@@ -208,11 +208,15 @@ export class WebhookProcessor {
                 organizationId: orgId,
                 waId: customerWaId,
                 name: customerName,
+                email: null,
+                customAttributes: {},
+                createdAt: new Date(),
+                updatedAt: new Date(),
               });
             } else if (existingContact.name !== customerName) {
               await db
                 .update(contacts)
-                .set({ name: customerName })
+                .set({ name: customerName, updatedAt: new Date() })
                 .where(eq(contacts.id, existingContact.id));
             }
 
@@ -256,6 +260,7 @@ export class WebhookProcessor {
                 windowExpiresAt,
                 lastMessagePreview: messageBody,
                 lastMessageAt: new Date(),
+                createdAt: new Date(),
               });
             } else {
               let assignedUser = activeConv.assignedUserId;
@@ -294,6 +299,7 @@ export class WebhookProcessor {
                 body: messageBody,
                 isInternalNote: false,
                 status: 'DELIVERED',
+                createdAt: new Date(),
               });
 
               console.log(`📩 Pesan WA masuk dari ${customerWaId}: "${messageBody.substring(0, 30)}"`);
