@@ -67,6 +67,10 @@ su - wacrm
 ### A. Install Bun
 
 ```bash
+# Install unzip (diperlukan installer Bun)
+sudo apt update && sudo apt install -y unzip
+
+# Install Bun runtime
 curl -fsSL https://bun.sh/install | bash
 
 # Reload shell
