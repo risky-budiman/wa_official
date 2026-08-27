@@ -81,11 +81,19 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
     let metaLivePhone: any = null;
     let metaLiveWaba: any = null;
 
-    // Fetch Live Dynamic Verification Data from Meta Graph API only if token is authentic
-    const isAuthenticMetaToken = org?.accessToken && !org.accessToken.startsWith('EAAGm0PX4ZCBO');
-    if (org?.wabaId && isAuthenticMetaToken) {
+    // Token and WABA resolution (org settings first, fallback to env)
+    const activeAccessToken = org?.accessToken && !org.accessToken.startsWith('EAAGm0PX4ZCBO')
+      ? org.accessToken
+      : env.META_ACCESS_TOKEN;
+
+    const activeWabaId = org?.wabaId && org.wabaId.length > 10
+      ? org.wabaId
+      : env.META_WABA_ID;
+
+    // Automatically sync live phone number and business name from Meta API
+    if (activeWabaId && activeAccessToken) {
       try {
-        const metaPhones = await MetaApiService.fetchWabaPhoneNumbers(org.wabaId, org.accessToken);
+        const metaPhones = await MetaApiService.fetchWabaPhoneNumbers(activeWabaId, activeAccessToken);
         if (metaPhones && metaPhones.length > 0) {
           metaLivePhone = metaPhones[0];
           const existingPhones = await db
@@ -107,7 +115,7 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
           }
         }
 
-        metaLiveWaba = await MetaApiService.fetchWabaDetails(org.wabaId, org.accessToken);
+        metaLiveWaba = await MetaApiService.fetchWabaDetails(activeWabaId, activeAccessToken);
         if (metaLiveWaba?.name && org?.id && metaLiveWaba.name !== org.name) {
           await db
             .update(organizations)

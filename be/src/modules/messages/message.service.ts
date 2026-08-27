@@ -64,6 +64,17 @@ export class MessageService {
       throw new Error('Jendela 24-jam Meta telah berakhir. Anda harus mengirim pesan menggunakan WhatsApp Template.');
     }
 
+    // Get organization access token for sending message
+    const [org] = await db
+      .select({ accessToken: organizations.accessToken })
+      .from(organizations)
+      .where(eq(organizations.id, conv.organizationId))
+      .limit(1);
+
+    const activeToken = org?.accessToken && !org.accessToken.startsWith('EAAGm0PX4ZCBO')
+      ? org.accessToken
+      : env.META_ACCESS_TOKEN;
+
     // Send via Meta API
     if (messageType === 'template' && body.templateName) {
       const metaRes = await MetaApiService.sendTemplateMessage({
@@ -72,14 +83,14 @@ export class MessageService {
         templateName: body.templateName,
         languageCode: 'id',
         components: body.templateComponents,
-      });
+      }, activeToken);
       wamId = metaRes.messages?.[0]?.id || null;
     } else {
       const metaRes = await MetaApiService.sendTextMessage({
         phoneNumberId: phone.phoneNumberId,
         recipientWaId: conv.contact.waId,
         text: body.body,
-      });
+      }, activeToken);
       wamId = metaRes.messages?.[0]?.id || null;
     }
 
