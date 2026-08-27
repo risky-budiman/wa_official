@@ -298,17 +298,18 @@ export class WebhookProcessor {
             }
 
             // 2c. Save Message (Deduplicate via Meta wamid)
+            const wamId = msg.id || ('wamid.inbound_' + nanoid());
             const [existingMsg] = await db
               .select({ id: messages.id })
               .from(messages)
-              .where(eq(messages.wamId, msg.id))
+              .where(eq(messages.wamId, wamId))
               .limit(1);
 
             if (!existingMsg) {
               await db.insert(messages).values({
                 id: nanoid(),
                 conversationId: convId!,
-                wamId: msg.id,
+                wamId: wamId,
                 direction: 'INBOUND',
                 senderType: 'CONTACT',
                 senderId: null,
@@ -319,7 +320,7 @@ export class WebhookProcessor {
                 createdAt: new Date(),
               });
 
-              console.log(`📩 Pesan WA masuk dari ${customerWaId}: "${messageBody.substring(0, 30)}"`);
+              console.log(`✅ Pesan WA masuk dari ${customerWaId} ("${messageBody.substring(0, 30)}") berhasil disimpan!`);
             }
           }
         }
