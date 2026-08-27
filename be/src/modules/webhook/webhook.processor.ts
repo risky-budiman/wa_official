@@ -203,16 +203,33 @@ export class WebhookProcessor {
 
             if (!existingContact) {
               contactId = nanoid();
-              await db.insert(contacts).values({
-                id: contactId,
-                organizationId: orgId,
-                waId: customerWaId,
-                name: customerName,
-                email: null,
-                customAttributes: {},
-                createdAt: new Date(),
-                updatedAt: new Date(),
-              });
+              try {
+                await db.insert(contacts).values({
+                  id: contactId,
+                  organizationId: orgId,
+                  waId: customerWaId,
+                  name: customerName,
+                  email: null,
+                  customAttributes: {},
+                  createdAt: new Date(),
+                  updatedAt: new Date(),
+                });
+              } catch (insertErr: any) {
+                // Handle concurrent insert duplicate key (uq_org_wa)
+                const [reFetched] = await db
+                  .select()
+                  .from(contacts)
+                  .where(
+                    and(
+                      eq(contacts.organizationId, orgId),
+                      eq(contacts.waId, customerWaId)
+                    )
+                  )
+                  .limit(1);
+                if (reFetched) {
+                  contactId = reFetched.id;
+                }
+              }
             } else if (existingContact.name !== customerName) {
               await db
                 .update(contacts)
