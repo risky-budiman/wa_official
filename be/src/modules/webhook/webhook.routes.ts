@@ -1,0 +1,40 @@
+// ===========================================
+// Meta WhatsApp Webhook Routes
+// ===========================================
+
+import { Elysia } from 'elysia';
+import { env } from '../../config/env';
+import { pushWebhookJob } from '../../services/queue.service';
+import { webhookVerifyPlugin } from '../../middleware/webhook-verify';
+
+export const webhookRoutes = new Elysia({ prefix: '/webhook' })
+  // ─── GET /webhook — Meta Handshake Verification ──
+  .get('/', ({ query, set }) => {
+    const mode = query['hub.mode'];
+    const token = query['hub.verify_token'];
+    const challenge = query['hub.challenge'];
+
+    if (mode === 'subscribe' && token === env.META_WEBHOOK_VERIFY_TOKEN) {
+      console.log('✅ Meta Webhook handshake verifikasi berhasil!');
+      return challenge;
+    }
+
+    set.status = 403;
+    return 'Forbidden: Verify token tidak cocok';
+  })
+
+  // ─── POST /webhook — Meta Inbound Events Ingestion 
+  .use(webhookVerifyPlugin)
+  .post('/', async ({ body, set }) => {
+    try {
+      // Fast decoupled queueing (<50ms response to satisfy Meta <5s SLA)
+      await pushWebhookJob(body);
+
+      set.status = 200;
+      return 'EVENT_RECEIVED';
+    } catch (err: any) {
+      console.error('❌ Gagal memasukkan webhook ke antrean:', err.message);
+      set.status = 500;
+      return 'FAILED';
+    }
+  });
