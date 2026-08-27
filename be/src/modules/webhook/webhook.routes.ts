@@ -6,6 +6,7 @@ import { Elysia } from 'elysia';
 import { env } from '../../config/env';
 import { pushWebhookJob } from '../../services/queue.service';
 import { webhookVerifyPlugin } from '../../middleware/webhook-verify';
+import { WebhookProcessor } from './webhook.processor';
 
 export const webhookRoutes = new Elysia({ prefix: '/webhook' })
   // ─── GET /webhook — Meta Handshake Verification ──
@@ -23,18 +24,25 @@ export const webhookRoutes = new Elysia({ prefix: '/webhook' })
     return 'Forbidden: Verify token tidak cocok';
   })
 
-  // ─── POST /webhook — Meta Inbound Events Ingestion 
+  // ─── POST /webhook — Meta Inbound Events Ingestion ──
   .use(webhookVerifyPlugin)
   .post('/', async ({ body, set }) => {
     try {
-      // Fast decoupled queueing (<50ms response to satisfy Meta <5s SLA)
-      await pushWebhookJob(body);
+      console.log('📩 Webhook POST diterima dari Meta');
+
+      // Direct execution: guarantees message processing even if Redis queue stalls
+      WebhookProcessor.handlePayload(body as any).catch((err) =>
+        console.error('❌ Webhook direct processing error:', err.message)
+      );
+
+      // Async queue push
+      pushWebhookJob(body).catch(() => {});
 
       set.status = 200;
       return 'EVENT_RECEIVED';
     } catch (err: any) {
-      console.error('❌ Gagal memasukkan webhook ke antrean:', err.message);
-      set.status = 500;
-      return 'FAILED';
+      console.error('❌ Webhook route error:', err.message);
+      set.status = 200;
+      return 'EVENT_RECEIVED';
     }
   });

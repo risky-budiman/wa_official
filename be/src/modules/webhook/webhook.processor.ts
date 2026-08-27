@@ -104,8 +104,14 @@ export class WebhookProcessor {
    * Process raw Meta webhook payload from BullMQ queue
    */
   static async handleJob(job: Job<MetaWebhookBody>) {
-    const payload = job.data;
-    if (!payload.entry) return;
+    await WebhookProcessor.handlePayload(job.data);
+  }
+
+  /**
+   * Process raw Meta webhook payload directly
+   */
+  static async handlePayload(payload: MetaWebhookBody) {
+    if (!payload || !payload.entry) return;
 
     for (const entry of payload.entry) {
       for (const change of entry.changes) {
