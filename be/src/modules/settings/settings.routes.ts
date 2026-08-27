@@ -445,11 +445,11 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
       try {
         const { code, wabaId, phoneNumberId, displayPhoneNumber, verifiedName } = body;
 
-        let finalAccessToken = 'EAAGm0PX4ZCBO' + nanoid(32);
-        let finalWabaId = wabaId || '1680616759700162';
-        let finalPhoneId = phoneNumberId || 'phone_' + nanoid(14);
+        let finalAccessToken = env.META_ACCESS_TOKEN || ('EAAGm0PX4ZCBO' + nanoid(32));
+        let finalWabaId = wabaId || env.META_WABA_ID || '';
+        let finalPhoneId = phoneNumberId || env.META_PHONE_NUMBER_ID || ('phone_' + nanoid(14));
         let finalDisplayName = verifiedName || 'Akun WhatsApp Business Resmi';
-        let finalPhone = displayPhoneNumber || '+62 812-3456-7890';
+        let finalPhone = displayPhoneNumber || '';
         let detectedCompanyName = null;
 
         // 1. If OAuth authorization code is provided, exchange for real Meta Token

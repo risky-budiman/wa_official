@@ -187,11 +187,11 @@
     const res = await apiRequest<any>('/settings/waba', {
       method: 'POST',
       body: JSON.stringify({
-        wabaId: wabaId.trim() || '1680616759700162',
-        appId: appId.trim() || 'phone_' + Date.now(),
-        accessToken: accessToken.trim() || 'token_' + Date.now(),
-        displayPhoneNumber: displayPhoneNumber.trim() || '+62 812-3456-7890',
-        verifiedName: verifiedName.trim() || 'Official WhatsApp Account',
+        wabaId: wabaId.trim(),
+        appId: appId.trim(),
+        accessToken: accessToken.trim(),
+        displayPhoneNumber: displayPhoneNumber.trim(),
+        verifiedName: verifiedName.trim(),
       }),
     });
     isSaving = false;
