@@ -184,7 +184,7 @@ export class WebhookProcessor {
         // 2. Handle Inbound Customer Messages
         if (value.messages && value.messages.length > 0) {
           for (const msg of value.messages) {
-            const customerWaId = msg.from;
+            const customerWaId = msg.from || value.contacts?.[0]?.wa_id || '628000000000';
             const customerName = value.contacts?.find((c) => c.wa_id === customerWaId)?.profile?.name || customerWaId;
 
             // 2a. Upsert Contact
