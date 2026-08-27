@@ -9,8 +9,8 @@
   let isLoading = $state(false);
   let errorMsg = $state<string | null>(null);
 
-  // Hide demo shortcuts in production
-  const isDev = !(import.meta as any).env?.PUBLIC_HIDE_DEMO;
+  // Automatically hide demo shortcuts in production builds (import.meta.env.DEV === false)
+  const isDev = import.meta.env.DEV;
 
   async function handleLogin(e: Event) {
     e.preventDefault();

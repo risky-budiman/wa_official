@@ -17,7 +17,7 @@ Type=simple
 User=wacrm
 Group=wacrm
 WorkingDirectory=/home/wacrm/wa_official/be
-ExecStart=/usr/local/bin/bun run src/index.ts
+ExecStart=/home/wacrm/.bun/bin/bun run src/index.ts
 Restart=always
 RestartSec=5
 
