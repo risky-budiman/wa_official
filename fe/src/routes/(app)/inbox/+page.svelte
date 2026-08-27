@@ -165,8 +165,10 @@
     })
   );
 
-  async function loadConversations() {
-    isLoading = true;
+  async function loadConversations(isSilent = false) {
+    if (!isSilent && conversationList.length === 0) {
+      isLoading = true;
+    }
     const res = await apiRequest<{ items: ConversationItem[] }>('/conversations');
     isLoading = false;
 
@@ -482,10 +484,10 @@
     loadTemplates();
     loadQueueStats();
 
-    // Auto-refresh conversations, queue stats, and messages every 3 seconds
+    // Auto-refresh conversations, queue stats, and messages every 3 seconds in background (silently)
     const refreshTimer = setInterval(() => {
       loadQueueStats();
-      loadConversations();
+      loadConversations(true);
       if (selectedConvId) {
         loadMessages(selectedConvId);
       }
