@@ -13,11 +13,93 @@ import {
   conversations,
   messages,
   users,
-  activityLogs
+  activityLogs,
+  organizations
 } from '../../db/schema';
 import type { MetaWebhookBody } from './webhook.types';
 
 export class WebhookProcessor {
+  /**
+   * Auto-assign strategy: Pick active agent with the least number of active (OPEN/PENDING) conversations
+   * Respects each organization's maxChatsPerAgent capacity limit.
+   */
+  static async getLeastBusyAgent(orgId: string): Promise<string | null> {
+    try {
+      // 0. Fetch Organization Workload & Capacity Configuration
+      const [org] = await db
+        .select({ maxChatsPerAgent: organizations.maxChatsPerAgent })
+        .from(organizations)
+        .where(eq(organizations.id, orgId))
+        .limit(1);
+
+      const maxLimit = org?.maxChatsPerAgent ?? 5;
+
+      // 1. Get all active agents in this organization
+      const activeAgents = await db
+        .select({
+          id: users.id,
+          fullName: users.fullName,
+          isOnline: users.isOnline,
+          role: users.role,
+        })
+        .from(users)
+        .where(
+          and(
+            eq(users.organizationId, orgId),
+            eq(users.status, 'ACTIVE'),
+            sql`${users.role} IN ('AGENT', 'ADMINISTRATOR')`
+          )
+        );
+
+      if (activeAgents.length === 0) return null;
+
+      // Only assign to agents who are currently ONLINE (isOnline = true)
+      const onlinePool = activeAgents.filter((a) => a.isOnline);
+      if (onlinePool.length === 0) {
+        // All agents are offline -> Return null so chat enters UNASSIGNED / PENDING queue for manual pickup
+        return null;
+      }
+
+      const pureAgents = onlinePool.filter((a) => a.role === 'AGENT');
+      const candidates = pureAgents.length > 0 ? pureAgents : onlinePool;
+
+      // 2. Count active workload for each online candidate
+      const workloads = await Promise.all(
+        candidates.map(async (agent) => {
+          const [result] = await db
+            .select({ count: sql<number>`count(*)` })
+            .from(conversations)
+            .where(
+              and(
+                eq(conversations.organizationId, orgId),
+                eq(conversations.assignedUserId, agent.id),
+                sql`${conversations.status} IN ('OPEN', 'PENDING')`
+              )
+            );
+          return {
+            agentId: agent.id,
+            count: Number(result?.count || 0),
+          };
+        })
+      );
+
+      // 3. Filter out agents who have reached the Max Handle Capacity Limit (Cap)
+      const availableWorkloads = workloads.filter((w) => w.count < maxLimit);
+      if (availableWorkloads.length === 0) {
+        // All online agents have reached maximum handle capacity -> queue in UNASSIGNED
+        return null;
+      }
+
+      // 4. Sort ascending by workload count (least busy agent wins)
+      availableWorkloads.sort((a, b) => a.count - b.count);
+
+      return availableWorkloads[0]?.agentId || null;
+    } catch (err) {
+      console.warn('Least busy agent calculation notice:', err);
+      return null;
+    }
+  }
+
   /**
    * Process raw Meta webhook payload from BullMQ queue
    */
@@ -46,6 +128,16 @@ export class WebhookProcessor {
         }
 
         const orgId = phone.organizationId;
+
+        // Fetch Organization Care Window Settings
+        const [org] = await db
+          .select({ careWindowHours: organizations.careWindowHours })
+          .from(organizations)
+          .where(eq(organizations.id, orgId))
+          .limit(1);
+
+        const careHours = org?.careWindowHours ?? 24;
+        const windowExpiresAt = new Date(Date.now() + careHours * 60 * 60 * 1000); // Standard Meta 24-hr session window
 
         // 2. Handle Inbound Customer Messages
         if (value.messages && value.messages.length > 0) {
@@ -96,7 +188,6 @@ export class WebhookProcessor {
               .limit(1);
 
             let convId = activeConv?.id;
-            const windowExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24-hr care window
 
             let messageBody = '';
             if (msg.type === 'text' && msg.text) {
@@ -110,39 +201,33 @@ export class WebhookProcessor {
             if (!activeConv) {
               convId = nanoid();
 
-              // Auto-assign: pick active agent with lowest active chat count
-              const [availableAgent] = await db
-                .select()
-                .from(users)
-                .where(
-                  and(
-                    eq(users.organizationId, orgId),
-                    eq(users.role, 'AGENT'),
-                    eq(users.status, 'ACTIVE'),
-                    eq(users.isOnline, true)
-                  )
-                )
-                .orderBy(users.createdAt)
-                .limit(1);
+              // Auto-assign: Least-Workload Routing (Agent with minimum active chats)
+              const leastBusyAgentId = await WebhookProcessor.getLeastBusyAgent(orgId);
 
               await db.insert(conversations).values({
                 id: convId,
                 organizationId: orgId,
                 phoneNumberId: phone.id,
                 contactId: contactId!,
-                assignedUserId: availableAgent?.id || null,
-                status: availableAgent ? 'OPEN' : 'UNASSIGNED',
+                assignedUserId: leastBusyAgentId,
+                status: leastBusyAgentId ? 'OPEN' : 'UNASSIGNED',
                 windowExpiresAt,
                 lastMessagePreview: messageBody,
                 lastMessageAt: new Date(),
               });
             } else {
+              let assignedUser = activeConv.assignedUserId;
+              if (!assignedUser || activeConv.status === 'RESOLVED') {
+                assignedUser = await WebhookProcessor.getLeastBusyAgent(orgId);
+              }
+
               await db
                 .update(conversations)
                 .set({
                   windowExpiresAt,
                   lastMessagePreview: messageBody,
                   lastMessageAt: new Date(),
+                  assignedUserId: assignedUser || activeConv.assignedUserId,
                   status: activeConv.status === 'RESOLVED' ? 'OPEN' : activeConv.status,
                 })
                 .where(eq(conversations.id, activeConv.id));

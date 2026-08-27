@@ -18,9 +18,13 @@ import { contactRoutes } from './modules/contacts/contact.routes';
 import { webhookRoutes } from './modules/webhook/webhook.routes';
 import { wsPlugin } from './websocket/ws.server';
 import './modules/webhook/webhook.processor'; // Initialize BullMQ worker
+import { AutoResolveService } from './services/auto-resolve.service';
 
 // Validate environment on startup
 validateEnv();
+
+// Start Inactivity Auto-Resolve Background Worker
+AutoResolveService.startWorker(60000);
 
 const app = new Elysia()
   // ─── Global Plugins ────────────────────────

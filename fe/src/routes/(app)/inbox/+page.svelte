@@ -27,7 +27,9 @@
     Sparkles,
     Trash2,
     ChevronRight,
-    MoreVertical
+    MoreVertical,
+    Inbox,
+    Bell
   } from 'lucide-svelte';
 
   let activeTab = $state<'ALL' | 'MINE' | 'UNASSIGNED'>('ALL');
@@ -38,6 +40,9 @@
   let searchQuery = $state('');
   let isLoading = $state(false);
   let isActionLoading = $state(false);
+  let isClaimingNext = $state(false);
+  let unassignedQueueCount = $state(0);
+  let myActiveCount = $state(0);
 
   // Modals & Drawers state
   let showReassignModal = $state(false);
@@ -199,9 +204,71 @@
     }
   }
 
+  async function loadQueueStats() {
+    const res = await apiRequest<{ unassignedCount: number; myActiveCount: number }>('/conversations/queue-stats');
+    if (res.success) {
+      unassignedQueueCount = res.unassignedCount || 0;
+      myActiveCount = res.myActiveCount || 0;
+    }
+  }
+
+  async function claimNextFromQueue() {
+    if (isClaimingNext) return;
+    isClaimingNext = true;
+    const res = await apiRequest<{ success: boolean; conversationId?: string; error?: string }>('/conversations/claim-next', {
+      method: 'POST',
+    });
+    isClaimingNext = false;
+
+    if (res.success && res.conversationId) {
+      await loadConversations();
+      await loadQueueStats();
+      selectConversation(res.conversationId);
+    } else if (res.error) {
+      alert(res.error);
+    }
+  }
+
   function selectConversation(convId: string) {
     selectedConvId = convId;
     loadMessages(convId);
+  }
+
+  async function claimConversation(convIdToClaim?: string) {
+    const targetId = convIdToClaim || selectedConvId;
+    if (!targetId || isActionLoading || !authStore.user) return;
+
+    isActionLoading = true;
+    const res = await apiRequest(`/conversations/${targetId}/assign`, {
+      method: 'PATCH',
+      body: JSON.stringify({ assignedUserId: authStore.user.id }),
+    });
+    isActionLoading = false;
+
+    if (res.success) {
+      const conv = conversationList.find((c) => c.id === targetId);
+      if (conv) {
+        conv.assignedUser = {
+          id: authStore.user.id,
+          fullName: authStore.user.fullName,
+          email: authStore.user.email,
+          role: authStore.user.role,
+        };
+        conv.status = 'OPEN';
+      }
+
+      if (targetId === selectedConvId) {
+        messageList.push({
+          id: 'claim-' + Date.now(),
+          senderType: authStore.role || 'AGENT',
+          senderId: authStore.user.id,
+          body: `📥 Tiket obrolan diambil oleh ${authStore.user.fullName}`,
+          isInternalNote: true,
+          status: 'SENT',
+          createdAt: new Date().toISOString(),
+        });
+      }
+    }
   }
 
   async function resolveConversation() {
@@ -413,6 +480,15 @@
     loadConversations();
     loadAgents();
     loadTemplates();
+    loadQueueStats();
+
+    const queueTimer = setInterval(() => {
+      loadQueueStats();
+    }, 4000);
+
+    return () => {
+      clearInterval(queueTimer);
+    };
   });
 </script>
 
@@ -420,7 +496,47 @@
   <!-- 1. LEFT COLUMN: Conversation List -->
   <div class="w-80 border-r border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-900/60 flex flex-col shrink-0">
     <!-- Search Bar & Filters -->
-    <div class="p-3.5 border-b border-slate-200 dark:border-slate-800/80 space-y-2.5">
+    <div class="p-3.5 border-b border-slate-200 dark:border-slate-800/80 space-y-3">
+      <!-- 🔔 Antrean Pesan Masuk (Khusus Role AGENT: Blind Queue Widget & 1-Click FIFO Claim) -->
+      {#if authStore.role === 'AGENT'}
+        <div class="p-3 rounded-2xl bg-gradient-to-br from-amber-500/10 via-orange-500/10 to-amber-500/5 dark:from-amber-950/40 dark:to-orange-950/20 border border-amber-500/25 space-y-2.5 shadow-sm">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <div class="relative">
+                {#if unassignedQueueCount > 0}
+                  <span class="w-2 h-2 rounded-full bg-amber-500 absolute -top-0.5 -right-0.5 animate-ping"></span>
+                  <span class="w-2 h-2 rounded-full bg-amber-500 absolute -top-0.5 -right-0.5"></span>
+                {/if}
+                <Inbox class="w-4 h-4 text-amber-600 dark:text-amber-400" />
+              </div>
+              <span class="text-xs font-extrabold text-amber-900 dark:text-amber-200 tracking-tight">
+                Antrean Masuk
+              </span>
+            </div>
+            
+            <span class="px-2 py-0.5 rounded-full text-[10px] font-black font-mono {unassignedQueueCount > 0 ? 'bg-amber-500 text-white shadow-sm' : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}">
+              {unassignedQueueCount} Menunggu
+            </span>
+          </div>
+
+          {#if unassignedQueueCount > 0}
+            <button
+              onclick={claimNextFromQueue}
+              disabled={isClaimingNext}
+              class="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-sm shadow-emerald-500/20 transition cursor-pointer disabled:opacity-60"
+              title="Tarik 1 pesan terlama dari antrean untuk ditangani"
+            >
+              <UserPlus class="w-3.5 h-3.5 {isClaimingNext ? 'animate-spin' : ''}" />
+              <span>{isClaimingNext ? 'Menarik Tiket...' : '⚡ Ambil 1 Pesan dari Antrean'}</span>
+            </button>
+          {:else}
+            <div class="text-[10px] text-amber-800/70 dark:text-amber-400/70 italic text-center py-0.5">
+              Semua pesan telah ditangani (Antrean kosong)
+            </div>
+          {/if}
+        </div>
+      {/if}
+
       <div class="relative">
         <Search class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
         <input
@@ -430,8 +546,6 @@
           class="w-full pl-9 pr-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700/60 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500 transition"
         />
       </div>
-
-
 
       <!-- Role Tabs -->
       {#if authStore.role === 'AGENT'}
@@ -460,9 +574,9 @@
           </button>
           <button
             onclick={() => activeTab = 'UNASSIGNED'}
-            class="flex-1 py-1.5 text-center rounded-lg transition cursor-pointer {activeTab === 'UNASSIGNED' ? 'bg-white dark:bg-slate-800 text-rose-500 shadow-sm' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}"
+            class="flex-1 py-1.5 text-center rounded-lg transition cursor-pointer {activeTab === 'UNASSIGNED' ? 'bg-white dark:bg-slate-800 text-amber-600 dark:text-amber-400 shadow-sm' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}"
           >
-            Antrean
+            Antrean ({unassignedQueueCount})
           </button>
         </div>
       {/if}
@@ -530,7 +644,11 @@
                   </span>
                 {/if}
 
-                {#if conv.status === 'RESOLVED'}
+                {#if conv.status === 'UNASSIGNED' || !conv.assignedUser}
+                  <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30 flex items-center gap-0.5">
+                    Belum Ditugaskan
+                  </span>
+                {:else if conv.status === 'RESOLVED'}
                   <span class="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-purple-500/10 text-purple-700 dark:text-purple-400 border border-purple-500/20 flex items-center gap-0.5">
                     <CheckCircle2 class="w-2.5 h-2.5" /> Selesai
                   </span>
@@ -560,7 +678,11 @@
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-2 flex-wrap">
               <h3 class="text-sm font-bold text-slate-900 dark:text-white truncate">{selectedConv.contact.name}</h3>
-              {#if selectedConv.status === 'RESOLVED'}
+              {#if selectedConv.status === 'UNASSIGNED' || !selectedConv.assignedUser}
+                <span class="px-2 py-0.5 rounded text-[10px] bg-amber-500/15 text-amber-700 dark:text-amber-400 font-bold border border-amber-500/30 shrink-0">
+                  Belum Ditugaskan
+                </span>
+              {:else if selectedConv.status === 'RESOLVED'}
                 <span class="px-2 py-0.5 rounded text-[10px] bg-purple-500/15 text-purple-700 dark:text-purple-400 font-semibold border border-purple-500/30 shrink-0">
                   Tiket Selesai
                 </span>
@@ -568,6 +690,25 @@
                 <span class="px-2 py-0.5 rounded text-[10px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 font-semibold border border-emerald-500/20 shrink-0">
                   Aktif
                 </span>
+              {/if}
+
+              <!-- ⏳ Sisa Masa Aktif Sesi 24 Jam Meta -->
+              {#if selectedConv.windowExpiresAt}
+                {@const timeLeftMs = new Date(selectedConv.windowExpiresAt).getTime() - Date.now()}
+                {@const hoursLeft = Math.floor(timeLeftMs / (1000 * 60 * 60))}
+                {@const minsLeft = Math.floor((timeLeftMs % (1000 * 60 * 60)) / (1000 * 60))}
+                
+                {#if timeLeftMs > 0}
+                  <span class="px-2 py-0.5 rounded-full text-[10px] font-bold border flex items-center gap-1 {hoursLeft > 6 ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800' : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'}" title="Sesi 24 jam layanan pelanggan aktif">
+                    <Clock class="w-3 h-3" />
+                    Sesi: {hoursLeft}j {minsLeft}m
+                  </span>
+                {:else}
+                  <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 flex items-center gap-1" title="Sesi 24 jam telah kedaluwarsa. Gunakan template untuk mengirim pesan.">
+                    <Clock class="w-3 h-3 text-rose-500" />
+                    Sesi Habis
+                  </span>
+                {/if}
               {/if}
             </div>
             <p class="text-[11px] text-slate-500 dark:text-slate-400 truncate">
@@ -581,6 +722,18 @@
 
         <!-- Right: Action Buttons with Proper Spacing -->
         <div class="flex items-center gap-2 shrink-0">
+          <!-- Ambil Obrolan / Claim Button if unassigned -->
+          {#if !selectedConv.assignedUser || selectedConv.status === 'UNASSIGNED'}
+            <button
+              onclick={() => claimConversation()}
+              disabled={isActionLoading}
+              class="py-1.5 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm shadow-emerald-500/20 transition cursor-pointer"
+              title="Ambil dan tugaskan obrolan ini ke saya"
+            >
+              <UserPlus class="w-3.5 h-3.5" />
+              <span>Ambil Obrolan</span>
+            </button>
+          {/if}
           <!-- + Kolaborator button -->
           {#if authStore.role !== 'AGENT'}
             <button

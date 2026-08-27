@@ -20,7 +20,10 @@
     ExternalLink,
     Info,
     PhoneCall,
-    X
+    Copy,
+    X,
+    Sliders,
+    Clock
   } from 'lucide-svelte';
 
   let activeTab = $state<'FACEBOOK_LOGIN' | 'MANUAL'>('FACEBOOK_LOGIN');
@@ -42,13 +45,100 @@
   let isSyncingLive = $state(false);
   let metaLive = $state<any>(null);
   let companyName = $state('');
+  let webhookVerifyToken = $state('c815d80a7f3608e9edc744580250728aca2574307b8fb724');
+  let customTunnelUrl = $state('');
+
+  // Operations & SLA Settings State
+  let maxChatsPerAgent = $state(5);
+  let autoResolveHours = $state(3);
+  let careWindowHours = $state(24);
+  let isSavingOperations = $state(false);
+  let operationsSuccessMsg = $state<string | null>(null);
+  let operationsErrorMsg = $state<string | null>(null);
+
+  async function loadOperationsSettings() {
+    const res = await apiRequest<{ success: boolean; settings: { maxChatsPerAgent: number; autoResolveHours: number; careWindowHours: number } }>('/settings/operations');
+    if (res.success && res.settings) {
+      maxChatsPerAgent = res.settings.maxChatsPerAgent ?? 5;
+      autoResolveHours = res.settings.autoResolveHours ?? 3;
+      careWindowHours = res.settings.careWindowHours ?? 24;
+    }
+  }
+
+  async function saveOperationsSettings(e: Event) {
+    e.preventDefault();
+    isSavingOperations = true;
+    operationsSuccessMsg = null;
+    operationsErrorMsg = null;
+
+    const res = await apiRequest<any>('/settings/operations', {
+      method: 'PATCH',
+      body: JSON.stringify({
+        maxChatsPerAgent: Number(maxChatsPerAgent),
+        autoResolveHours: Number(autoResolveHours),
+        careWindowHours: Number(careWindowHours),
+      }),
+    });
+    isSavingOperations = false;
+
+    if (res.success) {
+      operationsSuccessMsg = res.message || 'Pengaturan operasional & SLA berhasil disimpan!';
+      setTimeout(() => (operationsSuccessMsg = null), 4000);
+    } else {
+      operationsErrorMsg = res.error || 'Gagal menyimpan pengaturan operasional';
+      setTimeout(() => (operationsErrorMsg = null), 4000);
+    }
+  }
+
+  // Copy state feedback
+  let copiedUrl = $state(false);
+  let copiedToken = $state(false);
+  let copiedWaba = $state(false);
+
+  function copyToClipboard(text: string, type: 'url' | 'token' | 'waba') {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(text);
+    }
+    if (type === 'url') {
+      copiedUrl = true;
+      setTimeout(() => (copiedUrl = false), 2000);
+    } else if (type === 'token') {
+      copiedToken = true;
+      setTimeout(() => (copiedToken = false), 2000);
+    } else if (type === 'waba') {
+      copiedWaba = true;
+      setTimeout(() => (copiedWaba = false), 2000);
+    }
+  }
+
+  // Dynamic Webhook URL based on user's current environment/host
+  let webhookCallbackUrl = $derived.by(() => {
+    if (customTunnelUrl.trim()) {
+      const clean = customTunnelUrl.trim().replace(/\/+$/, '');
+      return clean.endsWith('/api/v1/webhook') ? clean : `${clean}/api/v1/webhook`;
+    }
+    if (typeof window !== 'undefined') {
+      const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      if (isLocal) {
+        return `http://${window.location.hostname}:3000/api/v1/webhook`;
+      }
+      return `${window.location.origin}/api/v1/webhook`;
+    }
+    return 'http://localhost:3000/api/v1/webhook';
+  });
 
   async function loadSettings() {
     await channelStore.checkStatus();
+    if (channelStore.channel?.companyName) {
+      companyName = channelStore.channel.companyName;
+    }
     if (authStore.role !== 'ADMINISTRATOR') return;
 
     const res = await apiRequest<any>('/settings/waba');
     if (res.success) {
+      if (res.webhookVerifyToken) {
+        webhookVerifyToken = res.webhookVerifyToken;
+      }
       if (res.metaLive) {
         metaLive = res.metaLive;
         if (res.metaLive.companyName) {
@@ -254,6 +344,7 @@
     window.addEventListener('message', messageListener);
 
     loadSettings();
+    loadOperationsSettings();
 
     return () => {
       window.removeEventListener('message', messageListener);
@@ -316,7 +407,7 @@
             <div class="space-y-1">
               <div class="flex flex-wrap items-center gap-2">
                 <h3 class="text-base font-extrabold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
-                  <span>{companyName || channelStore.channel.companyName || authStore.user?.organizationName || 'PT WhatsApp CRM Indonesia'}</span>
+                  <span>{companyName || channelStore.channel?.companyName || 'IDS Payment'}</span>
                 </h3>
                 <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 text-[11px] font-bold border border-emerald-500/20">
                   <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -375,18 +466,32 @@
               <span class="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                 Perusahaan Terdaftar
               </span>
-              <span class="text-xs font-bold text-slate-900 dark:text-white truncate" title={companyName || authStore.user?.organizationName || 'PT WhatsApp CRM Indonesia'}>
-                {companyName || authStore.user?.organizationName || 'PT WhatsApp CRM Indonesia'}
+              <span class="text-xs font-bold text-slate-900 dark:text-white truncate" title={companyName || channelStore.channel?.companyName || authStore.user?.organizationName || 'IDS Payment'}>
+                {companyName || channelStore.channel?.companyName || authStore.user?.organizationName || 'IDS Payment'}
               </span>
             </div>
 
             <!-- 2. WABA ID -->
             <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 flex flex-col justify-between space-y-1.5">
-              <span class="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                WABA ID Resmi
-              </span>
-              <span class="text-xs font-bold font-mono text-slate-900 dark:text-white truncate" title={channelStore.channel.wabaId}>
-                {channelStore.channel.wabaId}
+              <div class="flex items-center justify-between">
+                <span class="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                  WABA ID Resmi
+                </span>
+                <button
+                  onclick={() => copyToClipboard(channelStore.channel?.wabaId || '1386698372551547', 'waba')}
+                  class="text-[10px] text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 transition flex items-center gap-1 cursor-pointer"
+                  title="Salin WABA ID"
+                >
+                  {#if copiedWaba}
+                    <Check class="w-3 h-3 text-emerald-500" />
+                    <span class="text-emerald-500 font-bold">Disalin</span>
+                  {:else}
+                    <Copy class="w-3 h-3" />
+                  {/if}
+                </button>
+              </div>
+              <span class="text-xs font-bold font-mono text-slate-900 dark:text-white truncate" title={channelStore.channel?.wabaId || '1386698372551547'}>
+                {channelStore.channel?.wabaId || '1386698372551547'}
               </span>
             </div>
 
@@ -444,37 +549,220 @@
         </div>
       </div>
 
-      <!-- Webhook Configuration Overview Card -->
-      <div class="bg-white dark:bg-slate-900/70 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-        <h3 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-          <Shield class="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-          Konfigurasi Webhook Meta Cloud API
-        </h3>
+      <!-- Webhook Configuration Overview Card (With 1-Click Copy Buttons & Dynamic Host) -->
+      <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 space-y-5">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
+          <div class="flex items-center gap-2.5">
+            <div class="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center border border-emerald-500/20">
+              <Shield class="w-4 h-4" />
+            </div>
+            <div>
+              <h3 class="text-sm font-bold text-slate-900 dark:text-white">
+                Konfigurasi Webhook Meta Cloud API
+              </h3>
+              <p class="text-[11px] text-slate-500">
+                Salin Callback URL dan Verify Token di bawah ke Meta Developer Dashboard
+              </p>
+            </div>
+          </div>
+        </div>
 
-        <div class="space-y-3 text-xs">
-          <div>
-            <label for="active_callback_url" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Webhook Callback URL</label>
+        <div class="space-y-4 text-xs">
+          <!-- 1. Webhook Callback URL -->
+          <div class="space-y-1.5">
+            <div class="flex items-center justify-between">
+              <label for="active_callback_url" class="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                <span>Webhook Callback URL (Otomatis Sesuai Domain)</span>
+                <span class="px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold border border-emerald-200 dark:border-emerald-800">
+                  Auto Dynamic
+                </span>
+              </label>
+              <button
+                onclick={() => copyToClipboard(webhookCallbackUrl, 'url')}
+                class="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 border border-slate-200 dark:border-slate-700 hover:border-emerald-300 dark:hover:border-emerald-800 text-slate-700 dark:text-slate-300 hover:text-emerald-700 dark:hover:text-emerald-300 text-[11px] font-bold flex items-center gap-1.5 transition cursor-pointer shadow-sm"
+              >
+                {#if copiedUrl}
+                  <Check class="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 stroke-[2.5]" />
+                  <span class="text-emerald-600 dark:text-emerald-400">Tersalin!</span>
+                {:else}
+                  <Copy class="w-3.5 h-3.5" />
+                  <span>Salin URL</span>
+                {/if}
+              </button>
+            </div>
+
+            <div class="relative flex items-center">
+              <input
+                id="active_callback_url"
+                type="text"
+                readonly
+                value={webhookCallbackUrl}
+                class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white font-mono select-all font-bold tracking-tight focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <!-- Opsional: Custom Tunnel URL override untuk local testing -->
+          <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/40 border border-dashed border-slate-200 dark:border-slate-800 space-y-2">
+            <label for="custom_tunnel_input" class="text-[11px] font-semibold text-slate-600 dark:text-slate-400 block">
+              💡 Opsional: Masukkan Domain Tunnel (Cloudflare / Ngrok URL) untuk Auto-Update URL di atas:
+            </label>
             <input
-              id="active_callback_url"
+              id="custom_tunnel_input"
               type="text"
-              readonly
-              value="http://localhost:3000/api/v1/webhook"
-              class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white font-mono select-all"
+              bind:value={customTunnelUrl}
+              placeholder="Contoh: https://xxxx.trycloudflare.com atau https://xxxx.ngrok-free.app"
+              class="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white font-mono focus:border-emerald-500 focus:outline-none"
             />
           </div>
 
-          <div>
-            <label for="active_verify_token" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Verify Token</label>
-            <input
-              id="active_verify_token"
-              type="text"
-              readonly
-              value="my-custom-verify-token"
-              class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white font-mono select-all"
-            />
+          <!-- 2. Webhook Verify Token -->
+          <div class="space-y-1.5 pt-2">
+            <div class="flex items-center justify-between">
+              <label for="active_verify_token" class="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                <span>Verify Token (Kunci Rahasia Kriptografi Acak)</span>
+                <span class="px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 text-[10px] font-bold border border-indigo-200 dark:border-indigo-800 font-mono">
+                  High Security
+                </span>
+              </label>
+              <button
+                onclick={() => copyToClipboard(webhookVerifyToken, 'token')}
+                class="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 border border-slate-200 dark:border-slate-700 hover:border-emerald-300 dark:hover:border-emerald-800 text-slate-700 dark:text-slate-300 hover:text-emerald-700 dark:hover:text-emerald-300 text-[11px] font-bold flex items-center gap-1.5 transition cursor-pointer shadow-sm"
+              >
+                {#if copiedToken}
+                  <Check class="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 stroke-[2.5]" />
+                  <span class="text-emerald-600 dark:text-emerald-400">Tersalin!</span>
+                {:else}
+                  <Copy class="w-3.5 h-3.5" />
+                  <span>Salin Token</span>
+                {/if}
+              </button>
+            </div>
+
+            <div class="relative flex items-center">
+              <input
+                id="active_verify_token"
+                type="text"
+                readonly
+                value={webhookVerifyToken}
+                class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-indigo-700 dark:text-indigo-300 font-mono select-all font-bold tracking-tight focus:outline-none"
+              />
+            </div>
           </div>
         </div>
       </div>
+
+      <!-- 3. Pengaturan Operasional & Kapasitas Agen (Operational Rules & SLA) -->
+      <form onsubmit={saveOperationsSettings} class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 space-y-5">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
+          <div class="flex items-center gap-2.5">
+            <div class="w-8 h-8 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center border border-indigo-500/20">
+              <Sliders class="w-4 h-4" />
+            </div>
+            <div>
+              <h3 class="text-sm font-bold text-slate-900 dark:text-white">
+                Pengaturan Operasional & Distribusi Antrean
+              </h3>
+              <p class="text-[11px] text-slate-500">
+                Atur batas kapasitas beban agen, waktu auto-resolve, dan masa aktif sesi obrolan
+              </p>
+            </div>
+          </div>
+
+          {#if operationsSuccessMsg}
+            <div class="px-3 py-1 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs font-bold flex items-center gap-1.5 animate-fadeIn">
+              <Check class="w-3.5 h-3.5" />
+              <span>{operationsSuccessMsg}</span>
+            </div>
+          {/if}
+
+          {#if operationsErrorMsg}
+            <div class="px-3 py-1 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs font-bold flex items-center gap-1.5 animate-fadeIn">
+              <AlertCircle class="w-3.5 h-3.5" />
+              <span>{operationsErrorMsg}</span>
+            </div>
+          {/if}
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <!-- 1. Max Chats per Agent -->
+          <div class="space-y-1.5 p-4 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800/80">
+            <label for="max_chats_agent" class="block text-xs font-bold text-slate-800 dark:text-slate-200">
+              Maksimal Chat per Agen
+            </label>
+            <p class="text-[11px] text-slate-500 dark:text-slate-400 leading-tight">
+              Jika semua agen mencapai batas ini, pesan baru otomatis masuk antrean.
+            </p>
+            <div class="pt-2 flex items-center gap-2">
+              <input
+                id="max_chats_agent"
+                type="number"
+                min="1"
+                max="50"
+                bind:value={maxChatsPerAgent}
+                class="w-24 px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white text-center focus:outline-none focus:border-indigo-500"
+              />
+              <span class="text-xs font-semibold text-slate-500">Chat / Agen</span>
+            </div>
+          </div>
+
+          <!-- 2. Auto-Resolve Inactivity Hours -->
+          <div class="space-y-1.5 p-4 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800/80">
+            <label for="auto_resolve_hrs" class="block text-xs font-bold text-slate-800 dark:text-slate-200">
+              Auto-Resolve Tanpa Respon
+            </label>
+            <p class="text-[11px] text-slate-500 dark:text-slate-400 leading-tight">
+              Obrolan diselesaikan otomatis jika pelanggan tidak merespon setelah:
+            </p>
+            <div class="pt-2">
+              <select
+                id="auto_resolve_hrs"
+                bind:value={autoResolveHours}
+                class="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 cursor-pointer"
+              >
+                <option value={1}>1 Jam</option>
+                <option value={2}>2 Jam</option>
+                <option value={3}>3 Jam (Standar Rekomendasi)</option>
+                <option value={6}>6 Jam</option>
+                <option value={12}>12 Jam</option>
+                <option value={24}>24 Jam</option>
+                <option value={0}>Nonaktifkan (Manual)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- 3. Meta 24-Hour Customer Care Window -->
+          <div class="space-y-1.5 p-4 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800/80">
+            <label for="care_window_hrs" class="block text-xs font-bold text-slate-800 dark:text-slate-200">
+              Sesi Layanan Pelanggan
+            </label>
+            <p class="text-[11px] text-slate-500 dark:text-slate-400 leading-tight">
+              Masa aktif sesi pesan WhatsApp resmi dari respon terakhir pelanggan.
+            </p>
+            <div class="pt-2 flex items-center gap-2">
+              <input
+                id="care_window_hrs"
+                type="number"
+                readonly
+                value={careWindowHours}
+                class="w-24 px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 text-center select-none"
+              />
+              <span class="text-xs font-semibold text-slate-500">Jam (Meta Standard)</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex justify-end pt-1">
+          <button
+            type="submit"
+            disabled={isSavingOperations}
+            class="py-2.5 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-2 shadow-sm shadow-indigo-600/20 transition cursor-pointer disabled:opacity-60"
+          >
+            <Save class="w-3.5 h-3.5 {isSavingOperations ? 'animate-spin' : ''}" />
+            <span>{isSavingOperations ? 'Menyimpan...' : 'Simpan Pengaturan Operasional'}</span>
+          </button>
+        </div>
+      </form>
     </div>
 
   <!-- ══════════════════════════════════════════════════════════════ -->

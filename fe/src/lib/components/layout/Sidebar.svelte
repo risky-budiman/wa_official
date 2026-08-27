@@ -1,6 +1,7 @@
 <script lang="ts">
   import { page } from '$app/stores';
   import { authStore } from '$lib/stores/auth.svelte';
+  import { channelStore } from '$lib/stores/channel.svelte';
   import RoleBadge from './RoleBadge.svelte';
   import {
     MessageSquare,
@@ -52,8 +53,8 @@
       <h1 class="text-sm font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-1.5">
         WhatsApp CRM
       </h1>
-      <p class="text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-[130px]">
-        {authStore.user?.organizationName || 'Meta Cloud API'}
+      <p class="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate max-w-[130px]" title={channelStore.channel?.companyName || authStore.user?.organizationName || 'IDS Payment'}>
+        {channelStore.channel?.companyName || authStore.user?.organizationName || 'IDS Payment'}
       </p>
     </div>
   </div>

@@ -50,6 +50,30 @@ export const conversationRoutes = new Elysia({ prefix: '/conversations' })
     }
   )
 
+  // ─── GET /conversations/queue-stats — Real-time Queue Stats ──
+  .get('/queue-stats', async ({ user, set }) => {
+    if (!user) {
+      set.status = 401;
+      return { success: false, error: 'Unauthorized' };
+    }
+    const stats = await ConversationService.getQueueStats(user);
+    return { success: true, ...stats };
+  })
+
+  // ─── POST /conversations/claim-next — Claim 1 Conversation from Queue (FIFO) ──
+  .post('/claim-next', async ({ user, set }) => {
+    if (!user) {
+      set.status = 401;
+      return { success: false, error: 'Unauthorized' };
+    }
+    const result = await ConversationService.claimNext(user);
+    if (!result.success) {
+      set.status = 400;
+      return result;
+    }
+    return result;
+  })
+
   // ─── GET /conversations/:id — Get Single Detail ──
   .get('/:id', async ({ user, params, set }) => {
     if (!user) {

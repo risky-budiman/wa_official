@@ -2,7 +2,7 @@
   import { apiRequest } from '$lib/api/client';
   import { authStore } from '$lib/stores/auth.svelte';
   import { onMount } from 'svelte';
-  import { FileText, Plus, CheckCircle, Clock, XCircle, Search, Trash2, X } from 'lucide-svelte';
+  import { FileText, Plus, CheckCircle, Clock, XCircle, Search, Trash2, X, RefreshCw, Sparkles } from 'lucide-svelte';
 
   interface TemplateItem {
     id: string;
@@ -16,6 +16,8 @@
 
   let templateList = $state<TemplateItem[]>([]);
   let isLoading = $state(true);
+  let isSyncing = $state(false);
+  let syncFeedback = $state<string | null>(null);
   let showModal = $state(false);
 
   let newName = $state('');
@@ -29,6 +31,23 @@
     isLoading = false;
     if (res.success && res.items) {
       templateList = res.items;
+    }
+  }
+
+  async function syncFromMeta() {
+    isSyncing = true;
+    syncFeedback = null;
+    const res = await apiRequest<any>('/templates/sync', { method: 'POST' });
+    isSyncing = false;
+    if (res.success) {
+      syncFeedback = res.message || 'Template berhasil disinkronkan dari Meta!';
+      if (res.items) {
+        templateList = res.items;
+      }
+      setTimeout(() => (syncFeedback = null), 4000);
+    } else {
+      syncFeedback = res.error || 'Gagal menyinkronkan dari Meta';
+      setTimeout(() => (syncFeedback = null), 4000);
     }
   }
 
@@ -73,20 +92,44 @@
   <!-- Header -->
   <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
     <div>
-      <h2 class="text-xl font-extrabold text-slate-900 dark:text-white">Template Pesan WhatsApp</h2>
-      <p class="text-xs text-slate-600 dark:text-slate-400">Kelola dan ajukan template resmi ke Meta WhatsApp Graph API</p>
+      <div class="flex items-center gap-2.5">
+        <h2 class="text-xl font-extrabold text-slate-900 dark:text-white tracking-tight">Template Pesan WhatsApp</h2>
+        <span class="px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold border border-emerald-200 dark:border-emerald-800 flex items-center gap-1 font-mono">
+          <Sparkles class="w-3 h-3" /> Meta Live Sync
+        </span>
+      </div>
+      <p class="text-xs text-slate-600 dark:text-slate-400 mt-1">Kelola dan daftarkan template pesan resmi ke Meta WhatsApp Cloud API</p>
     </div>
 
     {#if authStore.role !== 'AGENT'}
-      <button
-        onclick={() => (showModal = true)}
-        class="py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-2 shadow-sm shadow-emerald-500/20 transition cursor-pointer"
-      >
-        <Plus class="w-4 h-4" />
-        Buat Template Baru
-      </button>
+      <div class="flex items-center gap-2.5">
+        <button
+          onclick={syncFromMeta}
+          disabled={isSyncing}
+          class="py-2.5 px-3.5 rounded-xl bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs flex items-center gap-2 shadow-sm transition cursor-pointer disabled:opacity-60"
+          title="Sinkronkan template langsung dari Meta WhatsApp Business Account"
+        >
+          <RefreshCw class="w-3.5 h-3.5 {isSyncing ? 'animate-spin text-emerald-500' : ''}" />
+          <span>{isSyncing ? 'Menyinkronkan...' : 'Sinkronkan dari Meta'}</span>
+        </button>
+
+        <button
+          onclick={() => (showModal = true)}
+          class="py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-2 shadow-sm shadow-emerald-500/20 transition cursor-pointer"
+        >
+          <Plus class="w-4 h-4" />
+          <span>Buat Template Baru</span>
+        </button>
+      </div>
     {/if}
   </div>
+
+  {#if syncFeedback}
+    <div class="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-xs font-semibold text-emerald-800 dark:text-emerald-300 flex items-center gap-2 animate-fadeIn">
+      <CheckCircle class="w-4 h-4 text-emerald-600 shrink-0" />
+      <span>{syncFeedback}</span>
+    </div>
+  {/if}
 
   <!-- Template Cards Grid -->
   {#if isLoading}

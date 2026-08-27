@@ -379,4 +379,92 @@ export class ConversationService {
 
     return { success: true, status };
   }
+
+  /**
+   * Get real-time queue count of unassigned conversations in organization
+   */
+  static async getQueueStats(user: JwtPayload) {
+    const [unassignedResult] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(conversations)
+      .where(
+        and(
+          eq(conversations.organizationId, user.orgId),
+          sql`(${conversations.status} = 'UNASSIGNED' OR ${conversations.assignedUserId} IS NULL)`
+        )
+      );
+
+    const [myActiveResult] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(conversations)
+      .where(
+        and(
+          eq(conversations.organizationId, user.orgId),
+          eq(conversations.assignedUserId, user.id),
+          sql`${conversations.status} IN ('OPEN', 'PENDING')`
+        )
+      );
+
+    return {
+      unassignedCount: Number(unassignedResult?.count || 0),
+      myActiveCount: Number(myActiveResult?.count || 0),
+    };
+  }
+
+  /**
+   * Claim next conversation from unassigned queue (FIFO: oldest unassigned first)
+   */
+  static async claimNext(user: JwtPayload) {
+    const [nextConv] = await db
+      .select()
+      .from(conversations)
+      .where(
+        and(
+          eq(conversations.organizationId, user.orgId),
+          sql`(${conversations.status} = 'UNASSIGNED' OR ${conversations.assignedUserId} IS NULL)`
+        )
+      )
+      .orderBy(conversations.createdAt)
+      .limit(1);
+
+    if (!nextConv) {
+      return { success: false, error: 'Tidak ada pesan dalam antrean saat ini.' };
+    }
+
+    await db
+      .update(conversations)
+      .set({
+        assignedUserId: user.id,
+        status: 'OPEN',
+      })
+      .where(eq(conversations.id, nextConv.id));
+
+    // Insert internal log
+    await db.insert(messages).values({
+      id: nanoid(),
+      organizationId: user.orgId,
+      conversationId: nextConv.id,
+      senderType: 'SYSTEM',
+      senderId: user.id,
+      direction: 'OUTBOUND',
+      messageType: 'TEXT',
+      body: `📥 Percakapan ditarik dari antrean oleh ${user.fullName || user.email}`,
+      isInternalNote: true,
+      status: 'SENT',
+    });
+
+    await db.insert(activityLogs).values({
+      id: nanoid(),
+      organizationId: user.orgId,
+      userId: user.id,
+      action: 'ASSIGN_CHAT',
+      details: {
+        conversationId: nextConv.id,
+        claimedBy: user.email,
+        type: 'CLAIM_FROM_QUEUE',
+      },
+    });
+
+    return { success: true, conversationId: nextConv.id };
+  }
 }

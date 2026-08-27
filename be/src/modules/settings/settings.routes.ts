@@ -23,6 +23,8 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
 
     const [org] = await db
       .select({
+        id: organizations.id,
+        name: organizations.name,
         wabaId: organizations.wabaId,
         accessToken: organizations.accessToken,
       })
@@ -43,10 +45,10 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
       isConnected,
       channel: isConnected
         ? {
-            companyName: org?.name || 'PT WhatsApp CRM Indonesia',
-            displayPhoneNumber: phone?.displayPhoneNumber || '+62 812-3456-7890',
-            verifiedName: phone?.verifiedName || 'Akun WhatsApp Business',
-            wabaId: org?.wabaId || '1680616759700162',
+            companyName: org?.name || 'IDS Payment',
+            displayPhoneNumber: phone?.displayPhoneNumber || '+62 821-6075-0067',
+            verifiedName: phone?.verifiedName || org?.name || 'IDS Payment',
+            wabaId: org?.wabaId || '1386698372551547',
             qualityRating: phone?.qualityRating || 'GREEN',
           }
         : null,
@@ -152,6 +154,7 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
         wabaId: org?.wabaId,
         appId: org?.appId || env.META_APP_ID || '',
       },
+      webhookVerifyToken: env.META_WEBHOOK_VERIFY_TOKEN || 'c815d80a7f3608e9edc744580250728aca2574307b8fb724',
       phoneNumbers: phones,
       metaLive: {
         isDynamicLive: Boolean(metaLivePhone || metaLiveWaba),
@@ -540,6 +543,69 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
         phoneNumberId: t.Optional(t.String()),
         displayPhoneNumber: t.Optional(t.String()),
         verifiedName: t.Optional(t.String()),
+      }),
+    }
+  )
+
+  // ─── GET /settings/operations — Workload & SLA Settings ──
+  .get('/operations', async ({ user, set }) => {
+    if (!user) {
+      set.status = 401;
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const [org] = await db
+      .select({
+        maxChatsPerAgent: organizations.maxChatsPerAgent,
+        autoResolveHours: organizations.autoResolveHours,
+        careWindowHours: organizations.careWindowHours,
+      })
+      .from(organizations)
+      .where(eq(organizations.id, user.orgId))
+      .limit(1);
+
+    return {
+      success: true,
+      settings: {
+        maxChatsPerAgent: org?.maxChatsPerAgent ?? 5,
+        autoResolveHours: org?.autoResolveHours ?? 3,
+        careWindowHours: org?.careWindowHours ?? 24,
+      },
+    };
+  })
+
+  // ─── PATCH /settings/operations — Update Workload & SLA Settings ──
+  .patch(
+    '/operations',
+    async ({ user, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { success: false, error: 'Unauthorized' };
+      }
+      if (user.role !== 'ADMINISTRATOR' && user.role !== 'SUPERVISOR') {
+        set.status = 403;
+        return { success: false, error: 'Hanya Administrator dan Supervisor yang dapat mengubah Pengaturan Operasional.' };
+      }
+
+      await db
+        .update(organizations)
+        .set({
+          maxChatsPerAgent: body.maxChatsPerAgent !== undefined ? Number(body.maxChatsPerAgent) : undefined,
+          autoResolveHours: body.autoResolveHours !== undefined ? Number(body.autoResolveHours) : undefined,
+          careWindowHours: body.careWindowHours !== undefined ? Number(body.careWindowHours) : undefined,
+        })
+        .where(eq(organizations.id, user.orgId));
+
+      return {
+        success: true,
+        message: 'Pengaturan operasional & SLA berhasil disimpan!',
+      };
+    },
+    {
+      body: t.Object({
+        maxChatsPerAgent: t.Optional(t.Number()),
+        autoResolveHours: t.Optional(t.Number()),
+        careWindowHours: t.Optional(t.Number()),
       }),
     }
   );
