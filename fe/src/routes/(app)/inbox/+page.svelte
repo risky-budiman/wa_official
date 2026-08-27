@@ -169,15 +169,19 @@
     if (!isSilent && conversationList.length === 0) {
       isLoading = true;
     }
-    const res = await apiRequest<{ items: ConversationItem[] }>('/conversations');
-    isLoading = false;
-
-    if (res.success && res.items) {
-      conversationList = res.items;
-      if (conversationList.length > 0 && !selectedConvId) {
-        selectedConvId = conversationList[0].id;
-        loadMessages(conversationList[0].id);
+    try {
+      const res = await apiRequest<{ items: ConversationItem[] }>('/conversations');
+      if (res && res.success && Array.isArray(res.items)) {
+        conversationList = res.items;
+        if (conversationList.length > 0 && !selectedConvId) {
+          selectedConvId = conversationList[0].id;
+          loadMessages(conversationList[0].id);
+        }
       }
+    } catch (err) {
+      console.error('Failed to load conversations:', err);
+    } finally {
+      isLoading = false;
     }
   }
 
