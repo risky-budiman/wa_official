@@ -20,13 +20,15 @@ if (fs.existsSync(envPath)) {
 }
 
 const host = process.env.DB_HOST || 'localhost';
-const port = process.env.DB_PORT || '3306';
+const port = Number(process.env.DB_PORT) || 3306;
 const user = process.env.DB_USER || 'root';
 const password = process.env.DB_PASSWORD || '';
 const database = process.env.DB_NAME || 'wa_crm';
 
+// Encode password to safely handle special characters like '#' in database URLs
+const encodedPassword = encodeURIComponent(password);
 const connectionString = password
-  ? `mysql://${user}:${password}@${host}:${port}/${database}`
+  ? `mysql://${user}:${encodedPassword}@${host}:${port}/${database}`
   : `mysql://${user}@${host}:${port}/${database}`;
 
 export default defineConfig({
@@ -37,4 +39,5 @@ export default defineConfig({
     url: process.env.DATABASE_URL || connectionString,
   },
 });
+
 
