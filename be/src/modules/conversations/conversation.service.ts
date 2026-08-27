@@ -2,7 +2,7 @@
 // Conversation Service — Multi-Agent Collaboration
 // ===========================================
 
-import { eq, and, desc, sql, inArray } from 'drizzle-orm';
+import { eq, and, desc, sql, inArray, or } from 'drizzle-orm';
 import { db } from '../../config/database';
 import {
   conversations,
@@ -32,14 +32,17 @@ export class ConversationService {
     let convIdsForAgent: string[] = [];
 
     if (user.role === 'AGENT') {
-      // 1. Get IDs where user is assigned
+      // 1. Get IDs where user is assigned or is unassigned
       const primaryConvs = await db
         .select({ id: conversations.id })
         .from(conversations)
         .where(
           and(
             eq(conversations.organizationId, user.orgId),
-            eq(conversations.assignedUserId, user.id)
+            or(
+              eq(conversations.assignedUserId, user.id),
+              eq(conversations.status, 'UNASSIGNED')
+            )
           )
         );
 
