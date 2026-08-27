@@ -78,9 +78,9 @@ export class ConversationService {
         lastMessageAt: conversations.lastMessageAt,
         createdAt: conversations.createdAt,
         contact: {
-          id: contacts.id,
-          waId: contacts.waId,
-          name: contacts.name,
+          id: sql<string>`COALESCE(${contacts.id}, ${conversations.contactId})`,
+          waId: sql<string>`COALESCE(${contacts.waId}, '628000000000')`,
+          name: sql<string>`COALESCE(${contacts.name}, 'Pelanggan WhatsApp')`,
           email: contacts.email,
           customAttributes: contacts.customAttributes,
         },
@@ -97,8 +97,8 @@ export class ConversationService {
         },
       })
       .from(conversations)
-      .innerJoin(contacts, eq(conversations.contactId, contacts.id))
-      .innerJoin(phoneNumbers, eq(conversations.phoneNumberId, phoneNumbers.id))
+      .leftJoin(contacts, eq(conversations.contactId, contacts.id))
+      .leftJoin(phoneNumbers, eq(conversations.phoneNumberId, phoneNumbers.id))
       .leftJoin(users, eq(conversations.assignedUserId, users.id))
       .where(and(...conditions))
       .orderBy(desc(conversations.lastMessageAt))

@@ -137,11 +137,11 @@
         if (!matchName && !matchPhone && !matchPreview) return false;
       }
 
-      // 2. Agent privacy check: visible if assigned or collaborator
-      if (authStore.role === 'AGENT') {
+      // 2. Agent privacy check: visible if assigned, collaborator, or if viewing unassigned queue
+      if (authStore.role === 'AGENT' && activeTab !== 'UNASSIGNED') {
         const isAssigned = c.assignedUser?.id === authStore.user?.id;
         const isParticipant = c.participants?.some((p) => p.id === authStore.user?.id);
-        if (!isAssigned && !isParticipant) return false;
+        if (!isAssigned && !isParticipant && activeTab === 'MINE') return false;
       }
 
       // 3. Tab filter
