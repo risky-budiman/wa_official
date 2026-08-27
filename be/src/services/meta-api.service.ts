@@ -108,7 +108,7 @@ export class MetaApiService {
     if (!accessToken || !phoneNumberId) return null;
 
     try {
-      const url = `${this.baseUrl}/${phoneNumberId}?fields=verified_name,code_verification_status,display_phone_number,quality_rating,name_status,messaging_limit_tier,status`;
+      const url = `${this.baseUrl}/${phoneNumberId}?fields=id,verified_name,display_phone_number,quality_rating,status`;
       const res = await fetch(url, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -116,12 +116,18 @@ export class MetaApiService {
       });
       const data = await res.json();
       if (!res.ok) {
-        console.warn('Meta API fetchPhoneNumberDetails notice:', data.error?.message);
+        // Try fallback with basic fields if requested fields don't exist on this node
+        if (data.error?.code === 100) {
+          const fallbackRes = await fetch(`${this.baseUrl}/${phoneNumberId}?fields=id,display_phone_number`, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+          const fallbackData = await fallbackRes.json();
+          if (fallbackRes.ok) return fallbackData;
+        }
         return null;
       }
       return data;
-    } catch (err: any) {
-      console.warn('Meta API fetchPhoneNumberDetails network notice:', err.message);
+    } catch {
       return null;
     }
   }
@@ -133,7 +139,7 @@ export class MetaApiService {
     if (!accessToken || !wabaId) return null;
 
     try {
-      const url = `${this.baseUrl}/${wabaId}/phone_numbers?fields=id,verified_name,code_verification_status,display_phone_number,quality_rating,name_status,messaging_limit_tier,status`;
+      const url = `${this.baseUrl}/${wabaId}/phone_numbers?fields=id,verified_name,display_phone_number,quality_rating,status`;
       const res = await fetch(url, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -146,12 +152,10 @@ export class MetaApiService {
           const singlePhone = await this.fetchPhoneNumberDetails(wabaId, accessToken);
           if (singlePhone) return [singlePhone];
         }
-        console.warn('Meta API fetchWabaPhoneNumbers notice:', data.error?.message);
         return null;
       }
       return data.data || [];
-    } catch (err: any) {
-      console.warn('Meta API fetchWabaPhoneNumbers network notice:', err.message);
+    } catch {
       return null;
     }
   }
@@ -163,7 +167,7 @@ export class MetaApiService {
     if (!accessToken || !wabaId) return null;
 
     try {
-      const url = `${this.baseUrl}/${wabaId}?fields=id,name,account_review_status,message_template_namespace`;
+      const url = `${this.baseUrl}/${wabaId}?fields=id,name`;
       const res = await fetch(url, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -171,12 +175,10 @@ export class MetaApiService {
       });
       const data = await res.json();
       if (!res.ok) {
-        console.warn('Meta API fetchWabaDetails notice:', data.error?.message);
         return null;
       }
       return data;
-    } catch (err: any) {
-      console.warn('Meta API fetchWabaDetails network notice:', err.message);
+    } catch {
       return null;
     }
   }
