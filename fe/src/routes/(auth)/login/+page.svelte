@@ -9,6 +9,9 @@
   let isLoading = $state(false);
   let errorMsg = $state<string | null>(null);
 
+  // Hide demo shortcuts in production
+  const isDev = !(import.meta as any).env?.PUBLIC_HIDE_DEMO;
+
   async function handleLogin(e: Event) {
     e.preventDefault();
     if (!email || !password) {
@@ -118,7 +121,8 @@
         </button>
       </form>
 
-      <!-- Demo 1-Click Login Shortcuts -->
+      <!-- Demo 1-Click Login Shortcuts (hidden in production) -->
+      {#if isDev}
       <div class="mt-6 pt-5 border-t border-slate-200 dark:border-slate-800">
         <p class="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-center mb-2.5">
           Akun Demo Siap Pakai (1-Click)
@@ -152,6 +156,7 @@
           </button>
         </div>
       </div>
+      {/if}
 
       <div class="mt-4 text-center">
         <p class="text-xs text-slate-500 dark:text-slate-400">

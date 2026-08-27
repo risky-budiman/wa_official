@@ -152,4 +152,35 @@ export class AuthService {
       organizationName: org?.name || '',
     };
   }
+
+  /**
+   * Lookup organization by ID (for join-org registration flow)
+   */
+  static async lookupOrganization(orgId: string) {
+    const [org] = await db
+      .select({
+        id: organizations.id,
+        name: organizations.name,
+        createdAt: organizations.createdAt,
+      })
+      .from(organizations)
+      .where(eq(organizations.id, orgId))
+      .limit(1);
+
+    if (!org) return null;
+
+    // Count members for display
+    const [memberCount] = await db
+      .select({ count: users.id })
+      .from(users)
+      .where(eq(users.organizationId, orgId))
+      .limit(1);
+
+    return {
+      id: org.id,
+      name: org.name,
+      createdAt: org.createdAt,
+      memberCount: memberCount ? 1 : 0, // simplified count
+    };
+  }
 }

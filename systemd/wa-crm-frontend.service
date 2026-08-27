@@ -1,0 +1,44 @@
+# ===========================================
+# Systemd Service — WhatsApp CRM Frontend (SvelteKit Node)
+# ===========================================
+# Taruh di: /etc/systemd/system/wa-crm-frontend.service
+#
+# sudo systemctl daemon-reload
+# sudo systemctl enable wa-crm-frontend
+# sudo systemctl start wa-crm-frontend
+
+[Unit]
+Description=WhatsApp CRM Frontend (SvelteKit Node Adapter)
+After=network.target wa-crm-backend.service
+
+[Service]
+Type=simple
+User=wacrm
+Group=wacrm
+WorkingDirectory=/home/wacrm/wa_official/fe
+ExecStart=/usr/bin/node build/index.js
+Restart=always
+RestartSec=5
+
+# Environment
+Environment=PORT=3001
+Environment=HOST=127.0.0.1
+Environment=ORIGIN=https://crm.domainanda.com
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=wa-crm-frontend
+
+# Security Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/wacrm/wa_official
+
+# Resource Limits
+LimitNOFILE=65535
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target

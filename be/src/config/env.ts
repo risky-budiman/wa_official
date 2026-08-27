@@ -6,6 +6,7 @@ export const env = {
   // Server
   PORT: Number(process.env.PORT) || 3000,
   NODE_ENV: process.env.NODE_ENV || 'development',
+  CORS_ORIGIN: process.env.CORS_ORIGIN || '*',
 
   // MySQL
   DB_HOST: process.env.DB_HOST || 'localhost',

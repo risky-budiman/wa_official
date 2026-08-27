@@ -1,0 +1,43 @@
+# ===========================================
+# Systemd Service — WhatsApp CRM Backend (Bun)
+# ===========================================
+# Taruh di: /etc/systemd/system/wa-crm-backend.service
+#
+# sudo systemctl daemon-reload
+# sudo systemctl enable wa-crm-backend
+# sudo systemctl start wa-crm-backend
+
+[Unit]
+Description=WhatsApp CRM Backend API (Bun + Elysia)
+After=network.target mysql.service redis-server.service
+Wants=mysql.service redis-server.service
+
+[Service]
+Type=simple
+User=wacrm
+Group=wacrm
+WorkingDirectory=/home/wacrm/wa_official/be
+ExecStart=/usr/local/bin/bun run src/index.ts
+Restart=always
+RestartSec=5
+
+# Environment
+EnvironmentFile=/home/wacrm/wa_official/be/.env
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=wa-crm-backend
+
+# Security Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/wacrm/wa_official
+
+# Resource Limits
+LimitNOFILE=65535
+MemoryMax=1G
+
+[Install]
+WantedBy=multi-user.target

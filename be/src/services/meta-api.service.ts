@@ -141,6 +141,11 @@ export class MetaApiService {
       });
       const data = await res.json();
       if (!res.ok) {
+        // If wabaId was actually a Phone Number ID, fallback to fetching single phone number details
+        if (data.error?.code === 100) {
+          const singlePhone = await this.fetchPhoneNumberDetails(wabaId, accessToken);
+          if (singlePhone) return [singlePhone];
+        }
         console.warn('Meta API fetchWabaPhoneNumbers notice:', data.error?.message);
         return null;
       }
@@ -158,7 +163,7 @@ export class MetaApiService {
     if (!accessToken || !wabaId) return null;
 
     try {
-      const url = `${this.baseUrl}/${wabaId}?fields=id,name,timezone_id,account_review_status,message_template_namespace`;
+      const url = `${this.baseUrl}/${wabaId}?fields=id,name,account_review_status,message_template_namespace`;
       const res = await fetch(url, {
         headers: {
           Authorization: `Bearer ${accessToken}`,

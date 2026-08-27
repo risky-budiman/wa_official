@@ -11,7 +11,18 @@ export interface ApiResponse<T = any> {
   [key: string]: any;
 }
 
-const API_BASE = '/api/v1';
+// In production, set PUBLIC_API_URL to your backend URL (e.g. https://api.domain.com/api/v1)
+// In development, Vite proxy handles /api/* → localhost:3000
+const getApiBase = (): string => {
+  if (typeof window !== 'undefined') {
+    // Check for runtime config injected via env
+    const envUrl = (import.meta as any).env?.PUBLIC_API_URL;
+    if (envUrl) return envUrl;
+  }
+  return '/api/v1';
+};
+
+const API_BASE = getApiBase();
 
 export async function apiRequest<T = any>(
   endpoint: string,

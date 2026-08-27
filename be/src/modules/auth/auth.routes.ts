@@ -104,4 +104,30 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
       success: true,
       user,
     };
-  });
+  })
+
+  // ─── GET /auth/org/:id — Validate Organization ID (for Join Org Registration) ──
+  .get(
+    '/org/:id',
+    async ({ params, set }) => {
+      try {
+        const org = await AuthService.lookupOrganization(params.id);
+        if (!org) {
+          set.status = 404;
+          return { success: false, error: 'Organisasi tidak ditemukan' };
+        }
+        return {
+          success: true,
+          organization: org,
+        };
+      } catch (error: any) {
+        set.status = 400;
+        return { success: false, error: error.message };
+      }
+    },
+    {
+      params: t.Object({
+        id: t.String(),
+      }),
+    }
+  );

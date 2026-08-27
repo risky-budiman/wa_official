@@ -30,7 +30,7 @@ const app = new Elysia()
   // ─── Global Plugins ────────────────────────
   .use(
     cors({
-      origin: true, // Allow all origins in dev (restrict in production)
+      origin: env.CORS_ORIGIN === '*' ? true : env.CORS_ORIGIN.split(',').map(s => s.trim()),
       credentials: true,
     })
   )
