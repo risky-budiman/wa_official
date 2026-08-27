@@ -237,7 +237,7 @@
 
           <!-- Role Selector (Join Mode) -->
           <div>
-            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Peran Anda di Tim</label>
+            <span class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Peran Anda di Tim</span>
             <div class="grid grid-cols-2 gap-2.5">
               <button
                 type="button"
