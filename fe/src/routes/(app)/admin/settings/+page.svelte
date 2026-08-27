@@ -28,7 +28,7 @@
 
   let activeTab = $state<'FACEBOOK_LOGIN' | 'MANUAL'>('FACEBOOK_LOGIN');
 
-  let wabaId = $state('1680616759700162');
+  let wabaId = $state('');
   let appId = $state('');
   let accessToken = $state('');
   let displayPhoneNumber = $state('');
@@ -222,7 +222,7 @@
 
     if (res.success) {
       channelStore.setDisconnected();
-      wabaId = '1680616759700162';
+      wabaId = '';
       accessToken = '';
       displayPhoneNumber = '';
       verifiedName = '';
@@ -268,17 +268,14 @@
 
   async function handleOAuthCode(code: string) {
     isConnectingFb = true;
-    fbSuccessMsg = 'Menerima otorisasi Facebook, menghubungkan saluran WhatsApp...';
+    fbSuccessMsg = 'Menerima otorisasi Facebook, mengambil data akun WhatsApp asli dari Meta...';
     
     const res = await apiRequest<any>('/settings/waba/embedded-signup', {
       method: 'POST',
       body: JSON.stringify({
         code,
         appId: appId.trim() || undefined,
-        wabaId: wabaId.trim() || '1680616759700162',
-        phoneNumberId: 'phone_' + Date.now(),
-        displayPhoneNumber: '+62 812-3456-7890',
-        verifiedName: 'Akun WhatsApp Business Resmi (Verified)',
+        wabaId: wabaId.trim() || undefined,
       }),
     });
     isConnectingFb = false;

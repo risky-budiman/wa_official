@@ -45,10 +45,10 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
       isConnected,
       channel: isConnected
         ? {
-            companyName: org?.name || 'IDS Payment',
-            displayPhoneNumber: phone?.displayPhoneNumber || '+62 821-6075-0067',
-            verifiedName: phone?.verifiedName || org?.name || 'IDS Payment',
-            wabaId: org?.wabaId || '1386698372551547',
+            companyName: org?.name || '',
+            displayPhoneNumber: phone?.displayPhoneNumber || '',
+            verifiedName: phone?.verifiedName || org?.name || '',
+            wabaId: org?.wabaId || '',
             qualityRating: phone?.qualityRating || 'GREEN',
           }
         : null,
@@ -270,8 +270,8 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
         nameStatus: metaLivePhone?.name_status || 'APPROVED',
         qualityRating: metaLivePhone?.quality_rating || 'GREEN',
         messagingLimitTier: metaLivePhone?.messaging_limit_tier || 'TIER_1K',
-        verifiedName: metaLivePhone?.verified_name || metaLiveWaba?.name || 'IDS',
-        displayPhoneNumber: metaLivePhone?.display_phone_number || '+62 812-3456-7890',
+        verifiedName: metaLivePhone?.verified_name || metaLiveWaba?.name || org?.name || '',
+        displayPhoneNumber: metaLivePhone?.display_phone_number || phone?.displayPhoneNumber || '',
         accountReviewStatus: metaLiveWaba?.account_review_status || 'APPROVED',
       },
     };
@@ -293,8 +293,8 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
       const finalWabaId = body.wabaId?.trim() || null;
       const finalAppId = body.appId?.trim() || null;
       const finalAccessToken = body.accessToken?.trim() || null;
-      const finalPhone = body.displayPhoneNumber?.trim() || '+62 812-3456-7890';
-      const finalName = body.verifiedName?.trim() || 'Akun WhatsApp Business Resmi';
+      const finalPhone = body.displayPhoneNumber?.trim() || '';
+      const finalName = body.verifiedName?.trim() || '';
 
       let detectedCompanyName = null;
       let detectedPhoneId = finalAppId || 'phone_' + nanoid(8);
