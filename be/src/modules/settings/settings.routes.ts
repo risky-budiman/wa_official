@@ -232,13 +232,14 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
       } catch (_) {}
     }
 
-    if (metaLivePhone) {
-      const existingPhones = await db
-        .select()
-        .from(phoneNumbers)
-        .where(eq(phoneNumbers.organizationId, user.orgId));
+    const existingPhones = await db
+      .select()
+      .from(phoneNumbers)
+      .where(eq(phoneNumbers.organizationId, user.orgId));
 
-      if (existingPhones.length > 0) {
+    const phone = existingPhones.length > 0 ? existingPhones[0] : null;
+
+    if (metaLivePhone && existingPhones.length > 0) {
         await db
           .update(phoneNumbers)
           .set({
@@ -250,7 +251,6 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
           })
           .where(eq(phoneNumbers.id, existingPhones[0].id));
       }
-    }
 
     if (metaLiveWaba?.name && org.id) {
       await db
