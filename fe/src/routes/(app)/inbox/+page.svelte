@@ -482,12 +482,17 @@
     loadTemplates();
     loadQueueStats();
 
-    const queueTimer = setInterval(() => {
+    // Auto-refresh conversations, queue stats, and messages every 3 seconds
+    const refreshTimer = setInterval(() => {
       loadQueueStats();
-    }, 4000);
+      loadConversations();
+      if (selectedConvId) {
+        loadMessages(selectedConvId);
+      }
+    }, 3000);
 
     return () => {
-      clearInterval(queueTimer);
+      clearInterval(refreshTimer);
     };
   });
 </script>
