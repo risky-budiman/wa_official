@@ -173,7 +173,7 @@
       const res = await apiRequest<{ items: ConversationItem[] }>('/conversations');
       if (res && res.success && Array.isArray(res.items)) {
         conversationList = res.items;
-        if (conversationList.length > 0 && !selectedConvId) {
+        if (conversationList.length > 0 && (!selectedConvId || !conversationList.some(c => c.id === selectedConvId))) {
           selectedConvId = conversationList[0].id;
           loadMessages(conversationList[0].id);
         }
@@ -619,7 +619,7 @@
 
     <!-- Conversation List Scrollable -->
     <div class="flex-1 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/40">
-      {#if isLoading}
+      {#if isLoading && conversationList.length === 0}
         <div class="p-6 text-center text-xs text-slate-400">Memuat percakapan...</div>
       {:else if filteredConversations.length === 0}
         <div class="p-8 text-center text-xs text-slate-400">
