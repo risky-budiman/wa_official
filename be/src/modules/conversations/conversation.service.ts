@@ -77,24 +77,18 @@ export class ConversationService {
         lastMessagePreview: conversations.lastMessagePreview,
         lastMessageAt: conversations.lastMessageAt,
         createdAt: conversations.createdAt,
-        contact: {
-          id: sql<string>`COALESCE(${contacts.id}, ${conversations.contactId})`,
-          waId: sql<string>`COALESCE(${contacts.waId}, '628000000000')`,
-          name: sql<string>`COALESCE(${contacts.name}, 'Pelanggan WhatsApp')`,
-          email: contacts.email,
-          customAttributes: contacts.customAttributes,
-        },
-        assignedUser: {
-          id: users.id,
-          fullName: users.fullName,
-          email: users.email,
-          role: users.role,
-        },
-        phoneNumber: {
-          id: phoneNumbers.id,
-          displayPhoneNumber: phoneNumbers.displayPhoneNumber,
-          verifiedName: phoneNumbers.verifiedName,
-        },
+        contactId: conversations.contactId,
+        contactName: contacts.name,
+        contactWaId: contacts.waId,
+        contactEmail: contacts.email,
+        contactCustomAttributes: contacts.customAttributes,
+        assignedUserId: users.id,
+        assignedFullName: users.fullName,
+        assignedEmail: users.email,
+        assignedRole: users.role,
+        phoneId: phoneNumbers.id,
+        displayPhoneNumber: phoneNumbers.displayPhoneNumber,
+        verifiedName: phoneNumbers.verifiedName,
       })
       .from(conversations)
       .leftJoin(contacts, eq(conversations.contactId, contacts.id))
@@ -145,7 +139,34 @@ export class ConversationService {
         }));
 
       return {
-        ...item,
+        id: item.id,
+        status: item.status,
+        windowExpiresAt: item.windowExpiresAt,
+        lastMessagePreview: item.lastMessagePreview,
+        lastMessageAt: item.lastMessageAt,
+        createdAt: item.createdAt,
+        contact: {
+          id: item.contactId,
+          waId: item.contactWaId || item.contactId || '628000000000',
+          name: item.contactName || item.contactWaId || 'Pelanggan WhatsApp',
+          email: item.contactEmail || undefined,
+          customAttributes: item.contactCustomAttributes || {},
+        },
+        assignedUser: item.assignedUserId
+          ? {
+              id: item.assignedUserId,
+              fullName: item.assignedFullName || '',
+              email: item.assignedEmail || '',
+              role: item.assignedRole || '',
+            }
+          : null,
+        phoneNumber: item.phoneId
+          ? {
+              id: item.phoneId,
+              displayPhoneNumber: item.displayPhoneNumber || '',
+              verifiedName: item.verifiedName || '',
+            }
+          : null,
         participants,
       };
     });
