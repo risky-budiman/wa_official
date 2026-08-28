@@ -114,9 +114,11 @@ export class WebhookProcessor {
     if (!payload || !payload.entry) return;
 
     for (const entry of payload.entry) {
-      for (const change of entry.changes) {
+      for (const change of (entry.changes || [])) {
         const value = change.value;
-        if (!value || value.messaging_product !== 'whatsapp') continue;
+        if (!value) continue;
+
+        console.log(`📩 Webhook Event: field="${change.field}", msgs=${value.messages?.length || 0}, statuses=${value.statuses?.length || 0}, phoneId=${value.metadata?.phone_number_id || 'none'}`);
 
         const phoneNumberId = value.metadata?.phone_number_id;
         if (!phoneNumberId) continue;
