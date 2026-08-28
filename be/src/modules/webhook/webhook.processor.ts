@@ -3,7 +3,7 @@
 // ===========================================
 
 import { Worker, Job } from 'bullmq';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, sql, desc } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { redis } from '../../config/redis';
 import { db } from '../../config/database';
