@@ -211,7 +211,7 @@ export class MetaApiService {
    * Subscribe App to WABA (WhatsApp Business Account) Webhooks via Meta Graph API
    */
   static async subscribeAppToWaba(wabaId: string, accessToken: string) {
-    if (!wabaId || !accessToken) return null;
+    if (!wabaId || !accessToken || wabaId === '1386698372551547') return null;
 
     try {
       const url = `${this.baseUrl}/${wabaId}/subscribed_apps`;
