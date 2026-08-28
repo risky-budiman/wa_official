@@ -194,12 +194,10 @@ export class MetaApiService {
       const res = await fetch(url);
       const data = await res.json();
       if (!res.ok) {
-        console.warn('Meta OAuth exchange error:', data.error?.message);
         return null;
       }
       return data.access_token as string;
-    } catch (err: any) {
-      console.warn('Meta OAuth exchange network error:', err.message);
+    } catch {
       return null;
     }
   }
