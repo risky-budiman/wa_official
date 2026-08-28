@@ -308,21 +308,28 @@ export class WebhookProcessor {
               .limit(1);
 
             if (!existingMsg) {
-              await db.insert(messages).values({
-                id: nanoid(),
-                conversationId: convId!,
-                wamId: wamId,
-                direction: 'INBOUND',
-                senderType: 'CONTACT',
-                senderId: null,
-                messageType: msg.type,
-                body: messageBody,
-                isInternalNote: false,
-                status: 'DELIVERED',
-                createdAt: new Date(),
-              });
+              try {
+                await db.insert(messages).values({
+                  id: nanoid(),
+                  conversationId: convId!,
+                  wamId: wamId,
+                  direction: 'INBOUND',
+                  senderType: 'CONTACT',
+                  senderId: null,
+                  messageType: msg.type,
+                  body: messageBody,
+                  mediaUrl: null,
+                  mediaMimeType: null,
+                  isInternalNote: false,
+                  status: 'DELIVERED',
+                  errorDetails: null,
+                  createdAt: new Date(),
+                });
 
-              console.log(`✅ Pesan WA masuk dari ${customerWaId} ("${messageBody.substring(0, 30)}") berhasil disimpan!`);
+                console.log(`✅ Pesan WA masuk dari ${customerWaId} ("${messageBody.substring(0, 30)}") berhasil disimpan!`);
+              } catch (msgErr: any) {
+                console.log(`ℹ️ Pesan WA ${wamId} sudah tersimpan sebelumnya.`);
+              }
             }
           }
         }

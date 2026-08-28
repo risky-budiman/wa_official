@@ -56,6 +56,7 @@ export const webhookVerifyPlugin = new Elysia({ name: 'webhook-verify' })
     const isValid = await verifyWebhookSignature(rawBody, signatureHeader ?? undefined);
 
     if (!isValid) {
+      console.warn('⚠️ Meta Webhook signature validation failed (META_APP_SECRET mismatch). Rejecting.');
       set.status = 401;
       return { error: 'Invalid webhook signature' };
     }
