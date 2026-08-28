@@ -90,9 +90,12 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
       ? org.wabaId
       : env.META_WABA_ID;
 
-    // Automatically sync live phone number and business name from Meta API
+    // Automatically sync live phone number and business name from Meta API & Subscribe WABA to App
     if (activeWabaId && activeAccessToken) {
       try {
+        // 1. Auto-subscribe WABA to App Webhooks
+        await MetaApiService.subscribeAppToWaba(activeWabaId, activeAccessToken);
+
         const metaPhones = await MetaApiService.fetchWabaPhoneNumbers(activeWabaId, activeAccessToken);
         if (metaPhones && metaPhones.length > 0) {
           metaLivePhone = metaPhones[0];

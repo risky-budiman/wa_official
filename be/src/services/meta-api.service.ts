@@ -184,20 +184,29 @@ export class MetaApiService {
   }
 
   /**
-   * Exchange OAuth Code from Facebook Login / Embedded Signup for a long-lived Access Token
+   * Subscribe App to WABA (WhatsApp Business Account) Webhooks via Meta Graph API
    */
-  static async exchangeCodeForToken(code: string, appId = env.META_APP_ID, appSecret = env.META_APP_SECRET) {
-    if (!code || !appId || !appSecret) return null;
+  static async subscribeAppToWaba(wabaId: string, accessToken: string) {
+    if (!wabaId || !accessToken) return null;
 
     try {
-      const url = `https://graph.facebook.com/v20.0/oauth/access_token?client_id=${appId}&client_secret=${appSecret}&code=${code}`;
-      const res = await fetch(url);
+      const url = `${this.baseUrl}/${wabaId}/subscribed_apps`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
       const data = await res.json();
-      if (!res.ok) {
-        return null;
+      if (res.ok) {
+        console.log(`✅ WABA ${wabaId} successfully subscribed to App Webhooks!`);
+      } else {
+        console.warn('⚠️ WABA subscribe app warning:', data.error?.message);
       }
-      return data.access_token as string;
-    } catch {
+      return data;
+    } catch (err: any) {
+      console.warn('WABA subscribe app notice:', err.message);
       return null;
     }
   }
