@@ -460,9 +460,16 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
             .where(eq(organizations.id, user.orgId))
             .limit(1);
 
-          const exchangedToken = await MetaApiService.exchangeCodeForToken(code, orgData?.appId || undefined);
-          if (exchangedToken) {
-            finalAccessToken = exchangedToken;
+          try {
+            const exchangedToken = await MetaApiService.exchangeCodeForToken(code, orgData?.appId || undefined);
+            if (exchangedToken) {
+              finalAccessToken = exchangedToken;
+            }
+          } catch (err: any) {
+            console.warn('Meta OAuth exchange notice (using active token fallback):', err.message);
+            finalAccessToken = orgData?.accessToken && !orgData.accessToken.startsWith('EAAGm0PX4ZCBO')
+              ? orgData.accessToken
+              : env.META_ACCESS_TOKEN;
           }
         }
 
