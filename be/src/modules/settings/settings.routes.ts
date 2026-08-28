@@ -82,13 +82,27 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
     let metaLiveWaba: any = null;
 
     // Token and WABA resolution (org settings first, fallback to env)
-    const activeAccessToken = org?.accessToken && !org.accessToken.startsWith('EAAGm0PX4ZCBO')
+    let activeAccessToken = org?.accessToken && !org.accessToken.startsWith('EAAGm0PX4ZCBO')
       ? org.accessToken
       : env.META_ACCESS_TOKEN;
 
-    const activeWabaId = org?.wabaId && org.wabaId.length > 10
+    let activeWabaId = org?.wabaId && org.wabaId.length > 10
       ? org.wabaId
       : env.META_WABA_ID;
+
+    // Dynamically resolve true WABA ID from Phone Number ID if token is present
+    if (activeAccessToken && env.META_PHONE_NUMBER_ID) {
+      const resolvedWaba = await MetaApiService.fetchWabaIdFromPhoneNumberId(env.META_PHONE_NUMBER_ID, activeAccessToken);
+      if (resolvedWaba) {
+        activeWabaId = resolvedWaba;
+        if (org?.id && org.wabaId !== resolvedWaba) {
+          await db
+            .update(organizations)
+            .set({ wabaId: resolvedWaba })
+            .where(eq(organizations.id, org.id));
+        }
+      }
+    }
 
     // Automatically sync live phone number and business name from Meta API & Subscribe WABA to App
     if (activeWabaId && activeAccessToken) {

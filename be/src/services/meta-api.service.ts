@@ -184,6 +184,30 @@ export class MetaApiService {
   }
 
   /**
+   * Resolve true WABA ID directly from Phone Number ID via Meta Graph API
+   */
+  static async fetchWabaIdFromPhoneNumberId(phoneNumberId: string, accessToken: string) {
+    if (!phoneNumberId || !accessToken) return null;
+
+    try {
+      const url = `${this.baseUrl}/${phoneNumberId}?fields=whatsapp_business_account`;
+      const res = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+      const data = await res.json();
+      if (res.ok && data.whatsapp_business_account?.id) {
+        console.log(`✨ Resolved true WABA ID ${data.whatsapp_business_account.id} for Phone Number ${phoneNumberId}`);
+        return data.whatsapp_business_account.id as string;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Subscribe App to WABA (WhatsApp Business Account) Webhooks via Meta Graph API
    */
   static async subscribeAppToWaba(wabaId: string, accessToken: string) {
