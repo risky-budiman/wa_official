@@ -130,48 +130,83 @@ export class WebhookProcessor {
           .where(eq(phoneNumbers.phoneNumberId, phoneNumberId))
           .limit(1);
 
+        // Get active user organization (excluding seed org-demo-default)
+        const [activeOrg] = await db
+          .select({ id: organizations.id })
+          .from(organizations)
+          .where(sql`${organizations.id} != 'org-demo-default'`)
+          .orderBy(desc(organizations.createdAt))
+          .limit(1);
+
+        const targetOrgId = activeOrg?.id || phone?.organizationId || 'org-demo-default';
+
         if (!phone) {
           // Auto-pair fallback: find existing phone record or first organization
           const [firstPhone] = await db.select().from(phoneNumbers).limit(1);
           if (firstPhone) {
             await db
               .update(phoneNumbers)
-              .set({ phoneNumberId: phoneNumberId, status: 'CONNECTED' })
+              .set({
+                phoneNumberId: phoneNumberId,
+                organizationId: targetOrgId,
+                status: 'CONNECTED',
+              })
               .where(eq(phoneNumbers.id, firstPhone.id));
-            phone = { ...firstPhone, phoneNumberId: phoneNumberId, status: 'CONNECTED' };
-            console.log(`✨ Auto-registered Phone Number ID ${phoneNumberId} to organization ${firstPhone.organizationId}`);
+
+            phone = {
+              ...firstPhone,
+              phoneNumberId: phoneNumberId,
+              organizationId: targetOrgId,
+              status: 'CONNECTED',
+            };
+            console.log(`✨ Auto-registered Phone Number ID ${phoneNumberId} to organization ${targetOrgId}`);
           } else {
-            const [firstOrg] = await db.select().from(organizations).limit(1);
-            if (firstOrg) {
-              const newPhoneId = nanoid();
-              await db.insert(phoneNumbers).values({
-                id: newPhoneId,
-                organizationId: firstOrg.id,
-                phoneNumberId: phoneNumberId,
-                displayPhoneNumber: '+62 812-3456-7890',
-                verifiedName: firstOrg.name,
-                qualityRating: 'GREEN',
-                status: 'CONNECTED',
-              });
-              phone = {
-                id: newPhoneId,
-                organizationId: firstOrg.id,
-                phoneNumberId: phoneNumberId,
-                displayPhoneNumber: '+62 812-3456-7890',
-                verifiedName: firstOrg.name,
-                qualityRating: 'GREEN',
-                status: 'CONNECTED',
-                createdAt: new Date(),
-              };
-              console.log(`✨ Auto-created phone record for Phone Number ID ${phoneNumberId}`);
-            } else {
-              console.warn(`⚠️ Webhook received for unregistered phone_number_id: ${phoneNumberId}`);
-              continue;
-            }
+            const newPhoneId = nanoid();
+            await db.insert(phoneNumbers).values({
+              id: newPhoneId,
+              organizationId: targetOrgId,
+              phoneNumberId: phoneNumberId,
+              displayPhoneNumber: '+62 821-6075-0067',
+              verifiedName: 'IDS Payment',
+              qualityRating: 'GREEN',
+              status: 'CONNECTED',
+              createdAt: new Date(),
+            });
+            phone = {
+              id: newPhoneId,
+              organizationId: targetOrgId,
+              phoneNumberId: phoneNumberId,
+              displayPhoneNumber: '+62 821-6075-0067',
+              verifiedName: 'IDS Payment',
+              qualityRating: 'GREEN',
+              status: 'CONNECTED',
+              createdAt: new Date(),
+            };
+            console.log(`✨ Auto-created phone record for Phone Number ID ${phoneNumberId}`);
           }
+        } else if (phone.organizationId !== targetOrgId && targetOrgId !== 'org-demo-default') {
+          // Ensure phone is linked to user's real active organization
+          await db
+            .update(phoneNumbers)
+            .set({ organizationId: targetOrgId })
+            .where(eq(phoneNumbers.id, phone.id));
+          phone.organizationId = targetOrgId;
         }
 
-        const orgId = phone.organizationId;
+        const orgId = targetOrgId;
+
+        // Auto-migrate any orphan conversations/contacts from demo org to active user org
+        if (targetOrgId !== 'org-demo-default') {
+          await db
+            .update(conversations)
+            .set({ organizationId: targetOrgId })
+            .where(eq(conversations.organizationId, 'org-demo-default'));
+
+          await db
+            .update(contacts)
+            .set({ organizationId: targetOrgId })
+            .where(eq(contacts.organizationId, 'org-demo-default'));
+        }
 
         // Fetch Organization Care Window Settings
         const [org] = await db
