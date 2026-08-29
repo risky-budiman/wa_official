@@ -53,6 +53,7 @@
   let showTemplatePicker = $state(false);
   let showEmojiPicker = $state(false);
   let messagesContainer = $state<HTMLDivElement | null>(null);
+  let messageInputRef = $state<HTMLInputElement | null>(null);
 
   function scrollToBottom(smooth = false) {
     setTimeout(() => {
@@ -63,6 +64,14 @@
         });
       }
     }, 60);
+  }
+
+  function focusMessageInput() {
+    setTimeout(() => {
+      if (messageInputRef) {
+        messageInputRef.focus();
+      }
+    }, 80);
   }
 
   interface Contact {
@@ -262,6 +271,7 @@
   function selectConversation(convId: string) {
     selectedConvId = convId;
     loadMessages(convId, true);
+    focusMessageInput();
   }
 
   async function claimConversation(convIdToClaim?: string) {
@@ -297,6 +307,7 @@
           status: 'SENT',
           createdAt: new Date().toISOString(),
         });
+        focusMessageInput();
       }
     }
   }
@@ -340,6 +351,7 @@
     if (res.success) {
       const conv = conversationList.find((c) => c.id === selectedConvId);
       if (conv) conv.status = 'OPEN';
+      focusMessageInput();
 
       messageList.push({
         id: 'reopen-' + Date.now(),
@@ -461,10 +473,12 @@
     const text = tpl.components?.[0]?.text || tpl.name;
     messageText = text;
     showTemplatePicker = false;
+    focusMessageInput();
   }
 
   function insertEmoji(emoji: string) {
     messageText += emoji;
+    focusMessageInput();
   }
 
   async function sendMessage() {
@@ -473,6 +487,7 @@
     const textToSend = messageText.trim();
     messageText = '';
     showEmojiPicker = false;
+    focusMessageInput();
 
     if (isInternalNote) {
       const res = await apiRequest('/messages/internal-note', {
@@ -485,6 +500,7 @@
       if (res.success && res.note) {
         messageList.push(res.note);
         scrollToBottom(true);
+        focusMessageInput();
       }
     } else {
       const res = await apiRequest('/messages/send', {
@@ -497,6 +513,7 @@
       if (res.success && res.message) {
         messageList.push(res.message);
         scrollToBottom(true);
+        focusMessageInput();
         const conv = conversationList.find((c) => c.id === selectedConvId);
         if (conv) {
           conv.lastMessagePreview = textToSend;
@@ -963,6 +980,7 @@
             </div>
 
             <input
+              bind:this={messageInputRef}
               type="text"
               bind:value={messageText}
               onkeydown={(e) => { if (e.key === 'Enter') sendMessage(); }}
