@@ -224,6 +224,22 @@ export class AiAgentService {
 
     if (!org) return;
 
+    // 1b. Check if conversation has already been assigned / claimed by a human agent
+    const [conv] = await db
+      .select({
+        id: conversations.id,
+        assignedUserId: conversations.assignedUserId,
+        status: conversations.status,
+      })
+      .from(conversations)
+      .where(eq(conversations.id, convId))
+      .limit(1);
+
+    if (conv && (conv.assignedUserId || conv.status === 'RESOLVED')) {
+      console.log(`ℹ️ Percakapan ${convId} sudah diambil/ditugaskan ke agen (${conv.assignedUserId || 'Resolved'}). AI Agent berhenti membalas.`);
+      return;
+    }
+
     const aiConfig = org.aiAgentConfig;
     if (!aiConfig || !aiConfig.enabled) {
       return; // AI Agent disabled

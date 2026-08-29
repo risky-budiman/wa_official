@@ -397,17 +397,22 @@ export class WebhookProcessor {
                   .limit(1);
 
                 if (orgFull?.operatingHours && AiAgentService.isOutOfOperatingHours(orgFull.operatingHours)) {
-                  console.log(`🕒 Pesan dari ${customerWaId} masuk di LUAR JAM OPERASIONAL. Memicu AI Agent Auto-Responder...`);
-                  AiAgentService.handleOutOfHoursInbound({
-                    orgId,
-                    convId: convId!,
-                    contactWaId: customerWaId,
-                    contactName: customerName,
-                    incomingText: messageBody,
-                    phoneRecordId: phone.id,
-                  }).catch((aiErr) =>
-                    console.error('❌ AI Agent background handler error:', aiErr.message)
-                  );
+                  // Hanya picu AI Agent jika pesan BELUM DIAMBIL / belum ditugaskan ke agen manusia
+                  if (!targetAssignedUser) {
+                    console.log(`🕒 Pesan dari ${customerWaId} masuk di LUAR JAM OPERASIONAL & BELUM DIAMBIL agen. Memicu AI Agent Auto-Responder...`);
+                    AiAgentService.handleOutOfHoursInbound({
+                      orgId,
+                      convId: convId!,
+                      contactWaId: customerWaId,
+                      contactName: customerName,
+                      incomingText: messageBody,
+                      phoneRecordId: phone.id,
+                    }).catch((aiErr) =>
+                      console.error('❌ AI Agent background handler error:', aiErr.message)
+                    );
+                  } else {
+                    console.log(`ℹ️ Pesan masuk di luar jam kerja tetapi percakapan sudah diambil oleh agen (${targetAssignedUser}). AI Agent tidak membalas.`);
+                  }
                 }
               } catch (msgErr: any) {
                 console.log(`ℹ️ Pesan WA ${wamId} sudah tersimpan sebelumnya.`);
