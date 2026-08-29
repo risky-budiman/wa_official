@@ -274,17 +274,17 @@ export class WebhookProcessor {
                 .where(eq(contacts.id, existingContact.id));
             }
 
-            // 2b. Find or Create Active Conversation
+            // 2b. Find or Create Active Conversation (Single unified thread per contact)
             const [activeConv] = await db
               .select()
               .from(conversations)
               .where(
                 and(
                   eq(conversations.organizationId, orgId),
-                  eq(conversations.contactId, contactId!),
-                  eq(conversations.phoneNumberId, phone.id)
+                  eq(conversations.contactId, contactId!)
                 )
               )
+              .orderBy(desc(conversations.createdAt))
               .limit(1);
 
             let convId = activeConv?.id;
@@ -304,19 +304,36 @@ export class WebhookProcessor {
               // Auto-assign: Least-Workload Routing (Agent with minimum active chats)
               const leastBusyAgentId = await WebhookProcessor.getLeastBusyAgent(orgId);
 
-              await db.insert(conversations).values({
-                id: convId,
-                organizationId: orgId,
-                phoneNumberId: phone.id,
-                contactId: contactId!,
-                assignedUserId: leastBusyAgentId,
-                status: leastBusyAgentId ? 'OPEN' : 'UNASSIGNED',
-                windowExpiresAt,
-                lastMessagePreview: messageBody,
-                lastMessageAt: new Date(),
-                createdAt: new Date(),
-              });
+              try {
+                await db.insert(conversations).values({
+                  id: convId,
+                  organizationId: orgId,
+                  phoneNumberId: phone.id,
+                  contactId: contactId!,
+                  assignedUserId: leastBusyAgentId,
+                  status: leastBusyAgentId ? 'OPEN' : 'UNASSIGNED',
+                  windowExpiresAt,
+                  lastMessagePreview: messageBody,
+                  lastMessageAt: new Date(),
+                  createdAt: new Date(),
+                });
+              } catch (convErr) {
+                // Concurrent webhook insert fallback
+                const [reConv] = await db
+                  .select()
+                  .from(conversations)
+                  .where(
+                    and(
+                      eq(conversations.organizationId, orgId),
+                      eq(conversations.contactId, contactId!)
+                    )
+                  )
+                  .orderBy(desc(conversations.createdAt))
+                  .limit(1);
+                if (reConv) convId = reConv.id;
+              }
             } else {
+              convId = activeConv.id;
               let assignedUser = activeConv.assignedUserId;
               if (!assignedUser || activeConv.status === 'RESOLVED') {
                 assignedUser = await WebhookProcessor.getLeastBusyAgent(orgId);
