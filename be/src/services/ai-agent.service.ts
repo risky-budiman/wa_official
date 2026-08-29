@@ -91,8 +91,10 @@ export class AiAgentService {
       throw new Error('Gemini API Key belum diatur. Harap masukkan API Key di Pengaturan AI.');
     }
 
-    const model = params.model || 'gemini-2.0-flash';
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    const primaryModel = params.model || 'gemini-2.0-flash';
+    const fallbackModels = [primaryModel, 'gemini-2.0-flash', 'gemini-1.5-flash-latest', 'gemini-2.5-flash'];
+    // Remove duplicates
+    const modelsToTry = Array.from(new Set(fallbackModels));
 
     const contents: any[] = [];
 
@@ -129,23 +131,35 @@ export class AiAgentService {
       },
     };
 
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(bodyPayload),
-    });
+    let lastError = '';
 
-    const data = await res.json();
-    if (data?.error) {
-      throw new Error(`Gemini API Error: ${data.error.message || JSON.stringify(data.error)}`);
+    for (const m of modelsToTry) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${apiKey}`;
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(bodyPayload),
+        });
+
+        const data = await res.json();
+        if (data?.error) {
+          lastError = data.error.message || JSON.stringify(data.error);
+          console.warn(`⚠️ Gemini model ${m} returned error:`, lastError);
+          continue; // Try next model
+        }
+
+        const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (reply) {
+          return reply.trim();
+        }
+      } catch (err: any) {
+        lastError = err.message || 'Fetch error';
+        console.warn(`⚠️ Error calling Gemini model ${m}:`, lastError);
+      }
     }
 
-    const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!reply) {
-      throw new Error('Gemini tidak memberikan respon teks.');
-    }
-
-    return reply.trim();
+    throw new Error(`Gemini API Error: ${lastError || 'Tidak ada model yang merespon'}`);
   }
 
   /**

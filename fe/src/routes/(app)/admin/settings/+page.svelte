@@ -979,8 +979,9 @@
                       bind:value={aiAgentConfig.model}
                       class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white"
                     >
-                      <option value="gemini-2.0-flash">Google Gemini 2.0 Flash (Sangat Cepat & Cerdas)</option>
-                      <option value="gemini-1.5-flash">Google Gemini 1.5 Flash (Stabil)</option>
+                      <option value="gemini-2.0-flash">Google Gemini 2.0 Flash (Rekomendasi - Cepat & Cerdas)</option>
+                      <option value="gemini-1.5-flash-latest">Google Gemini 1.5 Flash (Stabil)</option>
+                      <option value="gemini-2.5-flash">Google Gemini 2.5 Flash (Generasi Terbaru)</option>
                     </select>
                   </div>
 
