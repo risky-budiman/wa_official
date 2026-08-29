@@ -939,7 +939,7 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
           <div class="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-4">
             <!-- Hari Kerja Selector -->
             <div>
-              <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">Hari Kerja Operasional:</label>
+              <div class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">Hari Kerja Operasional:</div>
               <div class="flex flex-wrap gap-2">
                 {#each daysOfWeek as day}
                   <button
@@ -1024,7 +1024,7 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
           <div class="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-5">
             <!-- Pilihan Mode AI vs Pesan Statis -->
             <div>
-              <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">Mode Respon Otomatis:</label>
+              <div class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">Mode Respon Otomatis:</div>
               <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <button
                   type="button"
