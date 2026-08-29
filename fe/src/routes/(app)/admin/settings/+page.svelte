@@ -189,6 +189,55 @@
     }
   }
 
+  // Operations & SLA Settings State
+  let maxChatsPerAgent = $state(5);
+  let autoResolveHours = $state(3);
+  let careWindowHours = $state(24);
+  let isSavingOperations = $state(false);
+  let operationsSuccessMsg = $state<string | null>(null);
+  let operationsErrorMsg = $state<string | null>(null);
+
+  async function loadOperationsSettings() {
+    try {
+      const res = await apiRequest<{ success: boolean; settings: { maxChatsPerAgent: number; autoResolveHours: number; careWindowHours: number } }>('/settings/operations');
+      if (res && res.success && res.settings) {
+        maxChatsPerAgent = res.settings.maxChatsPerAgent ?? 5;
+        autoResolveHours = res.settings.autoResolveHours ?? 3;
+        careWindowHours = res.settings.careWindowHours ?? 24;
+      }
+    } catch (_) {}
+  }
+
+  async function saveOperationsSettings(e: Event) {
+    e.preventDefault();
+    isSavingOperations = true;
+    operationsSuccessMsg = null;
+    operationsErrorMsg = null;
+
+    try {
+      const res = await apiRequest<any>('/settings/operations', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          maxChatsPerAgent: Number(maxChatsPerAgent),
+          autoResolveHours: Number(autoResolveHours),
+          careWindowHours: Number(careWindowHours),
+        }),
+      });
+      isSavingOperations = false;
+
+      if (res.success) {
+        operationsSuccessMsg = res.message || 'Pengaturan operasional & SLA berhasil disimpan!';
+        setTimeout(() => (operationsSuccessMsg = null), 4000);
+      } else {
+        operationsErrorMsg = res.error || 'Gagal menyimpan pengaturan operasional';
+        setTimeout(() => (operationsErrorMsg = null), 4000);
+      }
+    } catch (err: any) {
+      isSavingOperations = false;
+      operationsErrorMsg = err.message || 'Gagal menyimpan pengaturan';
+    }
+  }
+
   // Copy state feedback
   let copiedUrl = $state(false);
   let copiedToken = $state(false);
