@@ -30,18 +30,13 @@ export const webhookRoutes = new Elysia({ prefix: '/webhook' })
     try {
       console.log('📩 Webhook POST diterima dari Meta');
 
-      // Direct execution: guarantees message processing even if Redis queue stalls
-      WebhookProcessor.handlePayload(body as any).catch((err) =>
-        console.error('❌ Webhook direct processing error:', err.message)
-      );
-
-      // Async queue push
-      pushWebhookJob(body).catch(() => {});
+      // Process payload exactly once
+      await WebhookProcessor.handlePayload(body as any);
 
       set.status = 200;
       return 'EVENT_RECEIVED';
     } catch (err: any) {
-      console.error('❌ Webhook route error:', err.message);
+      console.error('❌ Webhook processing error:', err.message);
       set.status = 200;
       return 'EVENT_RECEIVED';
     }
