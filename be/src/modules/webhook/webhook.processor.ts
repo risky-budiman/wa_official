@@ -358,7 +358,7 @@ export class WebhookProcessor {
                   isInternalNote: false,
                   status: 'DELIVERED',
                   errorDetails: null,
-                  createdAt: new Date(),
+                  createdAt: msg.timestamp ? new Date(Number(msg.timestamp) * 1000) : new Date(),
                 });
 
                 console.log(`✅ Pesan WA masuk dari ${customerWaId} ("${messageBody.substring(0, 30)}") berhasil disimpan!`);
