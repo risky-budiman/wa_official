@@ -5,10 +5,12 @@
 import { Elysia, t } from 'elysia';
 import { eq, and, desc } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
+import { env } from '../../config/env';
 import { db } from '../../config/database';
 import { messageTemplates, organizations } from '../../db/schema';
 import { authPlugin } from '../../middleware/auth';
 import { rbacPlugin } from '../../middleware/rbac';
+import { MetaApiService } from '../../services/meta-api.service';
 import type { TemplateCategory } from '../../db/schema/message-templates';
 
 export class TemplateService {
@@ -30,13 +32,48 @@ export class TemplateService {
       .where(eq(organizations.id, orgId))
       .limit(1);
 
-    if (!org?.wabaId || !org?.accessToken) {
-      return { success: false, error: 'WABA ID atau Access Token belum terpasang' };
+    const activeToken = org?.accessToken && !org.accessToken.startsWith('EAAGm0PX4ZCBO')
+      ? org.accessToken
+      : env.META_ACCESS_TOKEN;
+
+    let activeWabaId = org?.wabaId && org.wabaId.length > 8
+      ? org.wabaId
+      : env.META_WABA_ID;
+
+    // Fallback: Resolve WABA ID from Phone Number ID if token is available
+    if (activeToken && (!activeWabaId || activeWabaId === '1386698372551547') && env.META_PHONE_NUMBER_ID) {
+      try {
+        const resolvedWaba = await MetaApiService.fetchWabaIdFromPhoneNumberId(env.META_PHONE_NUMBER_ID, activeToken);
+        if (resolvedWaba) {
+          activeWabaId = resolvedWaba;
+          if (orgId) {
+            await db
+              .update(organizations)
+              .set({ wabaId: resolvedWaba })
+              .where(eq(organizations.id, orgId));
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (!activeWabaId || !activeToken) {
+      return { success: false, error: 'WABA ID atau Access Token belum terpasang di Pengaturan / .env' };
     }
 
     try {
-      const res = await fetch(`https://graph.facebook.com/v20.0/${org.wabaId}/message_templates?access_token=${org.accessToken}`);
+      const apiVersion = env.META_API_VERSION || 'v20.0';
+      const url = `https://graph.facebook.com/${apiVersion}/${activeWabaId}/message_templates?limit=100&access_token=${activeToken}`;
+      const res = await fetch(url);
       const data = await res.json();
+
+      if (data?.error) {
+        console.error('Meta Template Sync Error:', data.error);
+        return {
+          success: false,
+          error: `Meta API Error: ${data.error.message} (${data.error.type || 'Error'})`,
+        };
+      }
+
       if (data?.data && Array.isArray(data.data)) {
         for (const metaTpl of data.data) {
           const existing = await db

@@ -166,8 +166,8 @@
               {/if}
             </div>
 
-            <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-800 dark:text-slate-300 font-sans leading-relaxed">
-              {tpl.components?.[0]?.text || 'Body template'}
+            <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-800 dark:text-slate-300 font-sans leading-relaxed whitespace-pre-wrap">
+              {tpl.components?.find((c: any) => c.type === 'BODY')?.text || tpl.components?.[0]?.text || 'Konten Template'}
             </div>
           </div>
 
