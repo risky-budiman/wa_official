@@ -7,7 +7,7 @@ import { sql } from 'drizzle-orm';
 import { conversations } from './conversations';
 
 export const messageDirectionEnum = ['INBOUND', 'OUTBOUND'] as const;
-export const messageSenderTypeEnum = ['CONTACT', 'AGENT', 'SUPERVISOR', 'SYSTEM', 'BOT'] as const;
+export const messageSenderTypeEnum = ['CONTACT', 'AGENT', 'SUPERVISOR', 'ADMINISTRATOR', 'SYSTEM', 'BOT'] as const;
 export const messageStatusEnum = ['PENDING', 'SENT', 'DELIVERED', 'READ', 'FAILED'] as const;
 
 export type MessageDirection = (typeof messageDirectionEnum)[number];
