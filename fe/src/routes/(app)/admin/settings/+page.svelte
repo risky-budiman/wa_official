@@ -34,6 +34,7 @@
     ChevronDown,
     ChevronUp
   } from 'lucide-svelte';
+  import { formatWhatsAppMarkdown } from '$lib/utils/whatsapp-formatter';
 
   let activeTab = $state<'FACEBOOK_LOGIN' | 'MANUAL'>('FACEBOOK_LOGIN');
 
@@ -1294,9 +1295,9 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
               <Bot class="w-3.5 h-3.5" />
               <span>Hasil Balasan AI:</span>
             </div>
-            <p class="text-xs text-slate-800 dark:text-slate-200 whitespace-pre-line leading-relaxed font-sans">
-              {aiTestResponse}
-            </p>
+            <div class="text-xs text-slate-800 dark:text-slate-200 leading-relaxed font-sans">
+              {@html formatWhatsAppMarkdown(aiTestResponse)}
+            </div>
           </div>
         {/if}
 

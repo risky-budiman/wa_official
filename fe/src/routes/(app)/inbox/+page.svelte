@@ -32,6 +32,7 @@
     Bell,
     Bot
   } from 'lucide-svelte';
+  import { formatWhatsAppMarkdown } from '$lib/utils/whatsapp-formatter';
 
   let activeTab = $state<'ALL' | 'MINE' | 'UNASSIGNED'>('ALL');
   let statusFilter = $state<'ALL' | 'OPEN' | 'RESOLVED'>('ALL');
@@ -797,7 +798,7 @@
                   {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </span>
               </div>
-              <p class="text-slate-800 dark:text-slate-200 leading-relaxed">{msg.body}</p>
+              <p class="text-slate-800 dark:text-slate-200 leading-relaxed">{@html formatWhatsAppMarkdown(msg.body)}</p>
               <p class="text-[10px] text-amber-700/80 dark:text-amber-400/80 mt-1 italic">Hanya terlihat oleh seluruh agen/supervisor di percakapan ini</p>
             </div>
           {:else if msg.senderType === 'CONTACT'}
@@ -813,7 +814,9 @@
                   <span class="text-slate-700 dark:text-slate-200">{selectedConv.contact.name}</span>
                   <span class="px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-700/80 text-slate-500 dark:text-slate-300 text-[9px] font-semibold">Pelanggan</span>
                 </div>
-                <p class="whitespace-pre-line text-slate-800 dark:text-slate-100">{msg.body}</p>
+                <div class="text-slate-800 dark:text-slate-100 leading-relaxed font-sans">
+                  {@html formatWhatsAppMarkdown(msg.body)}
+                </div>
                 <div class="text-[10px] text-slate-400 text-right mt-1.5">
                   {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </div>
@@ -831,7 +834,9 @@
                   </div>
                   <span class="px-1.5 py-0.5 rounded bg-indigo-500/60 text-white text-[9px] font-mono font-black">BOT</span>
                 </div>
-                <p class="whitespace-pre-line text-white/95">{msg.body}</p>
+                <div class="text-white/95 leading-relaxed font-sans">
+                  {@html formatWhatsAppMarkdown(msg.body)}
+                </div>
                 <div class="text-[10px] text-indigo-200 flex items-center justify-end gap-1 mt-1.5">
                   <span>{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                   <CheckCheck class="w-3.5 h-3.5 text-indigo-300" />
@@ -850,7 +855,9 @@
                   </div>
                   <span class="px-1.5 py-0.5 rounded bg-emerald-700/70 text-white text-[9px] font-bold">AGENT</span>
                 </div>
-                <p class="whitespace-pre-line text-white/95">{msg.body}</p>
+                <div class="text-white/95 leading-relaxed font-sans">
+                  {@html formatWhatsAppMarkdown(msg.body)}
+                </div>
                 <div class="text-[10px] text-emerald-100 flex items-center justify-end gap-1 mt-1.5">
                   <span>{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                   <CheckCheck class="w-3.5 h-3.5 text-emerald-200" />
