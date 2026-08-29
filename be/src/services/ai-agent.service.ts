@@ -77,6 +77,28 @@ export class AiAgentService {
   }
 
   /**
+   * Dynamically fetch list of supported Gemini models for this specific API key
+   */
+  static async getAvailableGeminiModels(apiKey: string): Promise<string[]> {
+    try {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+      const data = await res.json();
+      if (res.ok && Array.isArray(data.models)) {
+        const supported = data.models
+          .filter((m: any) => Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'))
+          .map((m: any) => m.name.replace(/^models\//, ''));
+        if (supported.length > 0) {
+          console.log(`🤖 Discovered ${supported.length} available Gemini models for API Key:`, supported.slice(0, 4).join(', '));
+          return supported;
+        }
+      }
+    } catch (err: any) {
+      console.warn('Could not query dynamic Gemini models:', err.message);
+    }
+    return ['gemini-2.0-flash', 'gemini-1.5-flash-latest', 'gemini-1.5-flash-8b', 'gemini-pro'];
+  }
+
+  /**
    * Generate AI response using Google Gemini API
    */
   static async generateGeminiResponse(params: {
@@ -91,10 +113,22 @@ export class AiAgentService {
       throw new Error('Gemini API Key belum diatur. Harap masukkan API Key di Pengaturan AI.');
     }
 
-    const primaryModel = params.model || 'gemini-2.0-flash';
-    const fallbackModels = [primaryModel, 'gemini-2.0-flash', 'gemini-1.5-flash-latest', 'gemini-2.5-flash'];
-    // Remove duplicates
-    const modelsToTry = Array.from(new Set(fallbackModels));
+    const userModel = params.model ? params.model.replace(/^models\//, '') : '';
+    const availableModels = await this.getAvailableGeminiModels(apiKey);
+
+    // Build prioritized list of models to try
+    const modelsToTry: string[] = [];
+    if (userModel && availableModels.includes(userModel)) {
+      modelsToTry.push(userModel);
+    }
+
+    // Flash models first (fastest & cost-effective)
+    const flashModels = availableModels.filter((m) => m.includes('flash') && !m.includes('2.5'));
+    modelsToTry.push(...flashModels);
+    modelsToTry.push(...availableModels);
+
+    // Deduplicate
+    const uniqueModels = Array.from(new Set(modelsToTry));
 
     const contents: any[] = [];
 
@@ -133,7 +167,7 @@ export class AiAgentService {
 
     let lastError = '';
 
-    for (const m of modelsToTry) {
+    for (const m of uniqueModels) {
       try {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${apiKey}`;
         const res = await fetch(url, {
@@ -146,11 +180,12 @@ export class AiAgentService {
         if (data?.error) {
           lastError = data.error.message || JSON.stringify(data.error);
           console.warn(`⚠️ Gemini model ${m} returned error:`, lastError);
-          continue; // Try next model
+          continue; // Try next model in list
         }
 
         const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text;
         if (reply) {
+          console.log(`✨ Gemini successfully replied using model [${m}]`);
           return reply.trim();
         }
       } catch (err: any) {
