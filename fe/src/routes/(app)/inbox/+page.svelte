@@ -103,6 +103,7 @@
     id: string;
     senderType: string;
     senderId: string | null;
+    senderName?: string | null;
     body: string;
     isInternalNote: boolean;
     status: string;
