@@ -27,7 +27,12 @@
     Bot,
     MessageSquare,
     Send,
-    Calendar
+    Calendar,
+    BookOpen,
+    Wand2,
+    Lightbulb,
+    ChevronDown,
+    ChevronUp
   } from 'lucide-svelte';
 
   let activeTab = $state<'FACEBOOK_LOGIN' | 'MANUAL'>('FACEBOOK_LOGIN');
@@ -84,6 +89,93 @@
   let isTestingAi = $state(false);
   let aiTestResponse = $state<string | null>(null);
   let aiTestError = $state<string | null>(null);
+  let showPromptGuide = $state(false);
+  let appliedPresetKey = $state<string | null>(null);
+
+  const promptPresets: Record<string, { title: string; badge: string; desc: string; text: string }> = {
+    ecommerce: {
+      title: '🛍️ Toko Online / E-Commerce',
+      badge: 'Katalog & Resi',
+      desc: 'Panduan katalog produk, cek ongkir, nomor resi pengiriman, dan kebijakan retur garansi.',
+      text: `Anda adalah asisten AI resmi toko online kami di WhatsApp.
+Layanan bantuan manusia saat ini sedang berada di luar jam operasional.
+
+INFORMASI TOKO:
+- Nama Toko: Toko Sukses Berkah
+- Jam Buka: Senin - Sabtu 08:00 - 17:00 WIB (Minggu Libur)
+- Pengiriman: J&T, SiCepat, JNE (Pesanan dikirim H+1 setelah pembayaran terverifikasi).
+- Kebijakan Retur: Maksimal 2 hari setelah barang sampai dengan melampirkan video unboxing tanpa jeda.
+
+LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
+1. CEK ONGKIR: Jika pelanggan menanyakan ongkos kirim, minta mereka menyebutkan Kecamatan dan Kota tujuan pengiriman.
+2. CEK RESI: Jika pelanggan mengirim nomor resi atau bertanya status pesanan, sampaikan bahwa nomor resi akan segera diverifikasi oleh tim logistik saat jam kerja dimulai.
+3. ESKALASI: Jika pelanggan ingin membatalkan pesanan atau komplain barang rusak, tenangkan pelanggan dan minta foto barang serta nomor invoice.
+4. GAYA BICARA: Ramah, menggunakan sapaan "Kak", sopan, dan akhiri dengan emoji senyum.`,
+    },
+    it_support: {
+      title: '💻 IT Support & SaaS Helpdesk',
+      badge: 'Troubleshooting',
+      desc: 'Panduan teknis penanganan kendala login, tiket error, laporan bug, dan eskalasi server.',
+      text: `Anda adalah asisten AI Customer Service resmi dari tim IT Support kami.
+Layanan kami saat ini berada di luar jam operasional.
+
+INFORMASI PERUSAHAAN:
+- Nama Layanan: IT Helpdesk & Software Support
+- Jam Layanan Agen: Senin - Jumat 08:30 - 17:30 WIB
+- Jalur Darurat: Untuk kendala server down dapat mengirim email ke ops@perusahaan.com
+
+LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
+1. KENDALA LOGIN / AKUN: Minta pelanggan menyebutkan alamat email terdaftar dan screenshot kendala.
+2. PERMINTAAN FITUR / DEMO: Jelaskan gambaran umum fitur utama dan tawarkan penjadwalan demo saat jam kerja.
+3. KENDALA KRITIS: Jika mendeteksi sistem error atau kegagalan transaksi, sampaikan bahwa laporan telah diprioritaskan dan akan langsung diinspeksi pertama kali saat tim mulai bertugas.
+4. ATURAN PENULISAN: Singkat, solutif, gunakan poin-poin terstruktur, dan jangan berikan janji kompensasi secara sepihak.`,
+    },
+    clinic_booking: {
+      title: '🏥 Klinik & Booking Janji Temu',
+      badge: 'Reservasi',
+      desc: 'Pendaftaran pasien, jadwal praktek dokter, estimasi biaya, dan protokol darurat medis.',
+      text: `Anda adalah asisten AI resmi dari Klinik Sehat Prima di WhatsApp.
+Kantor kami sedang tutup dan akan buka kembali pada jam operasional kerja.
+
+INFORMASI KLINIK:
+- Alamat: Jl. Sudirman No. 45, Jakarta Pusat
+- Jam Buka Praktek: Senin - Sabtu 09:00 - 20:00 WIB
+- Layanan: Poli Gigi, Dokter Umum, Laboratorium Darah, Vaksinasi Anak.
+
+LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
+1. PENDAFTARAN / BOOKING: Jika pasien ingin mendaftar, minta data berupa: (Nama Lengkap, Usia, Poli Tujuan, Tanggal Rencana Kunjungan).
+2. TANYA BIAYA: Berikan estimasi kisaran biaya konsultasi mulai dari Rp 150.000.
+3. KONDISI DARURAT: Jika pasien mengeluhkan gejala darurat (misal: sesak napas berat, nyeri dada), anjurkan untuk segera menuju IGD Rumah Sakit terdekat tanpa menunggu balasan chat.
+4. GAYA BAHASA: Empati tinggi, ramah, menenangkan, dan profesional.`,
+    },
+    payment_fintech: {
+      title: '💳 Fintech & Payment Gateway',
+      badge: 'Keuangan',
+      desc: 'Panduan pengecekan transaksi, bukti pembayaran, pendaftaran merchant, dan edukasi anti-fraud.',
+      text: `Anda adalah asisten AI resmi dari IDS Payment Gateway.
+Layanan bantuan agen manusia saat ini sedang berada di luar jam operasional.
+
+INFORMASI LAYANAN:
+- Jam Buka CS: Senin - Jumat 08:00 - 17:00 WIB
+- Status Sistem: Layanan transaksi payment gateway & QRIS berjalan normal 24/7 otomatis.
+
+LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
+1. CEK STATUS TRANSAKSI / TOPUP: Minta pelanggan melampirkan Nomor Referensi Transaksi / ID Billing dan bukti transfer.
+2. PENDAFTARAN MERCHANT / MITRA: Berikan informasi bahwa registrasi merchant dapat dilakukan langsung di portal website kami.
+3. KEAMANAN (SECURITY): Ingatkan pelanggan bahwa pihak perusahaan TIDAK PERNAH meminta PIN, Password, atau Kode OTP.
+4. FORMAT: Padat, akurat, profesional, dan meyakinkan.`,
+    },
+  };
+
+  function applyPreset(key: string) {
+    if (promptPresets[key]) {
+      aiAgentConfig.systemPrompt = promptPresets[key].text;
+      appliedPresetKey = key;
+      setTimeout(() => {
+        appliedPresetKey = null;
+      }, 3000);
+    }
+  }
 
   const daysOfWeek = [
     { id: 1, label: 'Senin' },
@@ -999,24 +1091,126 @@
                   </div>
                 </div>
 
+                <!-- Preset Templates Bar -->
+                <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-950/70 border border-slate-200 dark:border-slate-800 space-y-2.5">
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2 text-xs font-bold text-slate-800 dark:text-slate-200">
+                      <Wand2 class="w-4 h-4 text-indigo-500" />
+                      <span>Template Prompt & Keahlian Khusus (Skills):</span>
+                    </div>
+                    <span class="text-[10px] text-slate-400 font-medium hidden sm:inline">Pilih salah satu untuk menerapkan format standar</span>
+                  </div>
+
+                  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+                    {#each Object.entries(promptPresets) as [key, preset]}
+                      <button
+                        type="button"
+                        onclick={() => applyPreset(key)}
+                        class="p-2.5 rounded-xl border text-left transition cursor-pointer hover:scale-[1.02] active:scale-[0.98] {appliedPresetKey === key 
+                          ? 'bg-emerald-500/15 border-emerald-500 text-emerald-900 dark:text-emerald-300 ring-2 ring-emerald-500/20' 
+                          : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-indigo-400 text-slate-700 dark:text-slate-300'}"
+                      >
+                        <div class="flex items-center justify-between mb-1">
+                          <span class="font-bold text-[11px] truncate">{preset.title}</span>
+                          {#if appliedPresetKey === key}
+                            <span class="text-[9px] font-black text-emerald-600 dark:text-emerald-400 flex items-center gap-0.5">
+                              <Check class="w-3 h-3" /> Diterapkan
+                            </span>
+                          {:else}
+                            <span class="px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-[9px] text-slate-500">{preset.badge}</span>
+                          {/if}
+                        </div>
+                        <p class="text-[10px] text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed">
+                          {preset.desc}
+                        </p>
+                      </button>
+                    {/each}
+                  </div>
+                </div>
+
                 <div>
-                  <label for="sys_prompt" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Panduan Bisnis, FAQ & Pengetahuan Perusahaan untuk AI (Knowledge Base):
-                  </label>
+                  <div class="flex items-center justify-between mb-1">
+                    <label for="sys_prompt" class="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Panduan Bisnis, FAQ, Aturan & Keahlian AI (Knowledge Base):
+                    </label>
+                    <span class="text-[11px] text-slate-400">Gunakan Bahasa Indonesia</span>
+                  </div>
                   <textarea
                     id="sys_prompt"
-                    rows="6"
+                    rows="8"
                     bind:value={aiAgentConfig.systemPrompt}
-                    placeholder="Tulis informasi perusahaan Anda di sini agar AI dapat menjawab dengan akurat. Contoh:
-- Nama Perusahaan: PT Infra Digital Solusindo (IDS)
-- Layanan: Payment Gateway, Integrasi WhatsApp Resmi, Solusi IT.
-- Jam Buka: Senin - Jumat 08:00 - 17:00 WIB.
-- Alamat: Jakarta, Indonesia.
-- Pertanyaan Umum (FAQ):
-  1. Cara daftar menjadi mitra: Silakan kirimkan email ke info@ids.net.id
-  2. Keluhan transaksi: Harap sertakan nomor referensi pembayaran..."
-                    class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white font-sans placeholder-slate-400 focus:outline-none focus:border-indigo-500"
+                    placeholder="Tulis informasi perusahaan Anda di sini agar AI dapat menjawab dengan akurat..."
+                    class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white font-mono leading-relaxed placeholder-slate-400 focus:outline-none focus:border-indigo-500"
                   ></textarea>
+                </div>
+
+                <!-- 📖 Collapsible Documentation & Prompting Cheatsheet -->
+                <div class="rounded-xl border border-indigo-200/80 dark:border-indigo-900/60 bg-indigo-50/40 dark:bg-indigo-950/20 overflow-hidden">
+                  <button
+                    type="button"
+                    onclick={() => (showPromptGuide = !showPromptGuide)}
+                    class="w-full p-3.5 flex items-center justify-between text-left hover:bg-indigo-100/40 dark:hover:bg-indigo-950/40 transition cursor-pointer"
+                  >
+                    <div class="flex items-center gap-2 text-xs font-bold text-indigo-950 dark:text-indigo-200">
+                      <BookOpen class="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                      <span>💡 Panduan & Cara Menulis Prompt (Logic & Skills) AI WhatsApp</span>
+                    </div>
+                    <div class="flex items-center gap-1.5 text-xs text-indigo-600 dark:text-indigo-400 font-semibold">
+                      <span>{showPromptGuide ? 'Tutup Panduan' : 'Buka Panduan & Contoh'}</span>
+                      {#if showPromptGuide}
+                        <ChevronUp class="w-4 h-4" />
+                      {:else}
+                        <ChevronDown class="w-4 h-4" />
+                      {/if}
+                    </div>
+                  </button>
+
+                  {#if showPromptGuide}
+                    <div class="p-4 border-t border-indigo-200/60 dark:border-indigo-900/40 text-xs space-y-4 text-slate-700 dark:text-slate-300 animate-in fade-in duration-200">
+                      <!-- 4 Kunci Utama -->
+                      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div class="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1">
+                          <span class="font-bold text-indigo-600 dark:text-indigo-400 text-xs">1. Identitas & Peran (Role)</span>
+                          <p class="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                            Beri tahu AI siapa dirinya (contoh: <em>"Anda adalah asisten WhatsApp resmi Toko ABC yang ramah dan solutif"</em>).
+                          </p>
+                        </div>
+                        <div class="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1">
+                          <span class="font-bold text-indigo-600 dark:text-indigo-400 text-xs">2. Informasi & FAQ (Knowledge Base)</span>
+                          <p class="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                            Tuliskan fakta penting: jam kerja, daftar layanan/produk, harga, alamat, dan pertanyaan yang sering diajukan pelanggan.
+                          </p>
+                        </div>
+                        <div class="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1">
+                          <span class="font-bold text-indigo-600 dark:text-indigo-400 text-xs">3. Logika & Kondisi Khusus (Skills)</span>
+                          <p class="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                            Gunakan aturan <strong>"Jika X maka lakukan Y"</strong> (contoh: <em>"Jika pelanggan bertanya ongkir, minta sebutkan Kecamatan & Kota"</em>).
+                          </p>
+                        </div>
+                        <div class="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-1">
+                          <span class="font-bold text-indigo-600 dark:text-indigo-400 text-xs">4. Batasan & Eskalasi (Safety)</span>
+                          <p class="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                            Tentukan kapan AI harus mengarahkan ke agen manusia (contoh: <em>"Jika komplain rusak, minta foto dan nomor pesanan"</em>).
+                          </p>
+                        </div>
+                      </div>
+
+                      <!-- Struktur Formula Prompt -->
+                      <div class="p-3 rounded-xl bg-slate-950 text-slate-100 font-mono text-[11px] space-y-1 overflow-x-auto">
+                        <div class="text-slate-400 font-sans font-bold text-[10px] uppercase tracking-wider mb-1">Formula Struktur Prompt Rekomendasi:</div>
+                        <div class="text-emerald-400"># 1. PERAN</div>
+                        <div>Anda adalah customer service AI resmi dari [Nama Bisnis].</div>
+                        <div class="text-emerald-400 mt-2"># 2. INFORMASI PERUSAHAAN</div>
+                        <div>- Layanan / Produk: [Jelaskan produk & harga]</div>
+                        <div>- Jam Buka: [Senin-Jumat 08:00-17:00]</div>
+                        <div class="text-emerald-400 mt-2"># 3. LOGIKA & KEAHLIAN (SKILLS)</div>
+                        <div>1. Jika pelanggan tanya A: Jawab dengan langkah B</div>
+                        <div>2. Jika pelanggan minta bicara manusia: Katakan pesan telah dicatat untuk ditangani agen saat jam kerja</div>
+                        <div class="text-emerald-400 mt-2"># 4. GAYA PENULISAN</div>
+                        <div>- Maksimal 2-3 paragraf, gunakan bahasa Indonesia sopan dan ramah.</div>
+                      </div>
+                    </div>
+                  {/if}
                 </div>
               </div>
             {:else}
