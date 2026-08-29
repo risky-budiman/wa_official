@@ -188,7 +188,7 @@
   async function loadMessages(convId: string) {
     const res = await apiRequest<{ items: MessageItem[] }>(`/messages/${convId}`);
     if (res.success && res.items) {
-      messageList = res.items;
+      messageList = [...res.items].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
     }
   }
 

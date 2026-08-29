@@ -110,6 +110,7 @@ export class MessageService {
       mediaMimeType: body.mediaMimeType,
       isInternalNote: false,
       status: 'SENT',
+      createdAt: new Date(),
     });
 
     // Update conversation preview and last activity
