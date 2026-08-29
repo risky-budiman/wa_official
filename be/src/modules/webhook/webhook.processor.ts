@@ -16,6 +16,7 @@ import {
   activityLogs,
   organizations
 } from '../../db/schema';
+import { AiAgentService } from '../../services/ai-agent.service';
 import type { MetaWebhookBody } from './webhook.types';
 
 export class WebhookProcessor {
@@ -384,6 +385,30 @@ export class WebhookProcessor {
                 });
 
                 console.log(`✅ Pesan WA masuk dari ${customerWaId} ("${messageBody.substring(0, 30)}") berhasil disimpan!`);
+
+                // 2d. Out-of-Hours Check & AI Auto-Responder Trigger
+                const [orgFull] = await db
+                  .select({
+                    operatingHours: organizations.operatingHours,
+                    aiAgentConfig: organizations.aiAgentConfig,
+                  })
+                  .from(organizations)
+                  .where(eq(organizations.id, orgId))
+                  .limit(1);
+
+                if (orgFull?.operatingHours && AiAgentService.isOutOfOperatingHours(orgFull.operatingHours)) {
+                  console.log(`🕒 Pesan dari ${customerWaId} masuk di LUAR JAM OPERASIONAL. Memicu AI Agent Auto-Responder...`);
+                  AiAgentService.handleOutOfHoursInbound({
+                    orgId,
+                    convId: convId!,
+                    contactWaId: customerWaId,
+                    contactName: customerName,
+                    incomingText: messageBody,
+                    phoneRecordId: phone.id,
+                  }).catch((aiErr) =>
+                    console.error('❌ AI Agent background handler error:', aiErr.message)
+                  );
+                }
               } catch (msgErr: any) {
                 console.log(`ℹ️ Pesan WA ${wamId} sudah tersimpan sebelumnya.`);
               }

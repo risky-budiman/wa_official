@@ -2,8 +2,26 @@
 // Schema: organizations (Multi-Tenancy)
 // ===========================================
 
-import { mysqlTable, varchar, text, datetime, int } from 'drizzle-orm/mysql-core';
+import { mysqlTable, varchar, text, datetime, int, json } from 'drizzle-orm/mysql-core';
 import { sql } from 'drizzle-orm';
+
+export interface OperatingHoursConfig {
+  enabled: boolean;
+  timezone: string; // 'Asia/Jakarta' | 'Asia/Makassar' | 'Asia/Jayapura'
+  days: number[]; // [1, 2, 3, 4, 5] (1=Monday ... 7=Sunday)
+  startTime: string; // '08:00'
+  endTime: string; // '17:00'
+}
+
+export interface AiAgentConfig {
+  enabled: boolean;
+  mode: 'AI_ASSISTANT' | 'STATIC_MESSAGE';
+  provider: 'gemini' | 'openai';
+  apiKey?: string;
+  model?: string;
+  systemPrompt?: string;
+  staticMessage?: string;
+}
 
 export const organizations = mysqlTable('organizations', {
   id: varchar('id', { length: 36 }).primaryKey(), // UUID v4
@@ -14,6 +32,8 @@ export const organizations = mysqlTable('organizations', {
   maxChatsPerAgent: int('max_chats_per_agent').default(5), // Workload Capacity per Agent
   autoResolveHours: int('auto_resolve_hours').default(3), // Auto-Resolve Inactivity Threshold in Hours
   careWindowHours: int('care_window_hours').default(24), // Customer Care Window in Hours
+  operatingHours: json('operating_hours').$type<OperatingHoursConfig>(),
+  aiAgentConfig: json('ai_agent_config').$type<AiAgentConfig>(),
   createdAt: datetime('created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: datetime('updated_at').default(sql`CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`).notNull(),
 });

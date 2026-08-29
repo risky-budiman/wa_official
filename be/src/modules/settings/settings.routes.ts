@@ -643,4 +643,119 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
         careWindowHours: t.Optional(t.Number()),
       }),
     }
+  )
+
+  // ─── GET /settings/operating-hours — Get Operating Hours & AI Agent Config ──
+  .get('/operating-hours', async ({ user, set }) => {
+    if (!user) {
+      set.status = 401;
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const [org] = await db
+      .select({
+        operatingHours: organizations.operatingHours,
+        aiAgentConfig: organizations.aiAgentConfig,
+      })
+      .from(organizations)
+      .where(eq(organizations.id, user.orgId))
+      .limit(1);
+
+    const defaultHours = {
+      enabled: false,
+      timezone: 'Asia/Jakarta',
+      days: [1, 2, 3, 4, 5],
+      startTime: '08:00',
+      endTime: '17:00',
+    };
+
+    const defaultAi = {
+      enabled: false,
+      mode: 'AI_ASSISTANT',
+      provider: 'gemini',
+      apiKey: '',
+      model: 'gemini-2.0-flash',
+      systemPrompt: '',
+      staticMessage: 'Halo! Layanan kami sedang di luar jam operasional. Pesan Anda telah kami terima dan akan segera dibalas oleh tim kami saat jam kerja dimulai. Terima kasih! 🙏',
+    };
+
+    return {
+      success: true,
+      operatingHours: org?.operatingHours || defaultHours,
+      aiAgentConfig: org?.aiAgentConfig || defaultAi,
+    };
+  })
+
+  // ─── PATCH /settings/operating-hours — Save Operating Hours & AI Agent Config ──
+  .patch(
+    '/operating-hours',
+    async ({ user, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { success: false, error: 'Unauthorized' };
+      }
+      if (user.role !== 'ADMINISTRATOR' && user.role !== 'SUPERVISOR') {
+        set.status = 403;
+        return { success: false, error: 'Akses ditolak' };
+      }
+
+      await db
+        .update(organizations)
+        .set({
+          operatingHours: body.operatingHours as any,
+          aiAgentConfig: body.aiAgentConfig as any,
+        })
+        .where(eq(organizations.id, user.orgId));
+
+      return {
+        success: true,
+        message: 'Pengaturan Jam Operasional & AI Agent berhasil disimpan!',
+      };
+    },
+    {
+      body: t.Object({
+        operatingHours: t.Optional(t.Any()),
+        aiAgentConfig: t.Optional(t.Any()),
+      }),
+    }
+  )
+
+  // ─── POST /settings/ai-agent/test — Test AI Prompt Directly ──
+  .post(
+    '/ai-agent/test',
+    async ({ user, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { success: false, error: 'Unauthorized' };
+      }
+
+      try {
+        const { AiAgentService } = await import('../../services/ai-agent.service');
+        const reply = await AiAgentService.generateGeminiResponse({
+          systemPrompt: body.systemPrompt || '',
+          userMessage: body.userMessage || 'Halo, saya mau tanya apakah ada promo hari ini?',
+          apiKey: body.apiKey || undefined,
+          model: body.model || 'gemini-2.0-flash',
+        });
+
+        return {
+          success: true,
+          reply,
+        };
+      } catch (err: any) {
+        set.status = 400;
+        return {
+          success: false,
+          error: err.message,
+        };
+      }
+    },
+    {
+      body: t.Object({
+        systemPrompt: t.String(),
+        userMessage: t.String(),
+        apiKey: t.Optional(t.String()),
+        model: t.Optional(t.String()),
+      }),
+    }
   );

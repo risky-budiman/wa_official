@@ -23,7 +23,11 @@
     Copy,
     X,
     Sliders,
-    Clock
+    Clock,
+    Bot,
+    MessageSquare,
+    Send,
+    Calendar
   } from 'lucide-svelte';
 
   let activeTab = $state<'FACEBOOK_LOGIN' | 'MANUAL'>('FACEBOOK_LOGIN');
@@ -48,45 +52,140 @@
   let webhookVerifyToken = $state('c815d80a7f3608e9edc744580250728aca2574307b8fb724');
   let customTunnelUrl = $state('');
 
-  // Operations & SLA Settings State
-  let maxChatsPerAgent = $state(5);
-  let autoResolveHours = $state(3);
-  let careWindowHours = $state(24);
-  let isSavingOperations = $state(false);
-  let operationsSuccessMsg = $state<string | null>(null);
-  let operationsErrorMsg = $state<string | null>(null);
+  // Main Section Tabs: WABA Channel vs Operating Hours & AI vs Operations & SLA
+  let mainSettingsTab = $state<'WABA' | 'HOURS_AI' | 'OPERATIONS'>('WABA');
 
-  async function loadOperationsSettings() {
-    const res = await apiRequest<{ success: boolean; settings: { maxChatsPerAgent: number; autoResolveHours: number; careWindowHours: number } }>('/settings/operations');
-    if (res.success && res.settings) {
-      maxChatsPerAgent = res.settings.maxChatsPerAgent ?? 5;
-      autoResolveHours = res.settings.autoResolveHours ?? 3;
-      careWindowHours = res.settings.careWindowHours ?? 24;
+  // Operating Hours State
+  let operatingHours = $state({
+    enabled: false,
+    timezone: 'Asia/Jakarta',
+    days: [1, 2, 3, 4, 5],
+    startTime: '08:00',
+    endTime: '17:00',
+  });
+
+  // AI Agent Auto-Responder State
+  let aiAgentConfig = $state({
+    enabled: false,
+    mode: 'AI_ASSISTANT' as 'AI_ASSISTANT' | 'STATIC_MESSAGE',
+    provider: 'gemini' as 'gemini' | 'openai',
+    apiKey: '',
+    model: 'gemini-2.0-flash',
+    systemPrompt: '',
+    staticMessage: 'Halo! Layanan kami saat ini sedang berada di luar jam operasional. Pesan Anda telah kami terima dan akan segera dibalas oleh tim kami saat jam kerja dimulai. Terima kasih! 🙏',
+  });
+
+  let isSavingHoursAi = $state(false);
+  let hoursAiSuccessMsg = $state<string | null>(null);
+  let hoursAiErrorMsg = $state<string | null>(null);
+
+  // AI Agent Live Simulator Testing State
+  let aiTestUserMessage = $state('Halo, saya ingin menanyakan jam buka dan produk yang tersedia.');
+  let isTestingAi = $state(false);
+  let aiTestResponse = $state<string | null>(null);
+  let aiTestError = $state<string | null>(null);
+
+  const daysOfWeek = [
+    { id: 1, label: 'Senin' },
+    { id: 2, label: 'Selasa' },
+    { id: 3, label: 'Rabu' },
+    { id: 4, label: 'Kamis' },
+    { id: 5, label: 'Jumat' },
+    { id: 6, label: 'Sabtu' },
+    { id: 7, label: 'Minggu' },
+  ];
+
+  function toggleDay(dayId: number) {
+    if (operatingHours.days.includes(dayId)) {
+      operatingHours.days = operatingHours.days.filter((d) => d !== dayId);
+    } else {
+      operatingHours.days = [...operatingHours.days, dayId].sort();
     }
   }
 
-  async function saveOperationsSettings(e: Event) {
+  async function loadOperatingHoursSettings() {
+    try {
+      const res = await apiRequest<any>('/settings/operating-hours');
+      if (res.success) {
+        if (res.operatingHours) {
+          operatingHours = {
+            enabled: !!res.operatingHours.enabled,
+            timezone: res.operatingHours.timezone || 'Asia/Jakarta',
+            days: Array.isArray(res.operatingHours.days) ? res.operatingHours.days : [1, 2, 3, 4, 5],
+            startTime: res.operatingHours.startTime || '08:00',
+            endTime: res.operatingHours.endTime || '17:00',
+          };
+        }
+        if (res.aiAgentConfig) {
+          aiAgentConfig = {
+            enabled: !!res.aiAgentConfig.enabled,
+            mode: res.aiAgentConfig.mode || 'AI_ASSISTANT',
+            provider: res.aiAgentConfig.provider || 'gemini',
+            apiKey: res.aiAgentConfig.apiKey || '',
+            model: res.aiAgentConfig.model || 'gemini-2.0-flash',
+            systemPrompt: res.aiAgentConfig.systemPrompt || '',
+            staticMessage: res.aiAgentConfig.staticMessage || 'Halo! Layanan kami saat ini sedang berada di luar jam operasional. Pesan Anda telah kami terima dan akan segera dibalas oleh tim kami saat jam kerja dimulai. Terima kasih! 🙏',
+          };
+        }
+      }
+    } catch (_) {}
+  }
+
+  async function saveOperatingHoursSettings(e: Event) {
     e.preventDefault();
-    isSavingOperations = true;
-    operationsSuccessMsg = null;
-    operationsErrorMsg = null;
+    isSavingHoursAi = true;
+    hoursAiSuccessMsg = null;
+    hoursAiErrorMsg = null;
 
-    const res = await apiRequest<any>('/settings/operations', {
-      method: 'PATCH',
-      body: JSON.stringify({
-        maxChatsPerAgent: Number(maxChatsPerAgent),
-        autoResolveHours: Number(autoResolveHours),
-        careWindowHours: Number(careWindowHours),
-      }),
-    });
-    isSavingOperations = false;
+    try {
+      const res = await apiRequest<any>('/settings/operating-hours', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          operatingHours,
+          aiAgentConfig,
+        }),
+      });
+      isSavingHoursAi = false;
 
-    if (res.success) {
-      operationsSuccessMsg = res.message || 'Pengaturan operasional & SLA berhasil disimpan!';
-      setTimeout(() => (operationsSuccessMsg = null), 4000);
-    } else {
-      operationsErrorMsg = res.error || 'Gagal menyimpan pengaturan operasional';
-      setTimeout(() => (operationsErrorMsg = null), 4000);
+      if (res.success) {
+        hoursAiSuccessMsg = 'Jadwal jam operasional dan konfigurasi AI Agent berhasil disimpan!';
+        setTimeout(() => (hoursAiSuccessMsg = null), 4000);
+      } else {
+        hoursAiErrorMsg = res.error || 'Gagal menyimpan pengaturan jam operasional';
+        setTimeout(() => (hoursAiErrorMsg = null), 4000);
+      }
+    } catch (err: any) {
+      isSavingHoursAi = false;
+      hoursAiErrorMsg = err.message || 'Terjadi kesalahan sistem';
+    }
+  }
+
+  async function testAiResponse() {
+    if (!aiTestUserMessage.trim()) return;
+    isTestingAi = true;
+    aiTestResponse = null;
+    aiTestError = null;
+
+    try {
+      const res = await apiRequest<any>('/settings/ai-agent/test', {
+        method: 'POST',
+        body: JSON.stringify({
+          systemPrompt: aiAgentConfig.systemPrompt,
+          userMessage: aiTestUserMessage,
+          apiKey: aiAgentConfig.apiKey || undefined,
+          model: aiAgentConfig.model || 'gemini-2.0-flash',
+        }),
+      });
+      isTestingAi = false;
+
+      if (res.success && res.reply) {
+        aiTestResponse = res.reply;
+      } else {
+        aiTestError = res.error || 'AI tidak memberikan balasan.';
+      }
+    } catch (err: any) {
+      isTestingAi = false;
+      aiTestError = err.message || 'Gagal menghubungi Gemini API';
     }
   }
 
@@ -379,7 +478,6 @@
       {fbSuccessMsg}
     </div>
   {/if}
-
   {#if fbErrorMsg}
     <div class="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 flex items-center gap-2 text-xs text-rose-800 dark:text-rose-300 font-bold animate-in fade-in">
       <AlertCircle class="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
@@ -388,581 +486,610 @@
   {/if}
 
   <!-- ══════════════════════════════════════════════════════════════ -->
-  <!-- 1. JIKA SUDAH TERHUBUNG (CONNECTED VIEW)                     -->
+  <!-- MAIN SETTINGS TOP TABS                                       -->
   <!-- ══════════════════════════════════════════════════════════════ -->
-  {#if channelStore.isConnected && channelStore.channel}
-    <div class="space-y-6">
-      <!-- Status Saluran Aktif Card (Ultra Precision & Modern UI) -->
-      <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
-        <!-- Card Header with Channel Info & Action Buttons -->
-        <div class="p-5 sm:p-6 bg-slate-50/50 dark:bg-slate-950/40 border-b border-slate-200/80 dark:border-slate-800/80 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div class="flex items-center gap-4">
-            <div class="w-12 h-12 rounded-2xl bg-emerald-500/10 dark:bg-emerald-950/60 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 shadow-sm">
-              <Smartphone class="w-6 h-6 stroke-[2.2]" />
-            </div>
-            
-            <div class="space-y-1">
-              <div class="flex flex-wrap items-center gap-2">
-                <h3 class="text-base font-extrabold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
-                  <span>{companyName || channelStore.channel?.companyName || 'IDS Payment'}</span>
-                </h3>
-                <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 text-[11px] font-bold border border-emerald-500/20">
-                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                  Saluran Terhubung
-                </span>
-                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 text-[10px] font-semibold border border-indigo-500/20 font-mono">
-                  <Sparkles class="w-3 h-3 text-indigo-500" />
-                  Meta Live v20.0
-                </span>
-              </div>
+  <div class="flex items-center p-1 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl gap-1">
+    <button
+      onclick={() => (mainSettingsTab = 'WABA')}
+      class="flex-1 py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer {mainSettingsTab === 'WABA' 
+        ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-sm border border-slate-200/80 dark:border-slate-700/80' 
+        : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}"
+    >
+      <Smartphone class="w-4 h-4" />
+      <span>Saluran WhatsApp (WABA)</span>
+    </button>
 
-              <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
-                <span class="font-mono font-bold text-slate-800 dark:text-slate-200">
-                  {channelStore.channel.displayPhoneNumber}
-                </span>
-                <span class="text-slate-300 dark:text-slate-700">•</span>
-                <div class="flex items-center gap-1 font-sans">
-                  <span class="text-slate-400">Nama Akun WhatsApp:</span>
-                  <span class="font-bold text-emerald-700 dark:text-emerald-400">
-                    {channelStore.channel.verifiedName.replace(/\s*\(Verified\)/gi, '')}
+    <button
+      onclick={() => (mainSettingsTab = 'HOURS_AI')}
+      class="flex-1 py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer {mainSettingsTab === 'HOURS_AI' 
+        ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm border border-slate-200/80 dark:border-slate-700/80' 
+        : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}"
+    >
+      <Clock class="w-4 h-4" />
+      <span>Jam Operasional & AI Agent</span>
+      {#if operatingHours.enabled && aiAgentConfig.enabled}
+        <span class="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
+      {/if}
+    </button>
+
+    <button
+      onclick={() => (mainSettingsTab = 'OPERATIONS')}
+      class="flex-1 py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer {mainSettingsTab === 'OPERATIONS' 
+        ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-sm border border-slate-200/80 dark:border-slate-700/80' 
+        : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}"
+    >
+      <Sliders class="w-4 h-4" />
+      <span>Kapasitas & SLA</span>
+    </button>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <!-- TAB CONTENT 1: WABA CHANNEL SETTINGS                         -->
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  {#if mainSettingsTab === 'WABA'}
+    {#if channelStore.isConnected && channelStore.channel}
+      <div class="space-y-6">
+        <!-- Status Saluran Aktif Card (Ultra Precision & Modern UI) -->
+        <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+          <!-- Card Header with Channel Info & Action Buttons -->
+          <div class="p-5 sm:p-6 bg-slate-50/50 dark:bg-slate-950/40 border-b border-slate-200/80 dark:border-slate-800/80 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div class="flex items-center gap-4">
+              <div class="w-12 h-12 rounded-2xl bg-emerald-500/10 dark:bg-emerald-950/60 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 shadow-sm">
+                <Smartphone class="w-6 h-6 stroke-[2.2]" />
+              </div>
+              
+              <div class="space-y-1">
+                <div class="flex flex-wrap items-center gap-2">
+                  <h3 class="text-base font-extrabold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+                    <span>{companyName || channelStore.channel?.companyName || 'IDS Payment'}</span>
+                  </h3>
+                  <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 text-[11px] font-bold border border-emerald-500/20">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    Saluran Terhubung
                   </span>
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 text-[10px] font-semibold border border-indigo-500/20 font-mono">
+                    <Sparkles class="w-3 h-3 text-indigo-500" />
+                    Meta Live v20.0
+                  </span>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+                  <span class="font-mono font-bold text-slate-800 dark:text-slate-200">
+                    {channelStore.channel.displayPhoneNumber}
+                  </span>
+                  <span class="text-slate-300 dark:text-slate-700">•</span>
+                  <div class="flex items-center gap-1 font-sans">
+                    <span class="text-slate-400">Nama Akun WhatsApp:</span>
+                    <span class="font-bold text-emerald-700 dark:text-emerald-400">
+                      {channelStore.channel.verifiedName.replace(/\s*\(Verified\)/gi, '')}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
+
+            <!-- Action Buttons (Pixel-Perfect Alignment) -->
+            <div class="flex items-center gap-2 self-start md:self-auto shrink-0">
+              <button
+                onclick={syncFromMetaLive}
+                disabled={isSyncingLive}
+                class="h-9 px-3.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700/80 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center gap-2 transition shadow-sm cursor-pointer disabled:opacity-60"
+                title="Perbarui status verifikasi langsung dari Meta Graph API"
+              >
+                <RefreshCw class="w-3.5 h-3.5 text-slate-500 dark:text-slate-400 {isSyncingLive ? 'animate-spin text-emerald-500' : ''}" />
+                <span>{isSyncingLive ? 'Menyinkronkan...' : 'Sinkronkan Meta'}</span>
+              </button>
+
+              <button
+                onclick={disconnectChannel}
+                disabled={isDisconnecting}
+                class="h-9 px-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-400 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer disabled:opacity-60"
+                title="Putuskan koneksi nomor ini"
+              >
+                <Unlink class="w-3.5 h-3.5" />
+                <span>{isDisconnecting ? 'Memutuskan...' : 'Putuskan'}</span>
+              </button>
+            </div>
           </div>
 
-          <!-- Action Buttons (Pixel-Perfect Alignment) -->
-          <div class="flex items-center gap-2 self-start md:self-auto shrink-0">
-            <button
-              onclick={syncFromMetaLive}
-              disabled={isSyncingLive}
-              class="h-9 px-3.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700/80 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center gap-2 transition shadow-sm cursor-pointer disabled:opacity-60"
-              title="Perbarui status verifikasi langsung dari Meta Graph API"
-            >
-              <RefreshCw class="w-3.5 h-3.5 text-slate-500 dark:text-slate-400 {isSyncingLive ? 'animate-spin text-emerald-500' : ''}" />
-              <span>{isSyncingLive ? 'Menyinkronkan...' : 'Sinkronkan Meta'}</span>
-            </button>
+          <!-- Metrics Grid -->
+          <div class="p-5 sm:p-6 space-y-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+              <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 flex flex-col justify-between space-y-1.5">
+                <span class="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Perusahaan Terdaftar</span>
+                <span class="text-xs font-bold text-slate-900 dark:text-white truncate">{companyName || 'IDS Payment'}</span>
+              </div>
 
-            <button
-              onclick={disconnectChannel}
-              disabled={isDisconnecting}
-              class="h-9 px-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-400 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer disabled:opacity-60"
-              title="Putuskan koneksi nomor ini"
-            >
-              <Unlink class="w-3.5 h-3.5" />
-              <span>{isDisconnecting ? 'Memutuskan...' : 'Putuskan'}</span>
-            </button>
+              <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 flex flex-col justify-between space-y-1.5">
+                <div class="flex items-center justify-between">
+                  <span class="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">WABA ID Resmi</span>
+                  <button onclick={() => copyToClipboard(channelStore.channel?.wabaId || '1386698372551547', 'waba')} class="text-[10px] text-slate-500 hover:text-emerald-600 transition flex items-center gap-1 cursor-pointer">
+                    {#if copiedWaba}<Check class="w-3 h-3 text-emerald-500" />{:else}<Copy class="w-3 h-3" />{/if}
+                  </button>
+                </div>
+                <span class="text-xs font-mono font-bold text-slate-900 dark:text-white truncate">{channelStore.channel?.wabaId || '1386698372551547'}</span>
+              </div>
+
+              <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 flex flex-col justify-between space-y-1.5">
+                <span class="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status Nomor</span>
+                <div class="flex items-center gap-1.5">
+                  <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                  <span class="text-xs font-bold text-emerald-700 dark:text-emerald-400">TERVERIFIKASI</span>
+                </div>
+              </div>
+
+              <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 flex flex-col justify-between space-y-1.5">
+                <span class="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Kualitas Pesan</span>
+                <div class="flex items-center gap-1.5">
+                  <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                  <span class="text-xs font-bold text-emerald-700 dark:text-emerald-400">{metaLive?.qualityRating || channelStore.channel?.qualityRating || 'GREEN'} (Tinggi)</span>
+                </div>
+              </div>
+
+              <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 flex flex-col justify-between space-y-1.5">
+                <span class="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Limit Pesan Meta</span>
+                <span class="text-xs font-bold text-indigo-700 dark:text-indigo-400 font-mono">1.000 Chat / 24 Jam</span>
+              </div>
+            </div>
           </div>
         </div>
 
-        <!-- 5 Precision Metrics Grid -->
-        <div class="p-5 sm:p-6 space-y-4">
-          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-            <!-- 1. Nama Perusahaan Terdaftar -->
-            <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 flex flex-col justify-between space-y-1.5">
-              <span class="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                Perusahaan Terdaftar
-              </span>
-              <span class="text-xs font-bold text-slate-900 dark:text-white truncate" title={companyName || channelStore.channel?.companyName || authStore.user?.organizationName || 'IDS Payment'}>
-                {companyName || channelStore.channel?.companyName || authStore.user?.organizationName || 'IDS Payment'}
-              </span>
-            </div>
-
-            <!-- 2. WABA ID -->
-            <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 flex flex-col justify-between space-y-1.5">
-              <div class="flex items-center justify-between">
-                <span class="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                  WABA ID Resmi
-                </span>
-                <button
-                  onclick={() => copyToClipboard(channelStore.channel?.wabaId || '1386698372551547', 'waba')}
-                  class="text-[10px] text-slate-500 hover:text-emerald-600 dark:hover:text-emerald-400 transition flex items-center gap-1 cursor-pointer"
-                  title="Salin WABA ID"
-                >
-                  {#if copiedWaba}
-                    <Check class="w-3 h-3 text-emerald-500" />
-                    <span class="text-emerald-500 font-bold">Disalin</span>
-                  {:else}
-                    <Copy class="w-3 h-3" />
-                  {/if}
+        <!-- Webhook Configuration Box -->
+        <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 space-y-4">
+          <h3 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <Layers class="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            Pengaturan Webhook Meta Developer
+          </h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label for="cb_url" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Callback URL (Webhook)</label>
+              <div class="flex items-center gap-2">
+                <input id="cb_url" type="text" readonly value={webhookCallbackUrl} class="flex-1 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-700 dark:text-slate-300" />
+                <button onclick={() => copyToClipboard(webhookCallbackUrl, 'url')} class="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-xs font-semibold transition cursor-pointer">
+                  {#if copiedUrl}<Check class="w-4 h-4 text-emerald-500" />{:else}<Copy class="w-4 h-4 text-slate-600 dark:text-slate-400" />{/if}
                 </button>
               </div>
-              <span class="text-xs font-bold font-mono text-slate-900 dark:text-white truncate" title={channelStore.channel?.wabaId || '1386698372551547'}>
-                {channelStore.channel?.wabaId || '1386698372551547'}
-              </span>
-            </div>
-
-            <!-- 3. Status Verifikasi Kepemilikan -->
-            <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 flex flex-col justify-between space-y-1.5">
-              <span class="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                Verifikasi Nomor
-              </span>
-              <div class="flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                <Check class="w-3.5 h-3.5 stroke-[2.5]" />
-                <span>Terverifikasi OTP</span>
-              </div>
-            </div>
-
-            <!-- 4. Status Nama Akun -->
-            <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 flex flex-col justify-between space-y-1.5">
-              <span class="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                Status Nama Meta
-              </span>
-              <div class="flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                <CheckCircle2 class="w-3.5 h-3.5" />
-                <span>Disetujui Meta</span>
-              </div>
-            </div>
-
-            <!-- 5. Quality Rating & Tier -->
-            <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 flex flex-col justify-between space-y-1.5">
-              <span class="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                Kualitas & Kuota
-              </span>
-              <div class="flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                <span>{channelStore.channel.qualityRating} ⭐</span>
-                <span class="text-[10px] font-medium text-slate-500 dark:text-slate-400">
-                  ({metaLive?.messagingLimitTier === 'TIER_10K' ? '10K/Hari' : (metaLive?.messagingLimitTier || '1K/Hari')})
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <!-- 💡 Informational Banner: OBA Green Tick Guidance -->
-          <div class="p-4 rounded-xl bg-sky-50/80 dark:bg-sky-950/30 border border-sky-200/80 dark:border-sky-800/60 text-xs text-sky-900 dark:text-sky-200 flex items-start gap-3">
-            <div class="p-1 rounded-lg bg-sky-500/10 text-sky-600 dark:text-sky-400 shrink-0 mt-0.5">
-              <Info class="w-4 h-4" />
-            </div>
-            <div class="space-y-1">
-              <h5 class="font-bold text-sky-900 dark:text-sky-100 text-xs flex items-center gap-2">
-                Informasi Verifikasi Akun & Lencana Centang Hijau (Official Business Account)
-              </h5>
-              <p class="text-[11px] text-sky-800/90 dark:text-sky-300/90 leading-relaxed">
-                Nomor Anda berstatus <strong>"Terverifikasi OTP"</strong> dan telah aktif mengirim & menerima pesan. 
-                Lencana centang hijau resmi <em>(Official Business Account)</em> adalah pengajuan opsional terpisah yang dapat Anda minta melalui <strong>Meta WhatsApp Business Manager</strong> setelah bisnis Anda menyelesaikan verifikasi legalitas (NIB/NPWP).
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Webhook Configuration Overview Card (With 1-Click Copy Buttons & Dynamic Host) -->
-      <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 space-y-5">
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100 dark:border-slate-800">
-          <div class="flex items-center gap-2.5">
-            <div class="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center border border-emerald-500/20">
-              <Shield class="w-4 h-4" />
             </div>
             <div>
-              <h3 class="text-sm font-bold text-slate-900 dark:text-white">
-                Konfigurasi Webhook Meta Cloud API
-              </h3>
-              <p class="text-[11px] text-slate-500">
-                Salin Callback URL dan Verify Token di bawah ke Meta Developer Dashboard
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div class="space-y-4 text-xs">
-          <!-- 1. Webhook Callback URL -->
-          <div class="space-y-1.5">
-            <div class="flex items-center justify-between">
-              <label for="active_callback_url" class="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                <span>Webhook Callback URL (Otomatis Sesuai Domain)</span>
-                <span class="px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold border border-emerald-200 dark:border-emerald-800">
-                  Auto Dynamic
-                </span>
-              </label>
-              <button
-                onclick={() => copyToClipboard(webhookCallbackUrl, 'url')}
-                class="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 border border-slate-200 dark:border-slate-700 hover:border-emerald-300 dark:hover:border-emerald-800 text-slate-700 dark:text-slate-300 hover:text-emerald-700 dark:hover:text-emerald-300 text-[11px] font-bold flex items-center gap-1.5 transition cursor-pointer shadow-sm"
-              >
-                {#if copiedUrl}
-                  <Check class="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 stroke-[2.5]" />
-                  <span class="text-emerald-600 dark:text-emerald-400">Tersalin!</span>
-                {:else}
-                  <Copy class="w-3.5 h-3.5" />
-                  <span>Salin URL</span>
-                {/if}
-              </button>
-            </div>
-
-            <div class="relative flex items-center">
-              <input
-                id="active_callback_url"
-                type="text"
-                readonly
-                value={webhookCallbackUrl}
-                class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white font-mono select-all font-bold tracking-tight focus:outline-none"
-              />
-            </div>
-          </div>
-
-          <!-- Opsional: Custom Tunnel URL override untuk local testing -->
-          <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/40 border border-dashed border-slate-200 dark:border-slate-800 space-y-2">
-            <label for="custom_tunnel_input" class="text-[11px] font-semibold text-slate-600 dark:text-slate-400 block">
-              💡 Opsional: Masukkan Domain Tunnel (Cloudflare / Ngrok URL) untuk Auto-Update URL di atas:
-            </label>
-            <input
-              id="custom_tunnel_input"
-              type="text"
-              bind:value={customTunnelUrl}
-              placeholder="Contoh: https://xxxx.trycloudflare.com atau https://xxxx.ngrok-free.app"
-              class="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white font-mono focus:border-emerald-500 focus:outline-none"
-            />
-          </div>
-
-          <!-- 2. Webhook Verify Token -->
-          <div class="space-y-1.5 pt-2">
-            <div class="flex items-center justify-between">
-              <label for="active_verify_token" class="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                <span>Verify Token (Kunci Rahasia Kriptografi Acak)</span>
-                <span class="px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 text-[10px] font-bold border border-indigo-200 dark:border-indigo-800 font-mono">
-                  High Security
-                </span>
-              </label>
-              <button
-                onclick={() => copyToClipboard(webhookVerifyToken, 'token')}
-                class="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/60 border border-slate-200 dark:border-slate-700 hover:border-emerald-300 dark:hover:border-emerald-800 text-slate-700 dark:text-slate-300 hover:text-emerald-700 dark:hover:text-emerald-300 text-[11px] font-bold flex items-center gap-1.5 transition cursor-pointer shadow-sm"
-              >
-                {#if copiedToken}
-                  <Check class="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 stroke-[2.5]" />
-                  <span class="text-emerald-600 dark:text-emerald-400">Tersalin!</span>
-                {:else}
-                  <Copy class="w-3.5 h-3.5" />
-                  <span>Salin Token</span>
-                {/if}
-              </button>
-            </div>
-
-            <div class="relative flex items-center">
-              <input
-                id="active_verify_token"
-                type="text"
-                readonly
-                value={webhookVerifyToken}
-                class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-indigo-700 dark:text-indigo-300 font-mono select-all font-bold tracking-tight focus:outline-none"
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 3. Pengaturan Operasional & Kapasitas Agen (Operational Rules & SLA) -->
-      <form onsubmit={saveOperationsSettings} class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 space-y-5">
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
-          <div class="flex items-center gap-2.5">
-            <div class="w-8 h-8 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center border border-indigo-500/20">
-              <Sliders class="w-4 h-4" />
-            </div>
-            <div>
-              <h3 class="text-sm font-bold text-slate-900 dark:text-white">
-                Pengaturan Operasional & Distribusi Antrean
-              </h3>
-              <p class="text-[11px] text-slate-500">
-                Atur batas kapasitas beban agen, waktu auto-resolve, dan masa aktif sesi obrolan
-              </p>
-            </div>
-          </div>
-
-          {#if operationsSuccessMsg}
-            <div class="px-3 py-1 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 text-xs font-bold flex items-center gap-1.5 animate-fadeIn">
-              <Check class="w-3.5 h-3.5" />
-              <span>{operationsSuccessMsg}</span>
-            </div>
-          {/if}
-
-          {#if operationsErrorMsg}
-            <div class="px-3 py-1 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 text-xs font-bold flex items-center gap-1.5 animate-fadeIn">
-              <AlertCircle class="w-3.5 h-3.5" />
-              <span>{operationsErrorMsg}</span>
-            </div>
-          {/if}
-        </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <!-- 1. Max Chats per Agent -->
-          <div class="space-y-1.5 p-4 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800/80">
-            <label for="max_chats_agent" class="block text-xs font-bold text-slate-800 dark:text-slate-200">
-              Maksimal Chat per Agen
-            </label>
-            <p class="text-[11px] text-slate-500 dark:text-slate-400 leading-tight">
-              Jika semua agen mencapai batas ini, pesan baru otomatis masuk antrean.
-            </p>
-            <div class="pt-2 flex items-center gap-2">
-              <input
-                id="max_chats_agent"
-                type="number"
-                min="1"
-                max="50"
-                bind:value={maxChatsPerAgent}
-                class="w-24 px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white text-center focus:outline-none focus:border-indigo-500"
-              />
-              <span class="text-xs font-semibold text-slate-500">Chat / Agen</span>
-            </div>
-          </div>
-
-          <!-- 2. Auto-Resolve Inactivity Hours -->
-          <div class="space-y-1.5 p-4 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800/80">
-            <label for="auto_resolve_hrs" class="block text-xs font-bold text-slate-800 dark:text-slate-200">
-              Auto-Resolve Tanpa Respon
-            </label>
-            <p class="text-[11px] text-slate-500 dark:text-slate-400 leading-tight">
-              Obrolan diselesaikan otomatis jika pelanggan tidak merespon setelah:
-            </p>
-            <div class="pt-2">
-              <select
-                id="auto_resolve_hrs"
-                bind:value={autoResolveHours}
-                class="w-full px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 cursor-pointer"
-              >
-                <option value={1}>1 Jam</option>
-                <option value={2}>2 Jam</option>
-                <option value={3}>3 Jam (Standar Rekomendasi)</option>
-                <option value={6}>6 Jam</option>
-                <option value={12}>12 Jam</option>
-                <option value={24}>24 Jam</option>
-                <option value={0}>Nonaktifkan (Manual)</option>
-              </select>
-            </div>
-          </div>
-
-          <!-- 3. Meta 24-Hour Customer Care Window -->
-          <div class="space-y-1.5 p-4 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800/80">
-            <label for="care_window_hrs" class="block text-xs font-bold text-slate-800 dark:text-slate-200">
-              Sesi Layanan Pelanggan
-            </label>
-            <p class="text-[11px] text-slate-500 dark:text-slate-400 leading-tight">
-              Masa aktif sesi pesan WhatsApp resmi dari respon terakhir pelanggan.
-            </p>
-            <div class="pt-2 flex items-center gap-2">
-              <input
-                id="care_window_hrs"
-                type="number"
-                readonly
-                value={careWindowHours}
-                class="w-24 px-3 py-2 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 text-center select-none"
-              />
-              <span class="text-xs font-semibold text-slate-500">Jam (Meta Standard)</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="flex justify-end pt-1">
-          <button
-            type="submit"
-            disabled={isSavingOperations}
-            class="py-2.5 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-2 shadow-sm shadow-indigo-600/20 transition cursor-pointer disabled:opacity-60"
-          >
-            <Save class="w-3.5 h-3.5 {isSavingOperations ? 'animate-spin' : ''}" />
-            <span>{isSavingOperations ? 'Menyimpan...' : 'Simpan Pengaturan Operasional'}</span>
-          </button>
-        </div>
-      </form>
-    </div>
-
-  <!-- ══════════════════════════════════════════════════════════════ -->
-  <!-- 2. JIKA BELUM TERHUBUNG (DISCONNECTED REGISTRATION TABS)      -->
-  <!-- ══════════════════════════════════════════════════════════════ -->
-  {:else}
-    <!-- Status Disconnected Banner -->
-    <div class="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 flex items-start gap-3 text-xs text-amber-800 dark:text-amber-300">
-      <AlertCircle class="w-5 h-5 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
-      <div class="flex-1">
-        <p class="font-bold">Status: WABA Disconnected (Belum Ada Saluran Terhubung)</p>
-        <p class="text-amber-700 dark:text-amber-400 text-[11px] mt-0.5">
-          Pilih salah satu metode di bawah untuk menghubungkan nomor WhatsApp resmi Anda.
-        </p>
-      </div>
-    </div>
-
-    <!-- Navigation Tabs: Facebook Embedded Signup vs Manual -->
-    <div class="flex p-1.5 bg-slate-200/80 dark:bg-slate-900 rounded-2xl text-xs font-bold w-fit border border-slate-300/60 dark:border-slate-800">
-      <button
-        onclick={() => (activeTab = 'FACEBOOK_LOGIN')}
-        class="py-2 px-4 rounded-xl transition cursor-pointer flex items-center gap-2 {activeTab === 'FACEBOOK_LOGIN' 
-          ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm' 
-          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}"
-      >
-        <div class="w-4 h-4 rounded-full bg-[#1877F2] text-white flex items-center justify-center text-[10px] font-black font-serif">
-          f
-        </div>
-        Login with Facebook (Otomatis)
-      </button>
-
-      <button
-        onclick={() => (activeTab = 'MANUAL')}
-        class="py-2 px-4 rounded-xl transition cursor-pointer flex items-center gap-2 {activeTab === 'MANUAL' 
-          ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-sm' 
-          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'}"
-      >
-        <Key class="w-3.5 h-3.5" />
-        Konfigurasi Manual (Developer)
-      </button>
-    </div>
-
-    <!-- ─── TAB 1: LOGIN WITH FACEBOOK (EMBEDDED SIGNUP) ─── -->
-    {#if activeTab === 'FACEBOOK_LOGIN'}
-      <div class="bg-white dark:bg-slate-900/70 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-5">
-        <div class="flex items-start gap-4">
-          <div class="w-12 h-12 rounded-2xl bg-[#1877F2]/10 text-[#1877F2] flex items-center justify-center font-black text-2xl font-serif shrink-0 border border-[#1877F2]/20">
-            f
-          </div>
-          <div>
-            <h3 class="text-sm font-bold text-slate-900 dark:text-white">Meta WhatsApp Embedded Signup</h3>
-            <p class="text-xs text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">
-              Hubungkan akun Facebook Anda untuk mengotorisasi nomor WhatsApp Business secara instan ke sistem CRM ini.
-            </p>
-          </div>
-        </div>
-
-        <!-- Meta App ID Input for Real Facebook Login -->
-        <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-3">
-          <div>
-            <label for="fb_app_id" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              Meta App ID Resmi Anda (Wajib diisi dari <a href="https://developers.facebook.com/apps/" target="_blank" rel="noopener noreferrer" class="text-blue-600 dark:text-blue-400 underline font-semibold">developers.facebook.com</a>)
-            </label>
-            <input
-              id="fb_app_id"
-              type="text"
-              bind:value={appId}
-              placeholder="Contoh: 123456789012345 (Salin dari dashboard Meta App Anda)"
-              class="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 font-mono"
-            />
-          </div>
-        </div>
-
-        <!-- Official Facebook Login Button -->
-        <div class="pt-1">
-          <button
-            onclick={connectWithFacebook}
-            disabled={isConnectingFb}
-            class="py-3 px-6 rounded-xl bg-[#1877F2] hover:bg-[#166fe5] text-white font-bold text-xs flex items-center gap-2.5 shadow-md shadow-[#1877F2]/25 transition cursor-pointer disabled:opacity-75"
-          >
-            {#if isConnectingFb}
-              <div class="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin"></div>
-              <span>Membuka Facebook Login...</span>
-            {:else}
-              <div class="w-4 h-4 rounded-full bg-white text-[#1877F2] flex items-center justify-center text-[10px] font-black font-serif">
-                f
+              <label for="v_tok" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Verify Token</label>
+              <div class="flex items-center gap-2">
+                <input id="v_tok" type="text" readonly value={webhookVerifyToken} class="flex-1 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-700 dark:text-slate-300" />
+                <button onclick={() => copyToClipboard(webhookVerifyToken, 'token')} class="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-xs font-semibold transition cursor-pointer">
+                  {#if copiedToken}<Check class="w-4 h-4 text-emerald-500" />{:else}<Copy class="w-4 h-4 text-slate-600 dark:text-slate-400" />{/if}
+                </button>
               </div>
-              <span>Lanjutkan dengan Facebook</span>
-            {/if}
-          </button>
-        </div>
-
-        <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-[11px] text-slate-600 dark:text-slate-400 space-y-1">
-          <p class="font-semibold text-slate-800 dark:text-slate-300">Panduan Menghubungkan Meta Facebook:</p>
-          <ol class="list-decimal list-inside space-y-0.5 text-slate-500 dark:text-slate-400">
-            <li>Buka <a href="https://developers.facebook.com/apps" target="_blank" rel="noopener noreferrer" class="text-blue-600 dark:text-blue-400 underline font-semibold">developers.facebook.com/apps</a>.</li>
-            <li>Buat Aplikasi bertipe <strong>Business</strong> dan aktifkan produk <strong>WhatsApp</strong>.</li>
-            <li>Salin <strong>App ID</strong> dari dashboard Meta Anda dan masukkan ke kotak Meta App ID di atas.</li>
-            <li>Klik tombol <strong>Lanjutkan dengan Facebook</strong> untuk login dan memilih nomor WhatsApp Anda.</li>
-          </ol>
+            </div>
+          </div>
         </div>
       </div>
-
-    <!-- ─── TAB 2: MANUAL CONFIGURATION (DEVELOPER) ─── -->
     {:else}
-      {#if saved}
-        <div class="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex items-center gap-2 text-xs text-emerald-800 dark:text-emerald-300 font-bold">
-          <CheckCircle2 class="w-4 h-4" />
-          Konfigurasi manual berhasil disimpan ke database!
-        </div>
-      {/if}
-
-      <form onsubmit={handleManualSave} class="space-y-6">
-        <!-- Phone & Business Info -->
-        <div class="bg-white dark:bg-slate-900/70 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-          <h3 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <Smartphone class="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-            Informasi Nomor & Saluran WhatsApp
-          </h3>
-
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label for="manual_phone" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Nomor WhatsApp Resmi</label>
-              <input
-                id="manual_phone"
-                type="text"
-                bind:value={displayPhoneNumber}
-                placeholder="e.g. +62 812-3456-7890"
-                class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white font-mono placeholder-slate-400 focus:outline-none focus:border-emerald-500"
-                required
-              />
-            </div>
-
-            <div>
-              <label for="manual_verified_name" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Nama Tampilan Bisnis (Verified Name)</label>
-              <input
-                id="manual_verified_name"
-                type="text"
-                bind:value={verifiedName}
-                placeholder="e.g. PT WhatsApp CRM Indonesia"
-                class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500"
-                required
-              />
-            </div>
-          </div>
+      <!-- Disconnected State: Facebook vs Manual Setup -->
+      <div class="space-y-6">
+        <div class="flex p-1.5 bg-slate-200/80 dark:bg-slate-900 rounded-2xl text-xs font-bold w-fit border border-slate-300/60 dark:border-slate-800">
+          <button onclick={() => (activeTab = 'FACEBOOK_LOGIN')} class="py-2 px-4 rounded-xl transition cursor-pointer flex items-center gap-2 {activeTab === 'FACEBOOK_LOGIN' ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-600 dark:text-slate-400'}">
+            <div class="w-4 h-4 rounded-full bg-[#1877F2] text-white flex items-center justify-center text-[10px] font-black font-serif">f</div>
+            Login with Facebook (Otomatis)
+          </button>
+          <button onclick={() => (activeTab = 'MANUAL')} class="py-2 px-4 rounded-xl transition cursor-pointer flex items-center gap-2 {activeTab === 'MANUAL' ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-sm' : 'text-slate-600 dark:text-slate-400'}">
+            <Key class="w-3.5 h-3.5" />
+            Konfigurasi Manual (Developer)
+          </button>
         </div>
 
-        <!-- Meta Credentials -->
-        <div class="bg-white dark:bg-slate-900/70 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
-          <h3 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <Key class="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-            Kredensial Meta Developer
-          </h3>
-
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label for="waba_id" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">WhatsApp Business Account (WABA) ID</label>
-              <input
-                id="waba_id"
-                type="text"
-                bind:value={wabaId}
-                placeholder="e.g. 109823471092834"
-                class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500"
-              />
+        {#if activeTab === 'FACEBOOK_LOGIN'}
+          <div class="bg-white dark:bg-slate-900/70 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-5">
+            <div class="flex items-start gap-4">
+              <div class="w-12 h-12 rounded-2xl bg-[#1877F2]/10 text-[#1877F2] flex items-center justify-center font-black text-2xl font-serif shrink-0 border border-[#1877F2]/20">f</div>
+              <div>
+                <h3 class="text-sm font-bold text-slate-900 dark:text-white">Meta WhatsApp Embedded Signup</h3>
+                <p class="text-xs text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">Hubungkan akun Facebook Anda untuk mengotorisasi nomor WhatsApp Business secara instan ke sistem CRM ini.</p>
+              </div>
             </div>
+            <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-3">
+              <div>
+                <label for="fb_app_id" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Meta App ID Resmi Anda</label>
+                <input id="fb_app_id" type="text" bind:value={appId} placeholder="Contoh: 123456789012345" class="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono" />
+              </div>
+            </div>
+            <button onclick={connectWithFacebook} disabled={isConnectingFb} class="py-3 px-6 rounded-xl bg-[#1877F2] hover:bg-[#166fe5] text-white font-bold text-xs flex items-center gap-2.5 shadow-md transition cursor-pointer">
+              {#if isConnectingFb}<div class="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin"></div>{:else}<div class="w-4 h-4 rounded-full bg-white text-[#1877F2] flex items-center justify-center text-[10px] font-black font-serif">f</div>{/if}
+              <span>Lanjutkan dengan Facebook</span>
+            </button>
+          </div>
+        {:else}
+          <form onsubmit={handleManualSave} class="space-y-6">
+            <div class="bg-white dark:bg-slate-900/70 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+              <h3 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2"><Smartphone class="w-4 h-4 text-emerald-600" /> Informasi Nomor WhatsApp</h3>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label for="m_phone" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Nomor WhatsApp</label>
+                  <input id="m_phone" type="text" bind:value={displayPhoneNumber} placeholder="+62 812-3456-7890" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono" required />
+                </div>
+                <div>
+                  <label for="m_name" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Nama Tampilan Bisnis</label>
+                  <input id="m_name" type="text" bind:value={verifiedName} placeholder="PT WhatsApp CRM Indonesia" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs" required />
+                </div>
+              </div>
+            </div>
+            <div class="bg-white dark:bg-slate-900/70 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+              <h3 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2"><Key class="w-4 h-4 text-emerald-600" /> Kredensial Meta Developer</h3>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label for="waba_id" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">WABA ID</label>
+                  <input id="waba_id" type="text" bind:value={wabaId} placeholder="109823471092834" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs" />
+                </div>
+                <div>
+                  <label for="p_id" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Phone Number ID</label>
+                  <input id="p_id" type="text" bind:value={appId} placeholder="102938475610293" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs" />
+                </div>
+              </div>
+              <div>
+                <label for="s_tok" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">System User Permanent Token</label>
+                <textarea id="s_tok" rows="3" bind:value={accessToken} placeholder="EAAGm0PX4ZCBO..." class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono"></textarea>
+              </div>
+            </div>
+            <div class="flex justify-end pt-2">
+              <button type="submit" disabled={isSaving} class="py-3 px-6 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-2 shadow-md transition cursor-pointer">
+                <Save class="w-4 h-4" />
+                {isSaving ? 'Menyimpan...' : 'Simpan & Hubungkan WABA'}
+              </button>
+            </div>
+          </form>
+        {/if}
+      </div>
+    {/if}
 
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <!-- TAB CONTENT 2: JAM OPERASIONAL & AI AGENT                   -->
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  {:else if mainSettingsTab === 'HOURS_AI'}
+    {#if hoursAiSuccessMsg}
+      <div class="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex items-center gap-2 text-xs text-emerald-800 dark:text-emerald-300 font-bold animate-in fade-in">
+        <CheckCircle2 class="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+        {hoursAiSuccessMsg}
+      </div>
+    {/if}
+
+    {#if hoursAiErrorMsg}
+      <div class="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 flex items-center gap-2 text-xs text-rose-800 dark:text-rose-300 font-bold animate-in fade-in">
+        <AlertCircle class="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
+        {hoursAiErrorMsg}
+      </div>
+    {/if}
+
+    <form onsubmit={saveOperatingHoursSettings} class="space-y-6">
+      <!-- 1. Card Jadwal Jam Operasional -->
+      <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 space-y-5">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+              <Clock class="w-5 h-5" />
+            </div>
             <div>
-              <label for="phone_number_id" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Phone Number ID / App ID</label>
-              <input
-                id="phone_number_id"
-                type="text"
-                bind:value={appId}
-                placeholder="e.g. 102938475610293"
-                class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500"
-              />
+              <h3 class="text-sm font-bold text-slate-900 dark:text-white">Jadwal Jam Operasional Layanan</h3>
+              <p class="text-xs text-slate-500 dark:text-slate-400">Atur hari dan jam kerja agen manusia untuk menangani chat pelanggan</p>
             </div>
           </div>
 
-          <div>
-            <label for="system_token" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">System User Permanent Access Token</label>
-            <textarea
-              id="system_token"
-              rows="3"
-              bind:value={accessToken}
-              placeholder="EAAGm0PX4ZCBO..."
-              class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white font-mono placeholder-slate-400 focus:outline-none focus:border-emerald-500"
-            ></textarea>
-          </div>
+          <!-- Toggle Enable Switch -->
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" bind:checked={operatingHours.enabled} class="sr-only peer" />
+            <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+          </label>
         </div>
 
-        <!-- Submit Button -->
+        {#if operatingHours.enabled}
+          <div class="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-4">
+            <!-- Hari Kerja Selector -->
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">Hari Kerja Operasional:</label>
+              <div class="flex flex-wrap gap-2">
+                {#each daysOfWeek as day}
+                  <button
+                    type="button"
+                    onclick={() => toggleDay(day.id)}
+                    class="py-2 px-4 rounded-xl text-xs font-bold transition cursor-pointer {operatingHours.days.includes(day.id) 
+                      ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-500/20' 
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'}"
+                  >
+                    {day.label}
+                  </button>
+                {/each}
+              </div>
+            </div>
+
+            <!-- Jam Buka & Jam Tutup + Timezone -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+              <div>
+                <label for="start_time" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Jam Mulai Layanan</label>
+                <input
+                  id="start_time"
+                  type="time"
+                  bind:value={operatingHours.startTime}
+                  class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white"
+                  required
+                />
+              </div>
+
+              <div>
+                <label for="end_time" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Jam Tutup Layanan</label>
+                <input
+                  id="end_time"
+                  type="time"
+                  bind:value={operatingHours.endTime}
+                  class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white"
+                  required
+                />
+              </div>
+
+              <div>
+                <label for="tz_select" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Zona Waktu</label>
+                <select
+                  id="tz_select"
+                  bind:value={operatingHours.timezone}
+                  class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white"
+                >
+                  <option value="Asia/Jakarta">WIB (Asia/Jakarta - UTC+7)</option>
+                  <option value="Asia/Makassar">WITA (Asia/Makassar - UTC+8)</option>
+                  <option value="Asia/Jayapura">WIT (Asia/Jayapura - UTC+9)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        {:else}
+          <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-500">
+            Jam operasional dinonaktifkan. Sistem menganggap layanan pelanggan buka 24 jam setiap hari.
+          </div>
+        {/if}
+      </div>
+
+      <!-- 2. Card AI Agent Auto-Responder di Luar Jam Operasional -->
+      <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 space-y-5">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+              <Bot class="w-5 h-5" />
+            </div>
+            <div>
+              <h3 class="text-sm font-bold text-slate-900 dark:text-white">AI Agent Auto-Responder di Luar Jam Kerja</h3>
+              <p class="text-xs text-slate-500 dark:text-slate-400">Secara otomatis menjawab dan melayani pelanggan dengan cerdas saat kantor tutup</p>
+            </div>
+          </div>
+
+          <!-- Toggle Enable Switch -->
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" bind:checked={aiAgentConfig.enabled} class="sr-only peer" />
+            <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+          </label>
+        </div>
+
+        {#if aiAgentConfig.enabled}
+          <div class="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-5">
+            <!-- Pilihan Mode AI vs Pesan Statis -->
+            <div>
+              <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">Mode Respon Otomatis:</label>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onclick={() => (aiAgentConfig.mode = 'AI_ASSISTANT')}
+                  class="p-4 rounded-xl border text-left transition cursor-pointer {aiAgentConfig.mode === 'AI_ASSISTANT' 
+                    ? 'bg-indigo-50/60 dark:bg-indigo-950/40 border-indigo-500 text-indigo-900 dark:text-indigo-200 ring-2 ring-indigo-500/20' 
+                    : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400'}"
+                >
+                  <div class="flex items-center gap-2 font-bold text-xs mb-1">
+                    <Sparkles class="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                    <span>AI Smart Assistant (Google Gemini)</span>
+                  </div>
+                  <p class="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                    AI berpikir secara cerdas untuk menjawab FAQ, deskripsi produk, jam buka, dan pertanyaan pelanggan sesuai panduan bisnis Anda.
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onclick={() => (aiAgentConfig.mode = 'STATIC_MESSAGE')}
+                  class="p-4 rounded-xl border text-left transition cursor-pointer {aiAgentConfig.mode === 'STATIC_MESSAGE' 
+                    ? 'bg-indigo-50/60 dark:bg-indigo-950/40 border-indigo-500 text-indigo-900 dark:text-indigo-200 ring-2 ring-indigo-500/20' 
+                    : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400'}"
+                >
+                  <div class="flex items-center gap-2 font-bold text-xs mb-1">
+                    <MessageSquare class="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                    <span>Pesan Teks Otomatis Statis</span>
+                  </div>
+                  <p class="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                    Mengirim satu pesan pemberitahuan tetap bahwa kantor sedang tutup dan akan membalas di jam kerja berikutnya.
+                  </p>
+                </button>
+              </div>
+            </div>
+
+            <!-- Jika Mode AI ASSISTANT: Prompt & Knowledge Base -->
+            {#if aiAgentConfig.mode === 'AI_ASSISTANT'}
+              <div class="space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label for="ai_model" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Model AI</label>
+                    <select
+                      id="ai_model"
+                      bind:value={aiAgentConfig.model}
+                      class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white"
+                    >
+                      <option value="gemini-2.0-flash">Google Gemini 2.0 Flash (Sangat Cepat & Cerdas)</option>
+                      <option value="gemini-1.5-flash">Google Gemini 1.5 Flash (Stabil)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label for="gemini_key" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Gemini API Key <span class="text-slate-400 font-normal">(Opsional — dapat dibuat gratis di aistudio.google.com)</span>
+                    </label>
+                    <input
+                      id="gemini_key"
+                      type="password"
+                      bind:value={aiAgentConfig.apiKey}
+                      placeholder="AIzaSy... (Biarkan kosong jika sudah diatur di server)"
+                      class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label for="sys_prompt" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Panduan Bisnis, FAQ & Pengetahuan Perusahaan untuk AI (Knowledge Base):
+                  </label>
+                  <textarea
+                    id="sys_prompt"
+                    rows="6"
+                    bind:value={aiAgentConfig.systemPrompt}
+                    placeholder="Tulis informasi perusahaan Anda di sini agar AI dapat menjawab dengan akurat. Contoh:
+- Nama Perusahaan: PT Infra Digital Solusindo (IDS)
+- Layanan: Payment Gateway, Integrasi WhatsApp Resmi, Solusi IT.
+- Jam Buka: Senin - Jumat 08:00 - 17:00 WIB.
+- Alamat: Jakarta, Indonesia.
+- Pertanyaan Umum (FAQ):
+  1. Cara daftar menjadi mitra: Silakan kirimkan email ke info@ids.net.id
+  2. Keluhan transaksi: Harap sertakan nomor referensi pembayaran..."
+                    class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white font-sans placeholder-slate-400 focus:outline-none focus:border-indigo-500"
+                  ></textarea>
+                </div>
+              </div>
+              <!-- Jika Mode STATIC MESSAGE -->
+              <div>
+                <label for="static_msg" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                  Isi Pesan Otomatis di Luar Jam Operasional:
+                </label>
+                <textarea
+                  id="static_msg"
+                  rows="4"
+                  bind:value={aiAgentConfig.staticMessage}
+                  placeholder="Halo! Layanan kami saat ini sedang berada di luar jam operasional..."
+                  class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-indigo-500"
+                ></textarea>
+              </div>
+            {/if}
+          </div>
+        {/if}
+
         <div class="flex justify-end pt-2">
           <button
             type="submit"
-            disabled={isSaving}
-            class="py-3 px-6 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-2 shadow-md shadow-emerald-600/30 transition cursor-pointer"
+            disabled={isSavingHoursAi}
+            class="py-2.5 px-6 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-2 shadow-md shadow-indigo-600/30 transition cursor-pointer disabled:opacity-60"
           >
             <Save class="w-4 h-4" />
-            {isSaving ? 'Menyimpan...' : 'Simpan & Hubungkan WABA'}
+            <span>{isSavingHoursAi ? 'Menyimpan...' : 'Simpan Pengaturan Jam & AI'}</span>
+          </button>
+        </div>
+      </div>
+    </form>
+
+    <!-- 3. Card Simulasi & Uji Coba Chat AI Langsung (Live AI Simulator) -->
+    {#if aiAgentConfig.enabled && aiAgentConfig.mode === 'AI_ASSISTANT'}
+      <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 space-y-4">
+        <div class="flex items-center gap-2.5">
+          <Sparkles class="w-4 h-4 text-indigo-500" />
+          <h3 class="text-sm font-bold text-slate-900 dark:text-white">Simulasi & Uji Coba Respon AI</h3>
+        </div>
+        <p class="text-xs text-slate-500 dark:text-slate-400">
+          Ketik pesan uji coba untuk melihat bagaimana AI akan membalas pertanyaan pelanggan berdasarkan panduan bisnis di atas:
+        </p>
+
+        <div class="flex items-center gap-2">
+          <input
+            type="text"
+            bind:value={aiTestUserMessage}
+            placeholder="Ketik pertanyaan uji coba, misal: 'Halo, kantor buka jam berapa ya?'"
+            class="flex-1 px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+          />
+          <button
+            type="button"
+            onclick={testAiResponse}
+            disabled={isTestingAi}
+            class="py-2.5 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-2 shadow-sm shadow-indigo-500/20 transition cursor-pointer disabled:opacity-60 shrink-0"
+          >
+            <Send class="w-3.5 h-3.5 {isTestingAi ? 'animate-spin' : ''}" />
+            <span>{isTestingAi ? 'Memproses AI...' : 'Uji Respon AI'}</span>
+          </button>
+        </div>
+
+        {#if aiTestResponse}
+          <div class="p-4 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60 space-y-1.5 animate-in fade-in">
+            <div class="flex items-center gap-1.5 text-indigo-700 dark:text-indigo-300 font-bold text-xs">
+              <Bot class="w-3.5 h-3.5" />
+              <span>Hasil Balasan AI:</span>
+            </div>
+            <p class="text-xs text-slate-800 dark:text-slate-200 whitespace-pre-line leading-relaxed font-sans">
+              {aiTestResponse}
+            </p>
+          </div>
+        {/if}
+
+        {#if aiTestError}
+          <div class="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-xs text-rose-700 dark:text-rose-300 font-semibold">
+            ❌ {aiTestError}
+          </div>
+        {/if}
+      </div>
+    {/if}
+
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  <!-- TAB CONTENT 3: KAPASITAS & SLA SETTINGS                      -->
+  <!-- ══════════════════════════════════════════════════════════════ -->
+  {:else if mainSettingsTab === 'OPERATIONS'}
+    {#if operationsSuccessMsg}
+      <div class="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex items-center gap-2 text-xs text-emerald-800 dark:text-emerald-300 font-bold animate-in fade-in">
+        <CheckCircle2 class="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+        {operationsSuccessMsg}
+      </div>
+    {/if}
+
+    {#if operationsErrorMsg}
+      <div class="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 flex items-center gap-2 text-xs text-rose-800 dark:text-rose-300 font-bold animate-in fade-in">
+        <AlertCircle class="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
+        {operationsErrorMsg}
+      </div>
+    {/if}
+
+    <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 space-y-6">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+          <Sliders class="w-5 h-5" />
+        </div>
+        <div>
+          <h3 class="text-sm font-bold text-slate-900 dark:text-white">Pengaturan Kapasitas Beban Kerja & Batas SLA</h3>
+          <p class="text-xs text-slate-500 dark:text-slate-400">Atur batas maksimal obrolan aktif per agen dan otomatisasi penyelesaian tiket kedaluwarsa</p>
+        </div>
+      </div>
+
+      <form onsubmit={saveOperationsSettings} class="space-y-4">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label for="max_c_op" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Maksimal Chat per Agen</label>
+            <input id="max_c_op" type="number" min="1" max="50" bind:value={maxChatsPerAgent} class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white" required />
+            <p class="text-[10px] text-slate-500 mt-1">Jika mencapai batas, chat masuk dialihkan ke Antrean.</p>
+          </div>
+
+          <div>
+            <label for="auto_r_op" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Auto-Resolve Inactivity (Jam)</label>
+            <input id="auto_r_op" type="number" min="1" max="72" bind:value={autoResolveHours} class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white" required />
+            <p class="text-[10px] text-slate-500 mt-1">Tutup tiket otomatis jika pelanggan tidak merespons.</p>
+          </div>
+
+          <div>
+            <label for="care_w_op" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Customer Care Window (Jam)</label>
+            <input id="care_w_op" type="number" min="1" max="72" bind:value={careWindowHours} class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white" required />
+            <p class="text-[10px] text-slate-500 mt-1">Masa aktif sesi Meta (standar 24 jam).</p>
+          </div>
+        </div>
+
+        <div class="flex justify-end pt-2">
+          <button type="submit" disabled={isSavingOperations} class="py-2.5 px-6 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-2 shadow-md transition cursor-pointer">
+            <Save class="w-4 h-4" />
+            {isSavingOperations ? 'Menyimpan...' : 'Simpan SLA'}
           </button>
         </div>
       </form>
-    {/if}
+    </div>
   {/if}
   {/if}
 </div>
