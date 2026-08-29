@@ -8,6 +8,7 @@ import { db } from '../../config/database';
 import { messages, conversations, contacts, phoneNumbers, organizations } from '../../db/schema';
 import { ConversationService } from '../conversations/conversation.service';
 import { MetaApiService } from '../../services/meta-api.service';
+import { env } from '../../config/env';
 import type { JwtPayload } from '../../middleware/auth';
 import type { SendMessageBody, InternalNoteBody, GetMessagesQuery } from './message.types';
 
@@ -126,6 +127,13 @@ export class MessageService {
       wamId,
       conversationId: conv.id,
       direction: 'OUTBOUND',
+      senderType: user.role,
+      senderId: user.id,
+      messageType,
+      body: body.body,
+      mediaUrl: body.mediaUrl,
+      mediaMimeType: body.mediaMimeType,
+      isInternalNote: false,
       status: 'SENT',
       createdAt: new Date(),
     };
