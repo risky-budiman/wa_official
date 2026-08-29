@@ -31,7 +31,7 @@ export class MessageService {
         direction: messages.direction,
         senderType: messages.senderType,
         senderId: messages.senderId,
-        senderName: users.name,
+        senderName: users.fullName,
         messageType: messages.messageType,
         body: messages.body,
         mediaUrl: messages.mediaUrl,
