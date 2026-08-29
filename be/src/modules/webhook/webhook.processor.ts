@@ -334,9 +334,14 @@ export class WebhookProcessor {
               }
             } else {
               convId = activeConv.id;
-              let assignedUser = activeConv.assignedUserId;
-              if (!assignedUser || activeConv.status === 'RESOLVED') {
-                assignedUser = await WebhookProcessor.getLeastBusyAgent(orgId);
+              let targetAssignedUser = activeConv.assignedUserId;
+              let targetStatus = activeConv.status;
+
+              // If conversation was RESOLVED or unassigned, route to least busy online agent or UNASSIGNED queue
+              if (activeConv.status === 'RESOLVED' || !targetAssignedUser) {
+                const onlineAgentId = await WebhookProcessor.getLeastBusyAgent(orgId);
+                targetAssignedUser = onlineAgentId; // null if all agents offline
+                targetStatus = onlineAgentId ? 'OPEN' : 'UNASSIGNED';
               }
 
               await db
@@ -345,8 +350,8 @@ export class WebhookProcessor {
                   windowExpiresAt,
                   lastMessagePreview: messageBody,
                   lastMessageAt: new Date(),
-                  assignedUserId: assignedUser || activeConv.assignedUserId,
-                  status: activeConv.status === 'RESOLVED' ? 'OPEN' : activeConv.status,
+                  assignedUserId: targetAssignedUser,
+                  status: targetStatus,
                 })
                 .where(eq(conversations.id, activeConv.id));
             }
