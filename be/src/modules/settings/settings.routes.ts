@@ -696,21 +696,34 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
       }
       if (user.role !== 'ADMINISTRATOR' && user.role !== 'SUPERVISOR') {
         set.status = 403;
-        return { success: false, error: 'Akses ditolak' };
+        return { success: false, error: 'Akses ditolak (Khusus Administrator atau Supervisor)' };
       }
 
-      await db
-        .update(organizations)
-        .set({
-          operatingHours: body.operatingHours as any,
-          aiAgentConfig: body.aiAgentConfig as any,
-        })
-        .where(eq(organizations.id, user.orgId));
+      try {
+        console.log(`🕒 Updating Operating Hours & AI Agent for org ${user.orgId}...`);
+        
+        await db
+          .update(organizations)
+          .set({
+            operatingHours: body.operatingHours as any,
+            aiAgentConfig: body.aiAgentConfig as any,
+          })
+          .where(eq(organizations.id, user.orgId));
 
-      return {
-        success: true,
-        message: 'Pengaturan Jam Operasional & AI Agent berhasil disimpan!',
-      };
+        console.log(`✅ Operating Hours & AI Agent updated successfully for org ${user.orgId}`);
+
+        return {
+          success: true,
+          message: 'Pengaturan Jam Operasional & AI Agent berhasil disimpan!',
+        };
+      } catch (err: any) {
+        console.error('❌ Failed to update operating hours:', err);
+        set.status = 500;
+        return {
+          success: false,
+          error: err.message || 'Gagal menyimpan ke database',
+        };
+      }
     },
     {
       body: t.Object({

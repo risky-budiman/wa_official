@@ -131,32 +131,37 @@
     } catch (_) {}
   }
 
-  async function saveOperatingHoursSettings(e: Event) {
-    e.preventDefault();
+  async function saveOperatingHoursSettings(e?: Event) {
+    if (e && e.preventDefault) e.preventDefault();
     isSavingHoursAi = true;
     hoursAiSuccessMsg = null;
     hoursAiErrorMsg = null;
 
     try {
+      // Snapshot state to plain objects for clean JSON serialization
+      const cleanHours = $state.snapshot(operatingHours);
+      const cleanAi = $state.snapshot(aiAgentConfig);
+
       const res = await apiRequest<any>('/settings/operating-hours', {
         method: 'PATCH',
         body: JSON.stringify({
-          operatingHours,
-          aiAgentConfig,
+          operatingHours: cleanHours,
+          aiAgentConfig: cleanAi,
         }),
       });
       isSavingHoursAi = false;
 
       if (res.success) {
-        hoursAiSuccessMsg = 'Jadwal jam operasional dan konfigurasi AI Agent berhasil disimpan!';
-        setTimeout(() => (hoursAiSuccessMsg = null), 4000);
+        hoursAiSuccessMsg = 'Pengaturan jam operasional dan AI Agent berhasil disimpan!';
+        setTimeout(() => (hoursAiSuccessMsg = null), 5000);
       } else {
         hoursAiErrorMsg = res.error || 'Gagal menyimpan pengaturan jam operasional';
-        setTimeout(() => (hoursAiErrorMsg = null), 4000);
+        setTimeout(() => (hoursAiErrorMsg = null), 5000);
       }
     } catch (err: any) {
       isSavingHoursAi = false;
-      hoursAiErrorMsg = err.message || 'Terjadi kesalahan sistem';
+      hoursAiErrorMsg = err.message || 'Terjadi kesalahan sistem saat menyimpan';
+      setTimeout(() => (hoursAiErrorMsg = null), 5000);
     }
   }
 
@@ -1002,6 +1007,7 @@
                   ></textarea>
                 </div>
               </div>
+            {:else}
               <!-- Jika Mode STATIC MESSAGE -->
               <div>
                 <label for="static_msg" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
@@ -1019,13 +1025,28 @@
           </div>
         {/if}
 
-        <div class="flex justify-end pt-2">
+        <div class="flex items-center justify-between pt-2">
+          <div>
+            {#if hoursAiSuccessMsg}
+              <span class="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5 animate-in fade-in">
+                <CheckCircle2 class="w-4 h-4" />
+                {hoursAiSuccessMsg}
+              </span>
+            {:else if hoursAiErrorMsg}
+              <span class="text-xs font-bold text-rose-600 dark:text-rose-400 flex items-center gap-1.5 animate-in fade-in">
+                <AlertCircle class="w-4 h-4" />
+                {hoursAiErrorMsg}
+              </span>
+            {/if}
+          </div>
+
           <button
-            type="submit"
+            type="button"
+            onclick={saveOperatingHoursSettings}
             disabled={isSavingHoursAi}
             class="py-2.5 px-6 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-2 shadow-md shadow-indigo-600/30 transition cursor-pointer disabled:opacity-60"
           >
-            <Save class="w-4 h-4" />
+            <Save class="w-4 h-4 {isSavingHoursAi ? 'animate-spin' : ''}" />
             <span>{isSavingHoursAi ? 'Menyimpan...' : 'Simpan Pengaturan Jam & AI'}</span>
           </button>
         </div>
