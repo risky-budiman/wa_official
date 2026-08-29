@@ -137,20 +137,25 @@
         if (!matchName && !matchPhone && !matchPreview) return false;
       }
 
-      // 2. Agent privacy check: visible if assigned, collaborator, or if viewing unassigned queue
-      if (authStore.role === 'AGENT' && activeTab !== 'UNASSIGNED') {
-        const isAssigned = c.assignedUser?.id === authStore.user?.id;
-        const isParticipant = c.participants?.some((p) => p.id === authStore.user?.id);
-        if (!isAssigned && !isParticipant && activeTab === 'MINE') return false;
+      // 2. Agent privacy check: For AGENTS, only show chats assigned to this agent or where they are a collaborator.
+      // Unassigned chats stay strictly in the "Antrean Masuk" queue until claimed!
+      if (authStore.role === 'AGENT') {
+        const isAssignedToMe = c.assignedUser?.id === authStore.user?.id;
+        const isMyCollaborator = c.participants?.some((p) => p.id === authStore.user?.id);
+        if (!isAssignedToMe && !isMyCollaborator) {
+          return false;
+        }
       }
 
-      // 3. Tab filter
-      if (activeTab === 'MINE') {
-        const isMine = c.assignedUser?.id === authStore.user?.id || c.participants?.some((p) => p.id === authStore.user?.id);
-        if (!isMine) return false;
-      }
-      if (activeTab === 'UNASSIGNED' && (c.status !== 'UNASSIGNED' && c.assignedUser)) {
-        return false;
+      // 3. Tab filter for Admin / Supervisor
+      if (authStore.role !== 'AGENT') {
+        if (activeTab === 'MINE') {
+          const isMine = c.assignedUser?.id === authStore.user?.id || c.participants?.some((p) => p.id === authStore.user?.id);
+          if (!isMine) return false;
+        }
+        if (activeTab === 'UNASSIGNED' && (c.status !== 'UNASSIGNED' && c.assignedUser)) {
+          return false;
+        }
       }
 
       // 4. Status filter (All / Open / Resolved)
@@ -632,8 +637,16 @@
             onclick={() => selectConversation(conv.id)}
             class="w-full text-left p-3.5 flex items-start gap-3 transition cursor-pointer {selectedConvId === conv.id ? 'bg-slate-100 dark:bg-slate-800/70 border-l-4 border-emerald-500' : 'hover:bg-slate-50 dark:hover:bg-slate-800/30'}"
           >
-            <div class="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center font-bold text-sm text-emerald-700 dark:text-emerald-400 shrink-0 border border-slate-300 dark:border-slate-600/40">
-              {conv.contact.name.charAt(0)}
+            <div class="relative shrink-0">
+              <div class="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center font-bold text-sm text-emerald-700 dark:text-emerald-400 border border-slate-300 dark:border-slate-600/40">
+                {conv.contact.name.charAt(0)}
+              </div>
+              {#if conv.status === 'UNASSIGNED' || !conv.assignedUser}
+                <span class="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-amber-500 ring-2 ring-white dark:ring-slate-900 animate-ping" title="Pesan Belum Diambil"></span>
+                <span class="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-amber-500 ring-2 ring-white dark:ring-slate-900" title="Pesan Belum Diambil"></span>
+              {:else if conv.status === 'OPEN'}
+                <span class="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-900" title="Aktif"></span>
+              {/if}
             </div>
 
             <div class="flex-1 min-w-0">
