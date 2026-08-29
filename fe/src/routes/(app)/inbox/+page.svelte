@@ -685,7 +685,9 @@
               <div class="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center font-bold text-sm text-emerald-700 dark:text-emerald-400 border border-slate-300 dark:border-slate-600/40">
                 {conv.contact.name.charAt(0)}
               </div>
-              {#if conv.status === 'UNASSIGNED' || !conv.assignedUser}
+              {#if conv.status === 'RESOLVED'}
+                <span class="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-purple-500 ring-2 ring-white dark:ring-slate-900" title="Selesai"></span>
+              {:else if conv.status === 'UNASSIGNED' || !conv.assignedUser}
                 <span class="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-amber-500 ring-2 ring-white dark:ring-slate-900 animate-ping" title="Pesan Belum Diambil"></span>
                 <span class="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-amber-500 ring-2 ring-white dark:ring-slate-900" title="Pesan Belum Diambil"></span>
               {:else if conv.status === 'OPEN'}
@@ -712,13 +714,13 @@
                   </span>
                 {/if}
 
-                {#if conv.status === 'UNASSIGNED' || !conv.assignedUser}
-                  <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30 flex items-center gap-0.5">
-                    Belum Ditugaskan
-                  </span>
-                {:else if conv.status === 'RESOLVED'}
+                {#if conv.status === 'RESOLVED'}
                   <span class="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-purple-500/10 text-purple-700 dark:text-purple-400 border border-purple-500/20 flex items-center gap-0.5">
                     <CheckCircle2 class="w-2.5 h-2.5" /> Selesai
+                  </span>
+                {:else if conv.status === 'UNASSIGNED' || !conv.assignedUser}
+                  <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30 flex items-center gap-0.5">
+                    Belum Ditugaskan
                   </span>
                 {:else}
                   <span class="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
@@ -747,13 +749,13 @@
             <div class="flex items-center gap-2">
               <h3 class="text-sm font-bold text-slate-900 dark:text-white truncate">{selectedConv.contact.name}</h3>
               
-              {#if selectedConv.status === 'UNASSIGNED' || !selectedConv.assignedUser}
-                <span class="px-2 py-0.5 rounded-full text-[10px] bg-amber-500/15 text-amber-700 dark:text-amber-300 font-bold border border-amber-500/30 shrink-0">
-                  Belum Ditugaskan
-                </span>
-              {:else if selectedConv.status === 'RESOLVED'}
+              {#if selectedConv.status === 'RESOLVED'}
                 <span class="px-2 py-0.5 rounded-full text-[10px] bg-purple-500/15 text-purple-700 dark:text-purple-300 font-semibold border border-purple-500/30 shrink-0">
                   Selesai
+                </span>
+              {:else if selectedConv.status === 'UNASSIGNED' || !selectedConv.assignedUser}
+                <span class="px-2 py-0.5 rounded-full text-[10px] bg-amber-500/15 text-amber-700 dark:text-amber-300 font-bold border border-amber-500/30 shrink-0">
+                  Belum Ditugaskan
                 </span>
               {:else}
                 <span class="px-2 py-0.5 rounded-full text-[10px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 font-semibold border border-emerald-500/20 shrink-0">

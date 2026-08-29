@@ -2,7 +2,7 @@
 // Message Service — Sending & Internal Whispering
 // ===========================================
 
-import { eq, and, desc, asc } from 'drizzle-orm';
+import { eq, and, desc, asc, ne } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { db } from '../../config/database';
 import { messages, conversations, contacts, phoneNumbers, organizations, users } from '../../db/schema';
@@ -19,6 +19,18 @@ export class MessageService {
   static async list(user: JwtPayload, conversationId: string, query: GetMessagesQuery = {}) {
     // 🔒 Enforce access verification: Agent only has access to their assigned chats!
     await ConversationService.getById(user, conversationId);
+
+    // Auto-mark inbound messages as READ when viewed
+    await db
+      .update(messages)
+      .set({ status: 'READ' })
+      .where(
+        and(
+          eq(messages.conversationId, conversationId),
+          eq(messages.direction, 'INBOUND'),
+          ne(messages.status, 'READ')
+        )
+      );
 
     const limit = query.limit || 50;
     const offset = query.offset || 0;
