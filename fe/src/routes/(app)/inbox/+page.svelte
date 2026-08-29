@@ -177,8 +177,9 @@
           const isMine = c.assignedUser?.id === authStore.user?.id || c.participants?.some((p) => p.id === authStore.user?.id);
           if (!isMine) return false;
         }
-        if (activeTab === 'UNASSIGNED' && (c.status !== 'UNASSIGNED' && c.assignedUser)) {
-          return false;
+        if (activeTab === 'UNASSIGNED') {
+          if (c.status === 'RESOLVED') return false;
+          if (c.status !== 'UNASSIGNED' && c.assignedUser) return false;
         }
       }
 
@@ -326,15 +327,20 @@
       const conv = conversationList.find((c) => c.id === selectedConvId);
       if (conv) conv.status = 'RESOLVED';
 
+      // Mark all messages as READ
+      messageList = messageList.map((m) => ({ ...m, status: 'READ' }));
+
       messageList.push({
         id: 'res-' + Date.now(),
         senderType: authStore.role || 'AGENT',
         senderId: authStore.user?.id || null,
-        body: `✅ Tiket diselesaikan (Resolved) oleh ${authStore.user?.fullName || 'Agen'}`,
+        body: `✅ Tiket diselesaikan (Resolved) & Terkunci oleh ${authStore.user?.fullName || 'Agen'}`,
         isInternalNote: true,
         status: 'SENT',
         createdAt: new Date().toISOString(),
       });
+
+      await loadQueueStats();
     }
   }
 

@@ -2,7 +2,7 @@
 // Conversation Service — Multi-Agent Collaboration
 // ===========================================
 
-import { eq, and, desc, sql, inArray, or } from 'drizzle-orm';
+import { eq, and, desc, sql, inArray, or, ne } from 'drizzle-orm';
 import { db } from '../../config/database';
 import {
   conversations,
@@ -389,6 +389,14 @@ export class ConversationService {
       .set({ status })
       .where(eq(conversations.id, conversationId));
 
+    if (status === 'RESOLVED') {
+      // ✅ Mark all unread messages as READ when ticket is resolved
+      await db
+        .update(messages)
+        .set({ status: 'READ' })
+        .where(eq(messages.conversationId, conversationId));
+    }
+
     await db.insert(activityLogs).values({
       id: nanoid(),
       organizationId: user.orgId,
@@ -414,6 +422,7 @@ export class ConversationService {
       .where(
         and(
           eq(conversations.organizationId, user.orgId),
+          ne(conversations.status, 'RESOLVED'),
           sql`(${conversations.status} = 'UNASSIGNED' OR ${conversations.assignedUserId} IS NULL)`
         )
       );
@@ -445,6 +454,7 @@ export class ConversationService {
       .where(
         and(
           eq(conversations.organizationId, user.orgId),
+          ne(conversations.status, 'RESOLVED'),
           sql`(${conversations.status} = 'UNASSIGNED' OR ${conversations.assignedUserId} IS NULL)`
         )
       )
