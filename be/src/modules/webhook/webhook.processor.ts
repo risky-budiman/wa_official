@@ -3,7 +3,7 @@
 // ===========================================
 
 import { Worker, Job } from 'bullmq';
-import { eq, and, sql, desc } from 'drizzle-orm';
+import { eq, and, sql, desc, ne } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { redis } from '../../config/redis';
 import { db } from '../../config/database';
@@ -275,14 +275,15 @@ export class WebhookProcessor {
                 .where(eq(contacts.id, existingContact.id));
             }
 
-            // 2b. Find or Create Active Conversation (Single unified thread per contact)
+            // 2b. Find Active Conversation (Exclude RESOLVED tickets so new customer messages start a fresh session)
             const [activeConv] = await db
               .select()
               .from(conversations)
               .where(
                 and(
                   eq(conversations.organizationId, orgId),
-                  eq(conversations.contactId, contactId!)
+                  eq(conversations.contactId, contactId!),
+                  ne(conversations.status, 'RESOLVED')
                 )
               )
               .orderBy(desc(conversations.createdAt))
@@ -301,6 +302,7 @@ export class WebhookProcessor {
             }
 
             if (!activeConv) {
+              // 🆕 Start a NEW Conversation Session / Ticket
               convId = nanoid();
 
               // Auto-assign: Least-Workload Routing (Agent with minimum active chats)
@@ -320,6 +322,7 @@ export class WebhookProcessor {
                   lastMessageAt: new Date(),
                   createdAt: new Date(),
                 });
+                console.log(`✨ Sesi percakapan baru (${convId}) berhasil dibuat untuk kontak ${customerWaId} (Status: ${leastBusyAgentId ? 'OPEN' : 'UNASSIGNED'})`);
               } catch (convErr) {
                 // Concurrent webhook insert fallback
                 const [reConv] = await db
@@ -328,7 +331,8 @@ export class WebhookProcessor {
                   .where(
                     and(
                       eq(conversations.organizationId, orgId),
-                      eq(conversations.contactId, contactId!)
+                      eq(conversations.contactId, contactId!),
+                      ne(conversations.status, 'RESOLVED')
                     )
                   )
                   .orderBy(desc(conversations.createdAt))
@@ -343,8 +347,8 @@ export class WebhookProcessor {
               let targetAssignedUser = activeConv.assignedUserId;
               let targetStatus = activeConv.status;
 
-              // If conversation was RESOLVED or unassigned, route to least busy online agent or UNASSIGNED queue
-              if (activeConv.status === 'RESOLVED' || !targetAssignedUser) {
+              // If conversation was unassigned, route to least busy online agent or UNASSIGNED queue
+              if (!targetAssignedUser) {
                 const onlineAgentId = await WebhookProcessor.getLeastBusyAgent(orgId);
                 targetAssignedUser = onlineAgentId; // null if all agents offline
                 targetStatus = onlineAgentId ? 'OPEN' : 'UNASSIGNED';

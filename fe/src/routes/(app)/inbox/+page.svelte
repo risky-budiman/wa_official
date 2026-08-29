@@ -52,6 +52,18 @@
   let showTagModal = $state(false);
   let showTemplatePicker = $state(false);
   let showEmojiPicker = $state(false);
+  let messagesContainer = $state<HTMLDivElement | null>(null);
+
+  function scrollToBottom(smooth = false) {
+    setTimeout(() => {
+      if (messagesContainer) {
+        messagesContainer.scrollTo({
+          top: messagesContainer.scrollHeight,
+          behavior: smooth ? 'smooth' : 'auto',
+        });
+      }
+    }, 60);
+  }
 
   interface Contact {
     id: string;
@@ -192,10 +204,14 @@
     }
   }
 
-  async function loadMessages(convId: string) {
+  async function loadMessages(convId: string, shouldScroll = true) {
     const res = await apiRequest<{ items: MessageItem[] }>(`/messages/${convId}`);
     if (res.success && res.items) {
+      const prevCount = messageList.length;
       messageList = [...res.items].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      if (shouldScroll || messageList.length !== prevCount) {
+        scrollToBottom(false);
+      }
     }
   }
 
@@ -244,7 +260,7 @@
 
   function selectConversation(convId: string) {
     selectedConvId = convId;
-    loadMessages(convId);
+    loadMessages(convId, true);
   }
 
   async function claimConversation(convIdToClaim?: string) {
@@ -467,6 +483,7 @@
       });
       if (res.success && res.note) {
         messageList.push(res.note);
+        scrollToBottom(true);
       }
     } else {
       const res = await apiRequest('/messages/send', {
@@ -478,6 +495,7 @@
       });
       if (res.success && res.message) {
         messageList.push(res.message);
+        scrollToBottom(true);
         const conv = conversationList.find((c) => c.id === selectedConvId);
         if (conv) {
           conv.lastMessagePreview = textToSend;
@@ -786,7 +804,7 @@
       </div>
 
       <!-- Messages Thread Flow (Soft Contrast) -->
-      <div class="flex-1 overflow-y-auto p-5 space-y-4 bg-slate-50 dark:bg-slate-950">
+      <div bind:this={messagesContainer} class="flex-1 overflow-y-auto p-5 space-y-4 bg-slate-50 dark:bg-slate-950">
         {#each messageList as msg}
           {#if msg.isInternalNote}
             <!-- Internal Note Bubble (Eye-friendly Amber) -->
