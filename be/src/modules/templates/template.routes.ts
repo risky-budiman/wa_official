@@ -11,7 +11,7 @@ import { messageTemplates, organizations } from '../../db/schema';
 import { authPlugin } from '../../middleware/auth';
 import { rbacPlugin } from '../../middleware/rbac';
 import { MetaApiService } from '../../services/meta-api.service';
-import type { TemplateCategory } from '../../db/schema/message-templates';
+import type { TemplateCategory, TemplateStatus } from '../../db/schema/message-templates';
 
 export class TemplateService {
   static async list(orgId: string) {
@@ -87,7 +87,7 @@ export class TemplateService {
             )
             .limit(1);
 
-          const statusMap: Record<string, any> = {
+          const statusMap: Record<string, TemplateStatus> = {
             APPROVED: 'APPROVED',
             PENDING: 'PENDING',
             REJECTED: 'REJECTED',
@@ -99,7 +99,7 @@ export class TemplateService {
               .update(messageTemplates)
               .set({
                 metaTemplateId: metaTpl.id,
-                category: (metaTpl.category as any) || existing[0].category,
+                category: (metaTpl.category as TemplateCategory) || existing[0].category,
                 language: metaTpl.language || existing[0].language,
                 status: statusMap[metaTpl.status] || existing[0].status,
                 components: metaTpl.components || existing[0].components,
@@ -110,7 +110,7 @@ export class TemplateService {
               id: nanoid(),
               organizationId: orgId,
               name: metaTpl.name,
-              category: (metaTpl.category as any) || 'UTILITY',
+              category: (metaTpl.category as TemplateCategory) || 'UTILITY',
               language: metaTpl.language || 'id',
               status: statusMap[metaTpl.status] || 'APPROVED',
               components: metaTpl.components || [],
@@ -128,8 +128,8 @@ export class TemplateService {
   static async create(orgId: string, body: {
     name: string;
     category: TemplateCategory;
-    language: string;
-    components: any[];
+    language?: string;
+    components: Record<string, unknown>[];
   }) {
     const id = nanoid();
     const formattedName = body.name.toLowerCase().replace(/\s+/g, '_');
@@ -144,7 +144,7 @@ export class TemplateService {
       .limit(1);
 
     let metaTemplateId: string | null = null;
-    let templateStatus: any = 'APPROVED';
+    let templateStatus: TemplateStatus = 'APPROVED';
 
     // Submit live to Meta Graph API if authentic token exists
     if (org?.wabaId && org?.accessToken && !org.accessToken.startsWith('EAAGm0PX4ZCBO')) {
