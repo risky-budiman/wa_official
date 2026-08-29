@@ -34,6 +34,20 @@ export async function testConnection(): Promise<void> {
   try {
     const connection = await pool.getConnection();
     console.log(`✅ MySQL connected → ${env.DB_HOST}:${env.DB_PORT}/${env.DB_NAME}`);
+    
+    // Auto-migration: Ensure new JSON columns exist in organizations table
+    try {
+      await connection.query(`ALTER TABLE organizations ADD COLUMN IF NOT EXISTS operating_hours JSON NULL;`);
+    } catch (_) {
+      try { await connection.query(`ALTER TABLE organizations ADD COLUMN operating_hours JSON NULL;`); } catch (_) {}
+    }
+
+    try {
+      await connection.query(`ALTER TABLE organizations ADD COLUMN IF NOT EXISTS ai_agent_config JSON NULL;`);
+    } catch (_) {
+      try { await connection.query(`ALTER TABLE organizations ADD COLUMN ai_agent_config JSON NULL;`); } catch (_) {}
+    }
+
     connection.release();
   } catch (error: any) {
     console.warn(`⚠️  MySQL not available (${error.code || error.message}). Server running without DB.`);

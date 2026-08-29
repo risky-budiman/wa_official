@@ -20,8 +20,9 @@ import { wsPlugin } from './websocket/ws.server';
 import './modules/webhook/webhook.processor'; // Initialize BullMQ worker
 import { AutoResolveService } from './services/auto-resolve.service';
 
-// Validate environment on startup
+// Validate environment and initialize database on startup
 validateEnv();
+await testConnection();
 
 // Start Inactivity Auto-Resolve Background Worker
 AutoResolveService.startWorker(60000);
