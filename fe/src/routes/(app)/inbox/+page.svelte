@@ -797,16 +797,12 @@
             </button>
           {/if}
 
-          <!-- Resolve / Reopen button -->
+          <!-- Resolve Status Badge / Button -->
           {#if selectedConv.status === 'RESOLVED'}
-            <button
-              onclick={reopenConversation}
-              disabled={isActionLoading}
-              class="py-1.5 px-3 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-700 dark:text-amber-400 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer"
-            >
-              <RotateCcw class="w-3.5 h-3.5" />
-              <span>Buka</span>
-            </button>
+            <div class="py-1.5 px-3 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-700 dark:text-purple-400 font-bold text-xs flex items-center gap-1.5 shadow-sm">
+              <Lock class="w-3.5 h-3.5" />
+              <span>Selesai & Terkunci</span>
+            </div>
           {:else}
             <button
               onclick={resolveConversation}
@@ -921,18 +917,14 @@
       <!-- Bottom Chat Input Bar -->
       <div class="p-3.5 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/80 space-y-2">
         {#if selectedConv.status === 'RESOLVED'}
-          <div class="p-3 bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/60 rounded-xl flex items-center justify-between gap-3 text-xs text-purple-900 dark:text-purple-200 shadow-sm">
-            <div class="flex items-center gap-2">
-              <CheckCircle2 class="w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0" />
-              <span>Tiket percakapan ini telah <strong>Diselesaikan (Resolved)</strong>.</span>
+          <div class="p-3.5 bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/60 rounded-xl flex items-center gap-3 text-xs text-purple-900 dark:text-purple-200 shadow-sm">
+            <div class="w-8 h-8 rounded-lg bg-purple-600/10 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0 border border-purple-500/20">
+              <Lock class="w-4 h-4" />
             </div>
-            <button
-              onclick={reopenConversation}
-              disabled={isActionLoading}
-              class="px-3.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs transition cursor-pointer shrink-0 shadow-sm shadow-purple-600/20"
-            >
-              Buka Kembali Tiket
-            </button>
+            <div>
+              <p class="font-bold">Tiket Percakapan Ini Telah Selesai & Terkunci Permanen</p>
+              <p class="text-[11px] text-purple-700/80 dark:text-purple-300/80">Pesan baru berikutnya dari pelanggan akan otomatis masuk ke antrean sebagai sesi tiket baru.</p>
+            </div>
           </div>
         {:else}
           <!-- Action Row -->

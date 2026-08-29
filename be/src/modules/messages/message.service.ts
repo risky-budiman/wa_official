@@ -60,6 +60,10 @@ export class MessageService {
     // 🔒 Verify user has rights to conversation (if agent, must be assigned)
     const conv = await ConversationService.getById(user, body.conversationId);
 
+    if (conv.status === 'RESOLVED') {
+      throw new Error('Tiket percakapan ini telah Diselesaikan (RESOLVED) & Terkunci permanen.');
+    }
+
     // Get phone channel details
     const [phone] = await db
       .select()
@@ -163,6 +167,10 @@ export class MessageService {
   static async addInternalNote(user: JwtPayload, body: InternalNoteBody) {
     // 🔒 Verify access
     const conv = await ConversationService.getById(user, body.conversationId);
+
+    if (conv.status === 'RESOLVED') {
+      throw new Error('Tiket percakapan ini telah Diselesaikan (RESOLVED) & Terkunci permanen.');
+    }
 
     const messageId = nanoid();
     await db.insert(messages).values({
