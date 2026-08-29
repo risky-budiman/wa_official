@@ -5,7 +5,7 @@
 import { eq, and, desc, asc } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { db } from '../../config/database';
-import { messages, conversations, contacts, phoneNumbers, organizations } from '../../db/schema';
+import { messages, conversations, contacts, phoneNumbers, organizations, users } from '../../db/schema';
 import { ConversationService } from '../conversations/conversation.service';
 import { MetaApiService } from '../../services/meta-api.service';
 import { env } from '../../config/env';
@@ -24,8 +24,24 @@ export class MessageService {
     const offset = query.offset || 0;
 
     const items = await db
-      .select()
+      .select({
+        id: messages.id,
+        conversationId: messages.conversationId,
+        wamId: messages.wamId,
+        direction: messages.direction,
+        senderType: messages.senderType,
+        senderId: messages.senderId,
+        senderName: users.name,
+        messageType: messages.messageType,
+        body: messages.body,
+        mediaUrl: messages.mediaUrl,
+        mediaMimeType: messages.mediaMimeType,
+        isInternalNote: messages.isInternalNote,
+        status: messages.status,
+        createdAt: messages.createdAt,
+      })
       .from(messages)
+      .leftJoin(users, eq(messages.senderId, users.id))
       .where(eq(messages.conversationId, conversationId))
       .orderBy(asc(messages.createdAt))
       .limit(limit)

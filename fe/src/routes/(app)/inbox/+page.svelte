@@ -29,7 +29,8 @@
     ChevronRight,
     MoreVertical,
     Inbox,
-    Bell
+    Bell,
+    Bot
   } from 'lucide-svelte';
 
   let activeTab = $state<'ALL' | 'MINE' | 'UNASSIGNED'>('ALL');
@@ -805,18 +806,51 @@
               <div class="w-7 h-7 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-[10px] font-bold text-emerald-700 dark:text-emerald-400 shrink-0">
                 {selectedConv.contact.name.charAt(0)}
               </div>
-              <div class="p-3.5 rounded-2xl rounded-bl-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 text-xs text-slate-900 dark:text-white shadow-sm leading-relaxed">
-                <p>{msg.body}</p>
+              <div class="p-3.5 rounded-2xl rounded-bl-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 text-xs text-slate-900 dark:text-white shadow-sm leading-relaxed space-y-1">
+                <!-- Label Pengirim: Pelanggan -->
+                <div class="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400 pb-1 border-b border-slate-100 dark:border-slate-700/50">
+                  <User class="w-3 h-3 text-slate-400" />
+                  <span class="text-slate-700 dark:text-slate-200">{selectedConv.contact.name}</span>
+                  <span class="px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-700/80 text-slate-500 dark:text-slate-300 text-[9px] font-semibold">Pelanggan</span>
+                </div>
+                <p class="whitespace-pre-line text-slate-800 dark:text-slate-100">{msg.body}</p>
                 <div class="text-[10px] text-slate-400 text-right mt-1.5">
                   {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </div>
               </div>
             </div>
-          {:else}
-            <!-- Outbound Agent Message (Soft Emerald) -->
+          {:else if msg.senderType === 'BOT'}
+            <!-- AI Auto-Responder / FAQ BOT Message (Indigo / Purple Glowing Badge) -->
             <div class="flex items-end gap-2 max-w-lg ml-auto justify-end">
-              <div class="p-3.5 rounded-2xl rounded-br-sm bg-emerald-600 text-xs text-white shadow-sm shadow-emerald-600/10 leading-relaxed">
-                <p>{msg.body}</p>
+              <div class="p-3.5 rounded-2xl rounded-br-sm bg-indigo-600 dark:bg-indigo-700 text-xs text-white shadow-md shadow-indigo-600/20 leading-relaxed border border-indigo-500/40 space-y-1">
+                <!-- Label Pengirim: AI Auto-Responder (FAQ / Jam Tutup) -->
+                <div class="flex items-center justify-between gap-3 text-[10px] font-bold text-indigo-100 pb-1 border-b border-indigo-400/40">
+                  <div class="flex items-center gap-1.5">
+                    <Bot class="w-3.5 h-3.5 text-indigo-200" />
+                    <span>AI Assistant (FAQ / Auto-Reply)</span>
+                  </div>
+                  <span class="px-1.5 py-0.5 rounded bg-indigo-500/60 text-white text-[9px] font-mono font-black">BOT</span>
+                </div>
+                <p class="whitespace-pre-line text-white/95">{msg.body}</p>
+                <div class="text-[10px] text-indigo-200 flex items-center justify-end gap-1 mt-1.5">
+                  <span>{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                  <CheckCheck class="w-3.5 h-3.5 text-indigo-300" />
+                </div>
+              </div>
+            </div>
+          {:else}
+            <!-- Outbound Agent Message (Soft Emerald with CS Badge) -->
+            <div class="flex items-end gap-2 max-w-lg ml-auto justify-end">
+              <div class="p-3.5 rounded-2xl rounded-br-sm bg-emerald-600 text-xs text-white shadow-sm shadow-emerald-600/10 leading-relaxed space-y-1">
+                <!-- Label Pengirim: CS / Agent -->
+                <div class="flex items-center justify-between gap-3 text-[10px] font-bold text-emerald-100 pb-1 border-b border-emerald-500/40">
+                  <div class="flex items-center gap-1.5">
+                    <User class="w-3.5 h-3.5 text-emerald-200" />
+                    <span>{msg.senderName || 'Customer Service'}</span>
+                  </div>
+                  <span class="px-1.5 py-0.5 rounded bg-emerald-700/70 text-white text-[9px] font-bold">AGENT</span>
+                </div>
+                <p class="whitespace-pre-line text-white/95">{msg.body}</p>
                 <div class="text-[10px] text-emerald-100 flex items-center justify-end gap-1 mt-1.5">
                   <span>{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                   <CheckCheck class="w-3.5 h-3.5 text-emerald-200" />
