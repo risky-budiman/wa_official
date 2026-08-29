@@ -679,10 +679,20 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
       staticMessage: 'Halo! Layanan kami sedang di luar jam operasional. Pesan Anda telah kami terima dan akan segera dibalas oleh tim kami saat jam kerja dimulai. Terima kasih! 🙏',
     };
 
+    let hours = org?.operatingHours;
+    let ai = org?.aiAgentConfig;
+
+    if (typeof hours === 'string') {
+      try { hours = JSON.parse(hours); } catch (_) {}
+    }
+    if (typeof ai === 'string') {
+      try { ai = JSON.parse(ai); } catch (_) {}
+    }
+
     return {
       success: true,
-      operatingHours: org?.operatingHours || defaultHours,
-      aiAgentConfig: org?.aiAgentConfig || defaultAi,
+      operatingHours: hours || defaultHours,
+      aiAgentConfig: ai || defaultAi,
     };
   })
 
@@ -702,11 +712,21 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
       try {
         console.log(`🕒 Updating Operating Hours & AI Agent for org ${user.orgId}...`);
         
+        let hoursToSave = body.operatingHours;
+        let aiToSave = body.aiAgentConfig;
+
+        if (typeof hoursToSave === 'string') {
+          try { hoursToSave = JSON.parse(hoursToSave); } catch (_) {}
+        }
+        if (typeof aiToSave === 'string') {
+          try { aiToSave = JSON.parse(aiToSave); } catch (_) {}
+        }
+
         await db
           .update(organizations)
           .set({
-            operatingHours: body.operatingHours as any,
-            aiAgentConfig: body.aiAgentConfig as any,
+            operatingHours: hoursToSave as any,
+            aiAgentConfig: aiToSave as any,
           })
           .where(eq(organizations.id, user.orgId));
 

@@ -107,24 +107,34 @@
     try {
       const res = await apiRequest<any>('/settings/operating-hours');
       if (res.success) {
-        if (res.operatingHours) {
+        let h = res.operatingHours;
+        let a = res.aiAgentConfig;
+
+        if (typeof h === 'string') {
+          try { h = JSON.parse(h); } catch (_) {}
+        }
+        if (typeof a === 'string') {
+          try { a = JSON.parse(a); } catch (_) {}
+        }
+
+        if (h) {
           operatingHours = {
-            enabled: !!res.operatingHours.enabled,
-            timezone: res.operatingHours.timezone || 'Asia/Jakarta',
-            days: Array.isArray(res.operatingHours.days) ? res.operatingHours.days : [1, 2, 3, 4, 5],
-            startTime: res.operatingHours.startTime || '08:00',
-            endTime: res.operatingHours.endTime || '17:00',
+            enabled: Boolean(h.enabled),
+            timezone: h.timezone || 'Asia/Jakarta',
+            days: Array.isArray(h.days) ? h.days : [1, 2, 3, 4, 5],
+            startTime: h.startTime || '08:00',
+            endTime: h.endTime || '17:00',
           };
         }
-        if (res.aiAgentConfig) {
+        if (a) {
           aiAgentConfig = {
-            enabled: !!res.aiAgentConfig.enabled,
-            mode: res.aiAgentConfig.mode || 'AI_ASSISTANT',
-            provider: res.aiAgentConfig.provider || 'gemini',
-            apiKey: res.aiAgentConfig.apiKey || '',
-            model: res.aiAgentConfig.model || 'gemini-2.0-flash',
-            systemPrompt: res.aiAgentConfig.systemPrompt || '',
-            staticMessage: res.aiAgentConfig.staticMessage || 'Halo! Layanan kami saat ini sedang berada di luar jam operasional. Pesan Anda telah kami terima dan akan segera dibalas oleh tim kami saat jam kerja dimulai. Terima kasih! 🙏',
+            enabled: Boolean(a.enabled),
+            mode: a.mode || 'AI_ASSISTANT',
+            provider: a.provider || 'gemini',
+            apiKey: a.apiKey || '',
+            model: a.model || 'gemini-2.0-flash',
+            systemPrompt: a.systemPrompt || '',
+            staticMessage: a.staticMessage || 'Halo! Layanan kami saat ini sedang berada di luar jam operasional. Pesan Anda telah kami terima dan akan segera dibalas oleh tim kami saat jam kerja dimulai. Terima kasih! 🙏',
           };
         }
       }
@@ -495,6 +505,7 @@
 
     loadSettings();
     loadOperationsSettings();
+    loadOperatingHoursSettings();
 
     return () => {
       window.removeEventListener('message', messageListener);
