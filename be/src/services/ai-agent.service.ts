@@ -160,8 +160,9 @@ export class AiAgentService {
       },
       contents,
       generationConfig: {
-        temperature: 0.7,
-        maxOutputTokens: 500,
+        temperature: 0.2,
+        topP: 0.8,
+        maxOutputTokens: 800,
       },
     };
 
@@ -294,7 +295,7 @@ Tugas Anda:
 3. Jika pelanggan menanyakan hal teknis atau membutuhkan bantuan agen manusia, jelaskan bahwa pesan mereka telah dicatat dan akan ditindaklanjuti oleh agen kami pada jam kerja.`;
 
         const finalSystemPrompt = aiConfig.systemPrompt?.trim()
-          ? `${defaultPrompt}\n\nPanduan Bisnis & FAQ Perusahaan:\n${aiConfig.systemPrompt}`
+          ? `[PANDUAN & ATURAN UTAMA DARI PERUSAHAAN]\n${aiConfig.systemPrompt.trim()}\n\n[ATURAN WAJIB]: Anda WAJIB mematuhi seluruh panduan, logika, jawaban FAQ, dan batasan yang tertera di atas.`
           : defaultPrompt;
 
         responseText = await AiAgentService.generateGeminiResponse({
