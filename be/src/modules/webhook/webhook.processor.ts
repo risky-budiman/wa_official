@@ -289,6 +289,7 @@ export class WebhookProcessor {
               .limit(1);
 
             let convId = activeConv?.id;
+            let currentAssignedAgentId: string | null = null;
 
             let messageBody = '';
             if (msg.type === 'text' && msg.text) {
@@ -304,6 +305,7 @@ export class WebhookProcessor {
 
               // Auto-assign: Least-Workload Routing (Agent with minimum active chats)
               const leastBusyAgentId = await WebhookProcessor.getLeastBusyAgent(orgId);
+              currentAssignedAgentId = leastBusyAgentId;
 
               try {
                 await db.insert(conversations).values({
@@ -331,7 +333,10 @@ export class WebhookProcessor {
                   )
                   .orderBy(desc(conversations.createdAt))
                   .limit(1);
-                if (reConv) convId = reConv.id;
+                if (reConv) {
+                  convId = reConv.id;
+                  currentAssignedAgentId = reConv.assignedUserId;
+                }
               }
             } else {
               convId = activeConv.id;
@@ -344,6 +349,8 @@ export class WebhookProcessor {
                 targetAssignedUser = onlineAgentId; // null if all agents offline
                 targetStatus = onlineAgentId ? 'OPEN' : 'UNASSIGNED';
               }
+
+              currentAssignedAgentId = targetAssignedUser;
 
               await db
                 .update(conversations)
@@ -398,7 +405,7 @@ export class WebhookProcessor {
 
                 if (orgFull?.operatingHours && AiAgentService.isOutOfOperatingHours(orgFull.operatingHours)) {
                   // Hanya picu AI Agent jika pesan BELUM DIAMBIL / belum ditugaskan ke agen manusia
-                  if (!targetAssignedUser) {
+                  if (!currentAssignedAgentId) {
                     console.log(`🕒 Pesan dari ${customerWaId} masuk di LUAR JAM OPERASIONAL & BELUM DIAMBIL agen. Memicu AI Agent Auto-Responder...`);
                     AiAgentService.handleOutOfHoursInbound({
                       orgId,
@@ -411,7 +418,7 @@ export class WebhookProcessor {
                       console.error('❌ AI Agent background handler error:', aiErr.message)
                     );
                   } else {
-                    console.log(`ℹ️ Pesan masuk di luar jam kerja tetapi percakapan sudah diambil oleh agen (${targetAssignedUser}). AI Agent tidak membalas.`);
+                    console.log(`ℹ️ Pesan masuk di luar jam kerja tetapi percakapan sudah diambil oleh agen (${currentAssignedAgentId}). AI Agent tidak membalas.`);
                   }
                 }
               } catch (msgErr: any) {
