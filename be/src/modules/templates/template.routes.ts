@@ -186,6 +186,183 @@ export class TemplateService {
     return { id, name: formattedName, status: templateStatus, metaTemplateId };
   }
 
+  static async update(orgId: string, id: string, body: {
+    category?: TemplateCategory;
+    language?: string;
+    components: Record<string, unknown>[];
+  }) {
+    const [existing] = await db
+      .select()
+      .from(messageTemplates)
+      .where(
+        and(
+          eq(messageTemplates.id, id),
+          eq(messageTemplates.organizationId, orgId)
+        )
+      )
+      .limit(1);
+
+    if (!existing) {
+      throw new Error('Template tidak ditemukan');
+    }
+
+    const [org] = await db
+      .select({
+        wabaId: organizations.wabaId,
+        accessToken: organizations.accessToken,
+      })
+      .from(organizations)
+      .where(eq(organizations.id, orgId))
+      .limit(1);
+
+    let templateStatus: TemplateStatus = existing.status || 'APPROVED';
+
+    // If connected to live Meta Graph API and has valid metaTemplateId
+    if (org?.accessToken && !org.accessToken.startsWith('EAAGm0PX4ZCBO') && existing.metaTemplateId && !existing.metaTemplateId.startsWith('meta_')) {
+      try {
+        const metaRes = await fetch(`https://graph.facebook.com/v20.0/${existing.metaTemplateId}`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${org.accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            components: body.components,
+          }),
+        });
+        const metaData = await metaRes.json();
+        if (metaData?.success) {
+          templateStatus = 'PENDING';
+        } else if (metaData?.error) {
+          console.warn('Meta template update warning:', metaData.error);
+        }
+      } catch (err) {
+        console.warn('Meta template update notice:', err);
+      }
+    }
+
+    await db
+      .update(messageTemplates)
+      .set({
+        category: body.category || existing.category,
+        language: body.language || existing.language,
+        components: body.components,
+        status: templateStatus,
+      })
+      .where(
+        and(
+          eq(messageTemplates.id, id),
+          eq(messageTemplates.organizationId, orgId)
+        )
+      );
+
+    return { id, success: true, status: templateStatus };
+  }
+
+  static async seedSamples(orgId: string) {
+    const samples: Array<{
+      name: string;
+      category: TemplateCategory;
+      language: string;
+      components: Record<string, unknown>[];
+    }> = [
+      {
+        name: 'konfirmasi_pesanan_v1',
+        category: 'UTILITY',
+        language: 'id',
+        components: [
+          { type: 'HEADER', format: 'TEXT', text: 'Konfirmasi Pesanan' },
+          {
+            type: 'BODY',
+            text: 'Halo {{1}}, terima kasih telah berbelanja. Pesanan Anda #{{2}} telah kami konfirmasi dengan total Rp {{3}}. Paket akan segera diproses pengirimannya.',
+          },
+          { type: 'FOOTER', text: 'Layanan WhatsApp Resmi' },
+        ],
+      },
+      {
+        name: 'pengingat_jadwal_v1',
+        category: 'UTILITY',
+        language: 'id',
+        components: [
+          { type: 'HEADER', format: 'TEXT', text: 'Pengingat Janji Temu' },
+          {
+            type: 'BODY',
+            text: 'Halo Bapak/Ibu {{1}}, kami mengingatkan jadwal janji temu Anda pada hari {{2}} pukul {{3}} WIB di {{4}}. Mohon konfirmasi jika ada perubahan jadwal.',
+          },
+          { type: 'FOOTER', text: 'Customer Service' },
+        ],
+      },
+      {
+        name: 'notifikasi_tagihan_v1',
+        category: 'UTILITY',
+        language: 'id',
+        components: [
+          { type: 'HEADER', format: 'TEXT', text: 'Pemberitahuan Tagihan' },
+          {
+            type: 'BODY',
+            text: 'Yth. {{1}}, tagihan layanan Anda untuk periode {{2}} sebesar Rp {{3}} telah terbit dan jatuh tempo pada {{4}}. Segera lakukan pembayaran untuk menjaga kelancaran layanan.',
+          },
+          { type: 'FOOTER', text: 'Divisi Billing & Keuangan' },
+        ],
+      },
+      {
+        name: 'promo_spesial_member_v1',
+        category: 'MARKETING',
+        language: 'id',
+        components: [
+          { type: 'HEADER', format: 'TEXT', text: '🎉 Promo Spesial Eksklusif!' },
+          {
+            type: 'BODY',
+            text: 'Hai {{1}}! Dapatkan penawaran istimewa diskon {{2}}% untuk semua produk pilihan kami dengan kode promo {{3}}. Promo berlaku s/d {{4}}. Klaim sekarang!',
+          },
+          { type: 'FOOTER', text: 'Syarat & Ketentuan berlaku' },
+        ],
+      },
+      {
+        name: 'verifikasi_otp_v1',
+        category: 'AUTHENTICATION',
+        language: 'id',
+        components: [
+          {
+            type: 'BODY',
+            text: 'Kode verifikasi (OTP) keamanan Anda adalah: {{1}}. Jangan bagikan kode ini kepada siapa pun termasuk pihak kami demi keamanan akun Anda. Berlaku {{2}} menit.',
+          },
+          { type: 'FOOTER', text: 'Keamanan Akun' },
+        ],
+      },
+    ];
+
+    let createdCount = 0;
+    for (const sample of samples) {
+      const [existing] = await db
+        .select()
+        .from(messageTemplates)
+        .where(
+          and(
+            eq(messageTemplates.organizationId, orgId),
+            eq(messageTemplates.name, sample.name)
+          )
+        )
+        .limit(1);
+
+      if (!existing) {
+        await db.insert(messageTemplates).values({
+          id: nanoid(),
+          organizationId: orgId,
+          name: sample.name,
+          category: sample.category,
+          language: sample.language,
+          status: 'APPROVED',
+          components: sample.components,
+          metaTemplateId: `meta_sample_${nanoid(6)}`,
+        });
+        createdCount++;
+      }
+    }
+
+    return { success: true, count: createdCount };
+  }
+
   static async delete(orgId: string, id: string) {
     const [existing] = await db
       .select()
@@ -262,6 +439,28 @@ export const templateRoutes = new Elysia({ prefix: '/templates' })
     };
   })
 
+  // ─── POST /templates/samples (Seed Standard Samples) ──
+  .post('/samples', async ({ user, set }) => {
+    if (!user) {
+      set.status = 401;
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    if (user.role === 'AGENT') {
+      set.status = 403;
+      return { success: false, error: 'Akses ditolak' };
+    }
+
+    const result = await TemplateService.seedSamples(user.orgId);
+    const items = await TemplateService.list(user.orgId);
+    return {
+      success: true,
+      message: `Berhasil menambahkan ${result.count} contoh template WhatsApp siap pakai!`,
+      count: result.count,
+      items,
+    };
+  })
+
   // ─── POST /templates (Admin & Supervisor Only) ─
   .post(
     '/',
@@ -292,6 +491,43 @@ export const templateRoutes = new Elysia({ prefix: '/templates' })
           t.Literal('UTILITY'),
           t.Literal('AUTHENTICATION'),
         ]),
+        language: t.Optional(t.String()),
+        components: t.Array(t.Any()),
+      }),
+    }
+  )
+
+  // ─── PUT /templates/:id (Admin & Supervisor Only) ─
+  .put(
+    '/:id',
+    async ({ user, params, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { success: false, error: 'Unauthorized' };
+      }
+
+      if (user.role === 'AGENT') {
+        set.status = 403;
+        return { success: false, error: 'Agen tidak memiliki hak untuk mengubah template' };
+      }
+
+      try {
+        const item = await TemplateService.update(user.orgId, params.id, body as any);
+        return { success: true, item };
+      } catch (err: any) {
+        set.status = 400;
+        return { success: false, error: err.message };
+      }
+    },
+    {
+      body: t.Object({
+        category: t.Optional(
+          t.Union([
+            t.Literal('MARKETING'),
+            t.Literal('UTILITY'),
+            t.Literal('AUTHENTICATION'),
+          ])
+        ),
         language: t.Optional(t.String()),
         components: t.Array(t.Any()),
       }),
