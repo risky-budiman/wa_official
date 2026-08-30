@@ -500,7 +500,7 @@ export class WebhookProcessor {
 
                 console.log(`✅ Pesan WA masuk dari ${customerWaId} ("${messageBody.substring(0, 30)}") berhasil disimpan!`);
 
-                // 2d. Out-of-Hours Check & AI Auto-Responder Trigger
+                // 2d. AI Agent Auto-Responder Trigger Check
                 const [orgFull] = await db
                   .select({
                     operatingHours: organizations.operatingHours,
@@ -510,22 +510,34 @@ export class WebhookProcessor {
                   .where(eq(organizations.id, orgId))
                   .limit(1);
 
-                if (orgFull?.operatingHours && AiAgentService.isOutOfOperatingHours(orgFull.operatingHours)) {
-                  // Hanya picu AI Agent jika pesan BELUM DIAMBIL / belum ditugaskan ke agen manusia
-                  if (!currentAssignedAgentId) {
-                    console.log(`🕒 Pesan dari ${customerWaId} masuk di LUAR JAM OPERASIONAL & BELUM DIAMBIL agen. Memicu AI Agent Auto-Responder...`);
-                    AiAgentService.handleOutOfHoursInbound({
-                      orgId,
-                      convId: convId!,
-                      contactWaId: customerWaId,
-                      contactName: customerName,
-                      incomingText: messageBody,
-                      phoneRecordId: phone.id,
-                    }).catch((aiErr) =>
-                      console.error('❌ AI Agent background handler error:', aiErr.message)
-                    );
+                const aiCfg = orgFull?.aiAgentConfig;
+                if (aiCfg && aiCfg.enabled) {
+                  const isScheduleEnabled = orgFull.operatingHours && orgFull.operatingHours.enabled;
+                  const isOutOfHours = isScheduleEnabled
+                    ? AiAgentService.isOutOfOperatingHours(orgFull.operatingHours)
+                    : true; // Jika jadwal jam kerja nonaktif, perlakukan sebagai 24/7
+
+                  const isAlwaysOn = aiCfg.triggerMode === 'ALWAYS' || !isScheduleEnabled;
+                  const shouldRespond = isAlwaysOn || isOutOfHours;
+
+                  if (shouldRespond) {
+                    if (!currentAssignedAgentId) {
+                      console.log(`🤖 Memicu AI Agent Auto-Responder untuk ${customerWaId} (Mode: ${isAlwaysOn ? '24/7 Selalu Aktif' : 'Luar Jam Kerja'})...`);
+                      AiAgentService.handleOutOfHoursInbound({
+                        orgId,
+                        convId: convId!,
+                        contactWaId: customerWaId,
+                        contactName: customerName,
+                        incomingText: messageBody,
+                        phoneRecordId: phone.id,
+                      }).catch((aiErr) =>
+                        console.error('❌ AI Agent background handler error:', aiErr.message)
+                      );
+                    } else {
+                      console.log(`ℹ️ Percakapan ${convId} sudah diambil oleh agen manusia (${currentAssignedAgentId}). AI Agent standby.`);
+                    }
                   } else {
-                    console.log(`ℹ️ Pesan masuk di luar jam kerja tetapi percakapan sudah diambil oleh agen (${currentAssignedAgentId}). AI Agent tidak membalas.`);
+                    console.log(`ℹ️ Pesan masuk pada JAM OPERASIONAL AKTIF. Menunggu respon agen manusia.`);
                   }
                 }
               } catch (msgErr: any) {

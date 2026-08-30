@@ -32,7 +32,9 @@
     Wand2,
     Lightbulb,
     ChevronDown,
-    ChevronUp
+    ChevronUp,
+    Zap,
+    Moon
   } from 'lucide-svelte';
   import { formatWhatsAppMarkdown } from '$lib/utils/whatsapp-formatter';
 
@@ -73,6 +75,7 @@
   // AI Agent Auto-Responder State
   let aiAgentConfig = $state({
     enabled: false,
+    triggerMode: 'ALWAYS' as 'OUT_OF_HOURS' | 'ALWAYS',
     mode: 'AI_ASSISTANT' as 'AI_ASSISTANT' | 'STATIC_MESSAGE',
     provider: 'gemini' as 'gemini' | 'openai',
     apiKey: '',
@@ -222,6 +225,7 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
         if (a) {
           aiAgentConfig = {
             enabled: Boolean(a.enabled),
+            triggerMode: a.triggerMode || 'ALWAYS',
             mode: a.mode || 'AI_ASSISTANT',
             provider: a.provider || 'gemini',
             apiKey: a.apiKey || '',
@@ -1023,6 +1027,44 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
 
         {#if aiAgentConfig.enabled}
           <div class="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-5">
+            <!-- Pilihan Waktu & Jadwal Respon AI -->
+            <div>
+              <div class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">Kapan AI Agent Harus Menjawab:</div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onclick={() => (aiAgentConfig.triggerMode = 'ALWAYS')}
+                  class="p-3.5 rounded-xl border text-left transition cursor-pointer {aiAgentConfig.triggerMode === 'ALWAYS'
+                    ? 'bg-emerald-50/60 dark:bg-emerald-950/40 border-emerald-500 text-emerald-900 dark:text-emerald-200 ring-2 ring-emerald-500/20'
+                    : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400'}"
+                >
+                  <div class="flex items-center gap-2 font-bold text-xs mb-1">
+                    <Zap class="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                    <span>⚡ Selalu Aktif 24 Jam (Setiap Chat Baru)</span>
+                  </div>
+                  <p class="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                    AI otomatis menjawab setiap pesan WhatsApp baru kapan saja, selama percakapan belum diambil oleh agen manusia.
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onclick={() => (aiAgentConfig.triggerMode = 'OUT_OF_HOURS')}
+                  class="p-3.5 rounded-xl border text-left transition cursor-pointer {aiAgentConfig.triggerMode === 'OUT_OF_HOURS'
+                    ? 'bg-amber-50/60 dark:bg-amber-950/40 border-amber-500 text-amber-900 dark:text-amber-200 ring-2 ring-amber-500/20'
+                    : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400'}"
+                >
+                  <div class="flex items-center gap-2 font-bold text-xs mb-1">
+                    <Moon class="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                    <span>🌙 Hanya di Luar Jam Operasional</span>
+                  </div>
+                  <p class="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                    AI standby saat jam kerja aktif. AI hanya akan otomatis merespons saat kantor sedang tutup sesuai jadwal di atas.
+                  </p>
+                </button>
+              </div>
+            </div>
+
             <!-- Pilihan Mode AI vs Pesan Statis -->
             <div>
               <div class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">Mode Respon Otomatis:</div>

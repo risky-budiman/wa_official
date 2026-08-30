@@ -15,6 +15,7 @@ export interface OperatingHoursConfig {
 
 export interface AiAgentConfig {
   enabled: boolean;
+  triggerMode?: 'OUT_OF_HOURS' | 'ALWAYS'; // OUT_OF_HOURS (di luar jam kerja) atau ALWAYS (24/7 selalu aktif)
   mode: 'AI_ASSISTANT' | 'STATIC_MESSAGE';
   provider: 'gemini' | 'openai';
   apiKey?: string;
