@@ -71,6 +71,24 @@ export class MetaApiService {
       };
     }
 
+    let targetNumber = (params.recipientWaId || '').replace(/[^0-9]/g, '');
+    if (targetNumber.startsWith('08')) {
+      targetNumber = '62' + targetNumber.slice(1);
+    } else if (targetNumber.startsWith('8')) {
+      targetNumber = '62' + targetNumber;
+    }
+
+    const templateObj: any = {
+      name: params.templateName,
+      language: {
+        code: params.languageCode || 'id',
+      },
+    };
+
+    if (params.components && Array.isArray(params.components) && params.components.length > 0) {
+      templateObj.components = params.components;
+    }
+
     const url = `${this.baseUrl}/${params.phoneNumberId}/messages`;
     const res = await fetch(url, {
       method: 'POST',
@@ -81,20 +99,15 @@ export class MetaApiService {
       body: JSON.stringify({
         messaging_product: 'whatsapp',
         recipient_type: 'individual',
-        to: params.recipientWaId,
+        to: targetNumber,
         type: 'template',
-        template: {
-          name: params.templateName,
-          language: {
-            code: params.languageCode,
-          },
-          components: params.components || [],
-        },
+        template: templateObj,
       }),
     });
 
     const data = await res.json();
     if (!res.ok) {
+      console.error('❌ Meta sendTemplateMessage error:', JSON.stringify(data));
       throw new Error(data.error?.message || 'Gagal mengirim template ke Meta WhatsApp API');
     }
 
