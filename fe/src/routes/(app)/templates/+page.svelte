@@ -1006,8 +1006,9 @@
 
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
                           <div>
-                            <label class="block text-[10px] text-slate-500 mb-0.5">Tipe Tombol</label>
+                            <label for={`btn_type_${idx}`} class="block text-[10px] text-slate-500 mb-0.5">Tipe Tombol</label>
                             <select
+                              id={`btn_type_${idx}`}
                               bind:value={btn.type}
                               class="w-full px-2 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white"
                             >
@@ -1019,8 +1020,9 @@
                           </div>
 
                           <div>
-                            <label class="block text-[10px] text-slate-500 mb-0.5">Teks Label Tombol</label>
+                            <label for={`btn_text_${idx}`} class="block text-[10px] text-slate-500 mb-0.5">Teks Label Tombol</label>
                             <input
+                              id={`btn_text_${idx}`}
                               type="text"
                               bind:value={btn.text}
                               placeholder="e.g. Kunjungi Website"
@@ -1031,8 +1033,9 @@
 
                           {#if btn.type === 'URL'}
                             <div>
-                              <label class="block text-[10px] text-slate-500 mb-0.5">URL Target</label>
+                              <label for={`btn_url_${idx}`} class="block text-[10px] text-slate-500 mb-0.5">URL Target</label>
                               <input
+                                id={`btn_url_${idx}`}
                                 type="text"
                                 bind:value={btn.url}
                                 placeholder="https://toko.com/inv/&#123;&#123;1&#125;&#125;"
@@ -1042,8 +1045,9 @@
                             </div>
                           {:else if btn.type === 'PHONE_NUMBER'}
                             <div>
-                              <label class="block text-[10px] text-slate-500 mb-0.5">Nomor (+62...)</label>
+                              <label for={`btn_phone_${idx}`} class="block text-[10px] text-slate-500 mb-0.5">Nomor (+62...)</label>
                               <input
+                                id={`btn_phone_${idx}`}
                                 type="text"
                                 bind:value={btn.phone_number}
                                 placeholder="+628123456789"
@@ -1053,8 +1057,9 @@
                             </div>
                           {:else if btn.type === 'COPY_CODE'}
                             <div>
-                              <label class="block text-[10px] text-slate-500 mb-0.5">Contoh Kode Voucher</label>
+                              <label for={`btn_code_${idx}`} class="block text-[10px] text-slate-500 mb-0.5">Contoh Kode Voucher</label>
                               <input
+                                id={`btn_code_${idx}`}
                                 type="text"
                                 bind:value={btn.example}
                                 placeholder="e.g. DISKON30"
