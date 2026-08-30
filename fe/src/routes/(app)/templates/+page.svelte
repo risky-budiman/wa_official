@@ -256,6 +256,16 @@
     previewVars = { ...previewVars, ...preset.sampleVariables };
   }
 
+  function insertVariable() {
+    const matches = formBodyText.match(/\{\{(\d+)\}\}/g) || [];
+    const existingNums = matches.map((m) => parseInt(m.replace(/\D/g, ''), 10));
+    const nextNum = existingNums.length > 0 ? Math.max(...existingNums) + 1 : 1;
+    formBodyText = formBodyText + ` {{${nextNum}}}`;
+    if (!previewVars[`{{${nextNum}}}`]) {
+      previewVars[`{{${nextNum}}}`] = `Parameter ${nextNum}`;
+    }
+  }
+
   async function handleSaveTemplate(e: Event) {
     e.preventDefault();
     if (!formBodyText.trim()) return;
@@ -831,13 +841,24 @@
 
             <!-- Body Message Text (Required) -->
             <div>
-              <div class="flex items-center justify-between mb-1">
+              <div class="flex items-center justify-between mb-1.5">
                 <label for="f_body" class="text-xs font-bold text-slate-700 dark:text-slate-300">
                   Isi Pesan / Body Text (Wajib)
                 </label>
-                <span class="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono font-bold">
-                  Gunakan &#123;&#123;1&#125;&#125;, &#123;&#123;2&#125;&#125; untuk variabel
-                </span>
+                <div class="flex items-center gap-2">
+                  <span class="text-[10px] text-slate-400 font-mono">
+                    Gunakan &#123;&#123;1&#125;&#125;, &#123;&#123;2&#125;&#125;, dst.
+                  </span>
+                  <button
+                    type="button"
+                    onclick={insertVariable}
+                    class="px-2 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/80 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[10px] font-mono font-bold transition flex items-center gap-1 cursor-pointer"
+                    title="Sisipkan variabel baru ke dalam teks pesan"
+                  >
+                    <Plus class="w-3 h-3" />
+                    <span>+ Sisipkan Variabel</span>
+                  </button>
+                </div>
               </div>
               <textarea
                 id="f_body"
