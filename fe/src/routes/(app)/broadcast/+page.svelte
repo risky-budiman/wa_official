@@ -23,6 +23,9 @@ interface CampaignItem {
 interface TemplateOption {
   id: string;
   name: string;
+  status: string;
+  category?: string;
+  language?: string;
 }
 
 interface MetaQuotaData {
@@ -49,6 +52,7 @@ let metaQuota = $state<MetaQuotaData | null>(null);
 let isLoading = $state(true);
 let isRefreshing = $state(false);
 let showModal = $state(false);
+let selectedCampaign = $state<CampaignItem | null>(null);
 let pollTimer: any = null;
 
 let newName = $state('');
@@ -81,6 +85,10 @@ async function loadData(showLoader = true) {
 
   if (cRes.success && cRes.items) {
     campaignList = cRes.items;
+    if (selectedCampaign) {
+      const updated = campaignList.find((c) => c.id === selectedCampaign?.id);
+      if (updated) selectedCampaign = updated;
+    }
   }
   if (tRes.success && tRes.items) {
     templateOptions = tRes.items;
@@ -121,19 +129,20 @@ async function deleteCampaign(id: string) {
   if (!confirm('Apakah Anda yakin ingin menghapus data kampanye ini?')) return;
   const res = await apiRequest(`/broadcast/${id}`, { method: 'DELETE' });
   if (res.success) {
+    if (selectedCampaign?.id === id) selectedCampaign = null;
     loadData(false);
   }
 }
 
 onMount(() => {
   loadData();
-  // Auto poll every 6 seconds to update progress while broadcast is active
+  // Auto poll every 2.5 seconds to track real-time broadcast progress
   pollTimer = setInterval(() => {
     const hasProcessing = campaignList.some((c) => c.status === 'PROCESSING');
     if (hasProcessing) {
       loadData(false);
     }
-  }, 6000);
+  }, 2500);
 });
 
 onDestroy(() => {
@@ -245,7 +254,7 @@ onDestroy(() => {
             <tr>
               <th class="py-3 px-4">Nama Kampanye</th>
               <th class="py-3 px-4">Template</th>
-              <th class="py-3 px-4">Status</th>
+              <th class="py-3 px-4">Status & Progres</th>
               <th class="py-3 px-4">Penerima</th>
               <th class="py-3 px-4">Terkirim</th>
               <th class="py-3 px-4">Delivered</th>
@@ -256,22 +265,34 @@ onDestroy(() => {
           </thead>
           <tbody class="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
             {#each campaignList as c}
-              <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition">
-                <td class="py-3.5 px-4 font-bold text-slate-900 dark:text-white">{c.name}</td>
+              <tr
+                onclick={() => (selectedCampaign = c)}
+                class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition cursor-pointer {selectedCampaign?.id === c.id ? 'bg-indigo-50/50 dark:bg-indigo-950/20' : ''}"
+              >
+                <td class="py-3.5 px-4 font-bold text-slate-900 dark:text-white">
+                  <div class="flex items-center gap-1.5">
+                    <span>{c.name}</span>
+                  </div>
+                </td>
                 <td class="py-3.5 px-4 font-mono text-[11px] text-emerald-700 dark:text-emerald-400">{c.template.name}</td>
                 <td class="py-3.5 px-4">
                   {#if c.status === 'COMPLETED'}
                     <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                      Selesai
+                      ✓ Selesai ({c.sentCount}/{c.totalRecipients})
                     </span>
                   {:else if c.status === 'FAILED'}
                     <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
-                      Gagal
+                      ✕ Gagal
                     </span>
                   {:else}
-                    <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 animate-pulse">
-                      Diproses ({c.sentCount}/{c.totalRecipients})
-                    </span>
+                    <div class="space-y-1">
+                      <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 animate-pulse">
+                        Diproses ({c.sentCount}/{c.totalRecipients} - {Math.round((c.sentCount / (c.totalRecipients || 1)) * 100)}%)
+                      </span>
+                      <div class="w-24 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                        <div class="h-full bg-amber-500 transition-all duration-300" style="width: {Math.round((c.sentCount / (c.totalRecipients || 1)) * 100)}%"></div>
+                      </div>
+                    </div>
                   {/if}
                 </td>
                 <td class="py-3.5 px-4 font-semibold">{c.totalRecipients} kontak</td>
@@ -281,7 +302,10 @@ onDestroy(() => {
                 <td class="py-3.5 px-4 text-slate-500 dark:text-slate-400">{new Date(c.createdAt).toLocaleDateString('id-ID')}</td>
                 <td class="py-3.5 px-4 text-center">
                   <button
-                    onclick={() => deleteCampaign(c.id)}
+                    onclick={(e) => {
+                      e.stopPropagation();
+                      deleteCampaign(c.id);
+                    }}
                     class="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition cursor-pointer"
                     title="Hapus riwayat kampanye ini"
                   >
@@ -296,6 +320,76 @@ onDestroy(() => {
     {/if}
   </div>
 </div>
+
+<!-- Modal Detail & Log Progress Kampanye -->
+{#if selectedCampaign}
+  <div class="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-900 w-full max-w-lg rounded-2xl p-6 border border-slate-200 dark:border-slate-800 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+        <div>
+          <h3 class="text-base font-bold text-slate-900 dark:text-white">{selectedCampaign.name}</h3>
+          <p class="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">Template: {selectedCampaign.template.name}</p>
+        </div>
+        <button onclick={() => (selectedCampaign = null)} class="text-slate-400 hover:text-slate-600 dark:hover:text-white cursor-pointer">
+          <X class="w-5 h-5" />
+        </button>
+      </div>
+
+      <!-- Live Step Progress Tracker -->
+      <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-3">
+        <div class="flex items-center justify-between text-xs">
+          <span class="font-bold text-slate-700 dark:text-slate-300">Status Pengiriman:</span>
+          <span class="font-mono font-bold {selectedCampaign.status === 'COMPLETED' ? 'text-emerald-600' : selectedCampaign.status === 'FAILED' ? 'text-rose-600' : 'text-amber-500'}">
+            {selectedCampaign.status === 'COMPLETED' ? '✓ SELESAI' : selectedCampaign.status === 'FAILED' ? '✕ GAGAL' : '⏳ SEDANG DIPROSES'}
+          </span>
+        </div>
+
+        <div class="w-full h-3 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden p-0.5 border border-slate-300 dark:border-slate-700">
+          <div
+            class="h-full rounded-full transition-all duration-500 bg-gradient-to-r {selectedCampaign.status === 'FAILED'
+              ? 'from-rose-500 to-rose-600'
+              : 'from-emerald-500 to-teal-400'}"
+            style="width: {Math.max(Math.round(((selectedCampaign.sentCount + (selectedCampaign.failedCount || 0)) / (selectedCampaign.totalRecipients || 1)) * 100), 4)}%"
+          ></div>
+        </div>
+
+        <div class="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+          <span>Progres: {selectedCampaign.sentCount + (selectedCampaign.failedCount || 0)} / {selectedCampaign.totalRecipients} Kontak</span>
+          <span>{Math.round(((selectedCampaign.sentCount + (selectedCampaign.failedCount || 0)) / (selectedCampaign.totalRecipients || 1)) * 100)}% Selesai</span>
+        </div>
+      </div>
+
+      <!-- 4 Stats Cards -->
+      <div class="grid grid-cols-4 gap-2 text-center">
+        <div class="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+          <span class="text-[10px] text-slate-500 dark:text-slate-400 block">Total Target</span>
+          <span class="text-sm font-black text-slate-900 dark:text-white">{selectedCampaign.totalRecipients}</span>
+        </div>
+        <div class="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800">
+          <span class="text-[10px] text-emerald-700 dark:text-emerald-400 block">Terkirim</span>
+          <span class="text-sm font-black text-emerald-600 dark:text-emerald-400">{selectedCampaign.sentCount}</span>
+        </div>
+        <div class="p-2.5 rounded-xl bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800">
+          <span class="text-[10px] text-teal-700 dark:text-teal-400 block">Delivered</span>
+          <span class="text-sm font-black text-teal-600 dark:text-teal-400">{selectedCampaign.deliveredCount}</span>
+        </div>
+        <div class="p-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800">
+          <span class="text-[10px] text-indigo-700 dark:text-indigo-400 block">Dibaca</span>
+          <span class="text-sm font-black text-indigo-600 dark:text-indigo-400">{selectedCampaign.readCount}</span>
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+        <button
+          onclick={() => (selectedCampaign = null)}
+          class="py-2 px-5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs cursor-pointer"
+        >
+          Tutup
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 <!-- Modal Create Campaign -->
 {#if showModal}
@@ -322,7 +416,7 @@ onDestroy(() => {
         </div>
 
         <div>
-          <label for="template_select" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Pilih WhatsApp Template</label>
+          <label for="template_select" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Pilih WhatsApp Template (Wajib Berstatus APPROVED)</label>
           <select
             id="template_select"
             bind:value={selectedTemplateId}
@@ -330,7 +424,9 @@ onDestroy(() => {
             required
           >
             {#each templateOptions as t}
-              <option value={t.id}>{t.name}</option>
+              <option value={t.id}>
+                {t.name} {t.status === 'APPROVED' ? '✓ [APPROVED / Disetujui Meta]' : `⚠️ [${t.status || 'PENDING'}]`}
+              </option>
             {/each}
           </select>
         </div>

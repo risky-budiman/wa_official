@@ -65,6 +65,12 @@ export class BroadcastService {
       throw new Error('Template WhatsApp tidak ditemukan');
     }
 
+    if (tmpl.status !== 'APPROVED') {
+      throw new Error(
+        `Template "${tmpl.name}" saat ini berstatus "${tmpl.status}". Meta WhatsApp API hanya mengizinkan pengiriman pesan broadcast untuk template yang sudah disetujui (APPROVED). Silakan buka menu Template WA untuk menyinkronkan status atau pilih template yang sudah Disetujui.`
+      );
+    }
+
     // 2. Get Organization & Phone
     const [org] = await db.select().from(organizations).where(eq(organizations.id, orgId)).limit(1);
     const phones = await db.select().from(phoneNumbers).where(eq(phoneNumbers.organizationId, orgId));
@@ -74,8 +80,12 @@ export class BroadcastService {
       org?.accessToken && !org.accessToken.startsWith('EAAGm0PX4ZCBO')
         ? org.accessToken
         : env.META_ACCESS_TOKEN;
-    const activePhoneNumberId = env.META_PHONE_NUMBER_ID || phone?.phoneNumberId || '';
+    const activePhoneNumberId = phone?.phoneNumberId || env.META_PHONE_NUMBER_ID || '';
     const dbPhoneId = phone?.id || phone?.phoneNumberId || env.META_PHONE_NUMBER_ID || 'default';
+
+    if (!activePhoneNumberId) {
+      throw new Error('Phone Number ID Meta tidak ditemukan. Pastikan akun WhatsApp Business sudah terhubung di menu Pengaturan.');
+    }
 
     // 3. Get Target Contacts
     const contactList = await db
