@@ -718,10 +718,15 @@
 
 <!-- Modal Create / Edit Template -->
 {#if showModal}
-  <div class="fixed inset-0 bg-slate-950/75 backdrop-blur-xs z-50 flex items-center justify-center p-4 overflow-y-auto">
-    <div class="bg-white dark:bg-slate-900 w-full max-w-4xl rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden my-6">
-      <!-- Modal Header -->
-      <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-900/50">
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    class="fixed inset-0 bg-slate-950/75 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-6 overflow-hidden"
+    onclick={(e) => { if (e.target === e.currentTarget) showModal = false; }}
+  >
+    <div class="bg-white dark:bg-slate-900 w-full max-w-4xl max-h-[92vh] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col">
+      <!-- Modal Header (Sticky Top) -->
+      <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-950 shrink-0 sticky top-0 z-10">
         <div class="flex items-center gap-2.5">
           <div class="p-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
             {#if modalMode === 'create'}
@@ -742,14 +747,19 @@
           </div>
         </div>
 
-        <button onclick={() => (showModal = false)} class="text-slate-400 hover:text-slate-600 dark:hover:text-white cursor-pointer p-1">
+        <button
+          type="button"
+          onclick={() => (showModal = false)}
+          class="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-slate-700 transition cursor-pointer"
+          title="Tutup Jendela"
+        >
           <X class="w-5 h-5" />
         </button>
       </div>
 
       <!-- Quick Sample Presets (Available on Create Mode) -->
       {#if modalMode === 'create'}
-        <div class="px-6 py-3 bg-indigo-50/60 dark:bg-indigo-950/30 border-b border-indigo-100 dark:border-indigo-900/50">
+        <div class="px-6 py-3 bg-indigo-50/60 dark:bg-indigo-950/30 border-b border-indigo-100 dark:border-indigo-900/50 shrink-0">
           <div class="flex items-center justify-between gap-2 mb-2">
             <span class="text-xs font-bold text-indigo-900 dark:text-indigo-300 flex items-center gap-1.5">
               <Sparkles class="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
@@ -774,202 +784,198 @@
       {/if}
 
       <!-- Modal Body (Form & Live WhatsApp Preview) -->
-      <form onsubmit={handleSaveTemplate} class="p-6">
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          <!-- Form Input Fields (Left 7 Cols) -->
-          <div class="lg:col-span-7 space-y-4">
-            <!-- Template Name & Language -->
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div class="sm:col-span-2">
-                <label for="f_name" class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Nama Template {modalMode === 'edit' ? '(Terkunci)' : '(Huruf kecil & underscore)'}
-                </label>
+      <form onsubmit={handleSaveTemplate} class="flex flex-col flex-1 overflow-hidden">
+        <div class="p-6 overflow-y-auto flex-1 max-h-[calc(92vh-160px)]">
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <!-- Form Input Fields (Left 7 Cols) -->
+            <div class="lg:col-span-7 space-y-4">
+              <!-- Template Name & Language -->
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div class="sm:col-span-2">
+                  <label for="f_name" class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Nama Template {modalMode === 'edit' ? '(Terkunci)' : '(Huruf kecil & underscore)'}
+                  </label>
+                  <input
+                    id="f_name"
+                    type="text"
+                    bind:value={formName}
+                    disabled={modalMode === 'edit'}
+                    placeholder="e.g. konfirmasi_pesanan_v1"
+                    class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white font-mono focus:outline-none focus:border-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label for="f_lang" class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Bahasa</label>
+                  <select
+                    id="f_lang"
+                    bind:value={formLanguage}
+                    class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+                  >
+                    <option value="id">Indonesia (id)</option>
+                    <option value="en_US">English (en_US)</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Meta Category -->
+              <div>
+                <label for="f_cat" class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Kategori Meta</label>
+                <select
+                  id="f_cat"
+                  bind:value={formCategory}
+                  class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+                >
+                  <option value="UTILITY">UTILITY — Transaksi, Resi, Konfirmasi, Janji Temu</option>
+                  <option value="MARKETING">MARKETING — Promosi, Penawaran Diskon, Produk Baru</option>
+                  <option value="AUTHENTICATION">AUTHENTICATION — Kode OTP, Verifikasi Keamanan Akun</option>
+                </select>
+              </div>
+
+              <!-- Header Text (Optional) -->
+              <div>
+                <div class="flex items-center justify-between mb-1">
+                  <label for="f_hdr" class="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    Header Judul (Opsional)
+                  </label>
+                  <span class="text-[10px] text-slate-400">Teks tebal di awal pesan</span>
+                </div>
                 <input
-                  id="f_name"
+                  id="f_hdr"
                   type="text"
-                  bind:value={formName}
-                  disabled={modalMode === 'edit'}
-                  placeholder="e.g. konfirmasi_pesanan_v1"
-                  class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white font-mono focus:outline-none focus:border-emerald-500 disabled:opacity-60 disabled:cursor-not-allowed"
-                  required
+                  bind:value={formHeaderText}
+                  placeholder="e.g. Konfirmasi Pesanan"
+                  class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
                 />
               </div>
 
+              <!-- Body Message Text (Required) -->
               <div>
-                <label for="f_lang" class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Bahasa</label>
-                <select
-                  id="f_lang"
-                  bind:value={formLanguage}
-                  class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
-                >
-                  <option value="id">Indonesia (id)</option>
-                  <option value="en_US">English (en_US)</option>
-                </select>
+                <div class="flex items-center justify-between mb-1.5">
+                  <label for="f_body" class="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    Isi Pesan / Body Text (Wajib)
+                  </label>
+                  <div class="flex items-center gap-2">
+                    <span class="text-[10px] text-slate-400 font-mono">
+                      Gunakan &#123;&#123;1&#125;&#125;, &#123;&#123;2&#125;&#125;, dst.
+                    </span>
+                    <button
+                      type="button"
+                      onclick={insertVariable}
+                      class="px-2 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/80 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[10px] font-mono font-bold transition flex items-center gap-1 cursor-pointer"
+                      title="Sisipkan variabel baru ke dalam teks pesan"
+                    >
+                      <Plus class="w-3 h-3" />
+                      <span>+ Sisipkan Variabel</span>
+                    </button>
+                  </div>
+                </div>
+                <textarea
+                  id="f_body"
+                  rows="5"
+                  bind:value={formBodyText}
+                  placeholder="Halo &#123;&#123;1&#125;&#125;, pesanan #&#123;&#123;2&#125;&#125; Anda sebesar Rp &#123;&#123;3&#125;&#125; telah kami terima."
+                  class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500 leading-relaxed font-sans"
+                  required
+                ></textarea>
+              </div>
+
+              <!-- Footer Text (Optional) -->
+              <div>
+                <div class="flex items-center justify-between mb-1">
+                  <label for="f_ftr" class="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    Footer / Catatan Kaki (Opsional)
+                  </label>
+                  <span class="text-[10px] text-slate-400">Teks kecil di bagian bawah</span>
+                </div>
+                <input
+                  id="f_ftr"
+                  type="text"
+                  bind:value={formFooterText}
+                  placeholder="e.g. Layanan Pelanggan Resmi WhatsApp"
+                  class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+                />
               </div>
             </div>
 
-            <!-- Meta Category -->
-            <div>
-              <label for="f_cat" class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">Kategori Meta</label>
-              <select
-                id="f_cat"
-                bind:value={formCategory}
-                class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
-              >
-                <option value="UTILITY">UTILITY — Transaksi, Resi, Konfirmasi, Janji Temu</option>
-                <option value="MARKETING">MARKETING — Promosi, Penawaran Diskon, Produk Baru</option>
-                <option value="AUTHENTICATION">AUTHENTICATION — Kode OTP, Verifikasi Keamanan Akun</option>
-              </select>
-            </div>
-
-            <!-- Header Text (Optional) -->
-            <div>
-              <div class="flex items-center justify-between mb-1">
-                <label for="f_hdr" class="text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Header Judul (Opsional)
-                </label>
-                <span class="text-[10px] text-slate-400">Teks tebal di awal pesan</span>
-              </div>
-              <input
-                id="f_hdr"
-                type="text"
-                bind:value={formHeaderText}
-                placeholder="e.g. Konfirmasi Pesanan"
-                class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
-              />
-            </div>
-
-            <!-- Body Message Text (Required) -->
-            <div>
-              <div class="flex items-center justify-between mb-1.5">
-                <label for="f_body" class="text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Isi Pesan / Body Text (Wajib)
-                </label>
-                <div class="flex items-center gap-2">
-                  <span class="text-[10px] text-slate-400 font-mono">
-                    Gunakan &#123;&#123;1&#125;&#125;, &#123;&#123;2&#125;&#125;, dst.
+            <!-- Live WhatsApp Preview (Right 5 Cols) -->
+            <div class="lg:col-span-5 flex flex-col justify-between space-y-4">
+              <div>
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                    <Eye class="w-3.5 h-3.5 text-emerald-500" />
+                    Pratinjau Pesan WhatsApp
                   </span>
-                  <button
-                    type="button"
-                    onclick={insertVariable}
-                    class="px-2 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/80 hover:bg-emerald-100 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[10px] font-mono font-bold transition flex items-center gap-1 cursor-pointer"
-                    title="Sisipkan variabel baru ke dalam teks pesan"
-                  >
-                    <Plus class="w-3 h-3" />
-                    <span>+ Sisipkan Variabel</span>
-                  </button>
+                  <span class="text-[10px] font-mono text-slate-400">Live Preview</span>
                 </div>
-              </div>
-              <textarea
-                id="f_body"
-                rows="5"
-                bind:value={formBodyText}
-                placeholder="Halo &#123;&#123;1&#125;&#125;, pesanan #&#123;&#123;2&#125;&#125; Anda sebesar Rp &#123;&#123;3&#125;&#125; telah kami terima."
-                class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500 leading-relaxed font-sans"
-                required
-              ></textarea>
-            </div>
 
-            <!-- Footer Text (Optional) -->
-            <div>
-              <div class="flex items-center justify-between mb-1">
-                <label for="f_ftr" class="text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Footer / Catatan Kaki (Opsional)
-                </label>
-                <span class="text-[10px] text-slate-400">Teks kecil di bagian bawah</span>
-              </div>
-              <input
-                id="f_ftr"
-                type="text"
-                bind:value={formFooterText}
-                placeholder="e.g. Layanan Pelanggan Resmi WhatsApp"
-                class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
-              />
-            </div>
-          </div>
-
-          <!-- Live WhatsApp Preview (Right 5 Cols) -->
-          <div class="lg:col-span-5 flex flex-col justify-between space-y-4">
-            <div>
-              <div class="flex items-center justify-between mb-2">
-                <span class="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                  <Eye class="w-3.5 h-3.5 text-emerald-500" />
-                  Pratinjau Pesan WhatsApp
-                </span>
-                <span class="text-[10px] font-mono text-slate-400">Live Preview</span>
-              </div>
-
-              <!-- WhatsApp Chat Phone Mockup Card -->
-              <div class="rounded-2xl bg-[#0b141a] dark:bg-slate-950 border border-slate-800 p-4 shadow-inner min-h-[260px] flex flex-col justify-between">
-                <!-- Chat Bubble -->
-                <div class="bg-[#202c33] text-[#e9edef] rounded-2xl rounded-tl-xs p-3.5 text-xs shadow-md space-y-2 border border-slate-700/50">
-                  {#if formHeaderText}
-                    <div class="font-bold text-white text-xs border-b border-slate-700 pb-1.5">
-                      {formHeaderText}
-                    </div>
-                  {/if}
-
-                  <div class="leading-relaxed whitespace-pre-wrap font-sans text-xs">
-                    {#if formBodyText}
-                      {renderPreview(formBodyText, true)}
-                    {:else}
-                      <span class="text-slate-500 italic">Isi template akan muncul di sini...</span>
+                <!-- WhatsApp Chat Phone Mockup Card -->
+                <div class="rounded-2xl bg-[#0b141a] dark:bg-slate-950 border border-slate-800 p-4 shadow-inner min-h-[260px] flex flex-col justify-between">
+                  <!-- Chat Bubble -->
+                  <div class="bg-[#202c33] text-[#e9edef] rounded-2xl rounded-tl-xs p-3.5 text-xs shadow-md space-y-2 border border-slate-700/50">
+                    {#if formHeaderText}
+                      <div class="font-bold text-white text-xs border-b border-slate-700 pb-1.5">
+                        {formHeaderText}
+                      </div>
                     {/if}
-                  </div>
 
-                  {#if formFooterText}
-                    <div class="text-[10px] text-slate-400 pt-1 border-t border-slate-700/60">
-                      {formFooterText}
+                    <div class="leading-relaxed whitespace-pre-wrap font-sans text-xs">
+                      {#if formBodyText}
+                        {renderPreview(formBodyText, true)}
+                      {:else}
+                        <span class="text-slate-500 italic">Isi template akan muncul di sini...</span>
+                      {/if}
                     </div>
-                  {/if}
 
-                  <div class="flex items-center justify-end gap-1 text-[9px] text-slate-400 pt-0.5">
-                    <span>10:30</span>
-                    <span class="text-[#53bdeb]">✓✓</span>
-                  </div>
-                </div>
+                    {#if formFooterText}
+                      <div class="text-[10px] text-slate-400 pt-1 border-t border-slate-700/60">
+                        {formFooterText}
+                      </div>
+                    {/if}
 
-                <!-- Simulation Variables Note -->
-                <div class="mt-4 pt-3 border-t border-slate-800 text-[10px] text-slate-400 space-y-1">
-                  <div class="font-bold text-slate-300 flex items-center gap-1">
-                    <HelpCircle class="w-3 h-3 text-emerald-400" />
-                    Variabel Pengujian Pratinjau:
+                    <div class="flex items-center justify-end gap-1 text-[9px] text-slate-400 pt-0.5">
+                      <span>10:30</span>
+                      <span class="text-[#53bdeb]">✓✓</span>
+                    </div>
                   </div>
-                  <div class="grid grid-cols-2 gap-1 font-mono text-[9px]">
-                    <div>&#123;&#123;1&#125;&#125; : {previewVars['{{1}}'] || 'Nama'}</div>
-                    <div>&#123;&#123;2&#125;&#125; : {previewVars['{{2}}'] || 'Parameter 2'}</div>
-                    <div>&#123;&#123;3&#125;&#125; : {previewVars['{{3}}'] || 'Parameter 3'}</div>
-                    <div>&#123;&#123;4&#125;&#125; : {previewVars['{{4}}'] || 'Parameter 4'}</div>
+
+                  <!-- Simulation Variables Note -->
+                  <div class="mt-4 pt-3 border-t border-slate-800 text-[10px] text-slate-400 space-y-1">
+                    <div class="font-bold text-slate-300 flex items-center gap-1">
+                      <HelpCircle class="w-3 h-3 text-emerald-400" />
+                      Variabel Pengujian Pratinjau:
+                    </div>
+                    <div class="grid grid-cols-2 gap-1 font-mono text-[9px]">
+                      <div>&#123;&#123;1&#125;&#125; : {previewVars['{{1}}'] || 'Nama'}</div>
+                      <div>&#123;&#123;2&#125;&#125; : {previewVars['{{2}}'] || 'Parameter 2'}</div>
+                      <div>&#123;&#123;3&#125;&#125; : {previewVars['{{3}}'] || 'Parameter 3'}</div>
+                      <div>&#123;&#123;4&#125;&#125; : {previewVars['{{4}}'] || 'Parameter 4'}</div>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-
-            <!-- Modal Action Buttons -->
-            <div class="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-200 dark:border-slate-800">
-              <button
-                type="button"
-                onclick={() => (showModal = false)}
-                class="py-2 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold transition cursor-pointer"
-              >
-                Batal
-              </button>
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                class="py-2 px-5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-2 shadow-sm shadow-emerald-500/20 transition cursor-pointer disabled:opacity-60"
-              >
-                <Send class="w-3.5 h-3.5" />
-                <span>
-                  {isSubmitting
-                    ? 'Menyimpan...'
-                    : modalMode === 'create'
-                      ? 'Ajukan Template'
-                      : 'Simpan Perubahan'}
-                </span>
-              </button>
-            </div>
           </div>
+        </div>
+
+        <!-- Sticky Footer Modal Action Buttons -->
+        <div class="px-6 py-3.5 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/90 flex items-center justify-end gap-3 shrink-0 sticky bottom-0 z-10">
+          <button
+            type="button"
+            onclick={() => (showModal = false)}
+            class="py-2 px-4 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold transition cursor-pointer"
+          >
+            Batal
+          </button>
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            class="py-2 px-5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-2 shadow-sm shadow-emerald-500/20 transition cursor-pointer disabled:opacity-60"
+          >
+            <Send class="w-3.5 h-3.5" />
+            <span>{isSubmitting ? 'Memproses...' : modalMode === 'create' ? 'Ajukan Template ke Meta' : 'Simpan Perubahan'}</span>
+          </button>
         </div>
       </form>
     </div>
