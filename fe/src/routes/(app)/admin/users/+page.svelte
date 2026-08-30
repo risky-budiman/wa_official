@@ -69,7 +69,7 @@
     const res = await apiRequest<{ items: UserItem[] }>('/users');
     isLoading = false;
     if (res.success && res.items) {
-      userList = res.items;
+      userList = (res.items || []).filter((u: any) => u.role !== 'SUPER_ADMIN');
     } else {
       errorMsg = res.error || 'Gagal memuat data pengguna';
     }
