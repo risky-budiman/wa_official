@@ -28,7 +28,9 @@
     MessageSquare,
     Sparkles,
     ArrowRight,
-    HelpCircle
+    HelpCircle,
+    CreditCard,
+    DollarSign
   } from 'lucide-svelte';
 
   interface ApiKeyItem {
@@ -865,6 +867,87 @@ console.log(await res.json());`;
             </p>
           </div>
         </div>
+      </div>
+
+      <!-- Transparansi Tagihan & Biaya Resmi Meta -->
+      <div class="bg-gradient-to-br from-slate-900 via-slate-900 to-emerald-950/80 p-6 rounded-2xl border border-emerald-500/30 text-white space-y-5 shadow-lg">
+        <div class="flex items-start justify-between gap-4">
+          <div class="space-y-1">
+            <div class="flex items-center gap-2">
+              <div class="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400">
+                <CreditCard class="w-4 h-4" />
+              </div>
+              <h3 class="text-sm font-extrabold text-white">Transparansi Tagihan & Biaya Resmi Meta (Direct-to-Meta)</h3>
+            </div>
+            <p class="text-xs text-slate-300">
+              Platform WhatsApp CRM ini <strong>TIDAK memungut komisi atau biaya per-pesan (0% Markup)</strong>. Tagihan resmi percakapan ditagihkan <strong>langsung oleh Meta</strong> ke metode pembayaran Anda.
+            </p>
+          </div>
+          <span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shrink-0">
+            0% Markup Platform
+          </span>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="p-4 rounded-xl bg-slate-800/70 border border-slate-700/60 space-y-2">
+            <div class="flex items-center gap-2 text-emerald-400 font-bold text-xs">
+              <CheckCircle2 class="w-4 h-4" />
+              <span>Sistem Tarif: Per Sesi 24 Jam (Bukan Per Pesan)</span>
+            </div>
+            <p class="text-[11px] text-slate-300 leading-relaxed">
+              Meta menghitung biaya per <strong>Sesi Percakapan 24 Jam</strong>, bukan per butir pesan. Dalam 1 sesi 24 jam dengan pelanggan, Anda bebas membalas puluhan pesan chat secara gratis tanpa dikalikan jumlah pesan.
+            </p>
+          </div>
+
+          <div class="p-4 rounded-xl bg-slate-800/70 border border-slate-700/60 space-y-2">
+            <div class="flex items-center gap-2 text-teal-400 font-bold text-xs">
+              <Sparkles class="w-4 h-4 text-teal-400" />
+              <span>1.000 Percakapan Gratis / Bulan dari Meta</span>
+            </div>
+            <p class="text-[11px] text-slate-300 leading-relaxed">
+              Setiap bulan, Meta memberikan jatah <strong>1.000 percakapan Layanan Pelanggan (CS) GRATIS (Rp 0)</strong> untuk setiap Akun WhatsApp Business (WABA).
+            </p>
+          </div>
+        </div>
+
+        <!-- Meta Category Table -->
+        <div class="overflow-x-auto border border-slate-700/70 rounded-xl">
+          <table class="w-full text-left text-xs text-slate-200">
+            <thead class="bg-slate-950 font-bold text-[11px] text-slate-400 border-b border-slate-800">
+              <tr>
+                <th class="py-2.5 px-3.5">Kategori Percakapan</th>
+                <th class="py-2.5 px-3.5">Keterangan & Use Case</th>
+                <th class="py-2.5 px-3.5">Skema Tarif Resmi Meta</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800 font-medium">
+              <tr>
+                <td class="py-2.5 px-3.5 font-bold text-emerald-400">1. Layanan CS (Service)</td>
+                <td class="py-2.5 px-3.5">Obrolan live chat yang dimulai saat pelanggan chat ke CS</td>
+                <td class="py-2.5 px-3.5 text-emerald-300">1.000 Pertama Gratis / Bulan. Di atas itu ~Rp 250 - Rp 350 / 24 jam</td>
+              </tr>
+              <tr>
+                <td class="py-2.5 px-3.5 font-bold text-teal-400">2. Notifikasi Transaksi (Utility)</td>
+                <td class="py-2.5 px-3.5">Konfirmasi pesanan, invoice tagihan, resi pengiriman</td>
+                <td class="py-2.5 px-3.5 text-teal-300">~Rp 300 - Rp 450 / sesi 24 jam</td>
+              </tr>
+              <tr>
+                <td class="py-2.5 px-3.5 font-bold text-indigo-400">3. Keamanan (Authentication)</td>
+                <td class="py-2.5 px-3.5">Kode verifikasi OTP login dan reset password</td>
+                <td class="py-2.5 px-3.5 text-indigo-300">~Rp 300 - Rp 400 / sesi 24 jam</td>
+              </tr>
+              <tr>
+                <td class="py-2.5 px-3.5 font-bold text-amber-400">4. Pemasaran (Marketing)</td>
+                <td class="py-2.5 px-3.5">Broadcast promosi massal dan diskon produk</td>
+                <td class="py-2.5 px-3.5 text-amber-300">~Rp 450 - Rp 600 / sesi 24 jam</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p class="text-[11px] text-slate-400 italic">
+          * Catatan: Rincian pemakaian, faktur pajak resmi, dan penambahan kartu pembayaran (Kartu Debit/Kredit) diatur langsung oleh Anda melalui portal <strong>business.facebook.com ➔ Billing & Payments</strong>.
+        </p>
       </div>
     </div>
   {/if}

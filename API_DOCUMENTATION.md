@@ -380,3 +380,53 @@ def send_whatsapp_order(phone: str, customer_name: str, invoice_id: str):
    * Selalu lakukan pengiriman dari backend aplikasi Anda (PHP/Laravel, Node.js, Python), **bukan dari Javascript browser pelanggan**, agar API Key Anda tidak dapat diintip oleh pengunjung website.
 3. **Pencabutan Kunci Cepat (*Instant Revoke*):**
    * Jika sewaktu-waktu kunci API Anda bocor atau tidak sengaja terekspos, segera buka menu **`API Key & Developer`** di dashboard CRM dan klik tombol **Hapus (🗑️)** untuk menonaktifkannya secara instan.
+
+---
+
+## 💳 Transparansi Tagihan & Biaya Resmi Meta (Billing & Pricing Guide)
+
+> 📢 **PEMBERITAHUAN PENTING:**  
+> **Platform WhatsApp CRM ini TIDAK memungut biaya per-pesan ataupun komisi per-percakapan (0% Markup).**  
+> Seluruh biaya percakapan WhatsApp Business resmi ditagihkan **LANGSUNG OLEH META (Facebook/Meta Business Manager)** ke metode pembayaran Anda (Kartu Kredit/Debit/Invoice Resmi Meta) secara transparan dan tanpa perantara pihak ketiga.
+
+---
+
+### 1. Bagaimana Cara Perhitungan Tagihan Meta?
+Meta WhatsApp Cloud API menggunakan sistem **Percakapan 24 Jam (*Conversation-Based Pricing*)**, **BUKAN dihitung per butir pesan/kata**:
+
+* **Apa itu 1 Sesi Percakapan 24 Jam?**  
+  Ketika sebuah sesi percakapan dimulai, Anda dan pelanggan dapat saling berkirim **puluhan hingga ratusan pesan teks, gambar, video, dan dokumen selama 24 jam penuh**, dan Meta **HANYA menagih 1x biaya sesi percakapan tersebut** (tidak dikalikan jumlah pesan yang dikirim).
+
+---
+
+### 2. Kategori Percakapan & Tarif Resmi Meta:
+
+| Kategori Percakapan | Keterangan & Use Case | Skema Tarif Meta |
+|---|---|:---:|
+| **1. Layanan Pelanggan (*Service / CS*)** | Obrolan langsung (*live chat*) yang dimulai oleh pelanggan saat bertanya ke CS Anda. | **1.000 Percakapan Pertama GRATIS setiap bulan**. Di atas itu ~Rp 250 - Rp 350 / sesi 24 jam. |
+| **2. Notifikasi Transaksi (*Utility*)** | Konfirmasi pesanan, invoice tagihan, resi pengiriman, update pembayaran. | Berbayar per sesi 24 jam (~Rp 300 - Rp 450). |
+| **3. Keamanan (*Authentication / OTP*)** | Kode verifikasi OTP login dan reset password. | Berbayar per sesi 24 jam (~Rp 300 - Rp 400). |
+| **4. Pemasaran (*Marketing / Promo*)** | Broadcast promosi massal, diskon, penawaran produk baru. | Berbayar per sesi 24 jam (~Rp 450 - Rp 600). |
+
+*Catatan: Estimasi tarif di atas mengacu pada tarif resmi Meta untuk nomor tujuan wilayah Indonesia (ID).*
+
+---
+
+### 3. Fasilitas 1.000 Percakapan GRATIS Setiap Bulan (*Free Tier*)
+* Setiap bulan, Meta memberikan kuota **1.000 percakapan Layanan Pelanggan (Service Conversations) GRATIS (Rp 0)** untuk setiap Akun WhatsApp Business (WABA).
+* Selama total percakapan layanan pelanggan Anda masih berada di bawah 1.000 dalam bulan tersebut, Meta tidak akan membebankan biaya apa pun ke kartu Anda.
+
+---
+
+### 4. Perbedaan: Limit Harian (*1.000 Chat/24 Jam*) vs Jatah Gratis Bulanan
+* **Limit 1.000 Chat / 24 Jam (Messaging Tier):** Batas kapasitas/kecepatan pengiriman nomor berbeda per hari yang diizinkan Meta untuk mencegah spam. Tier ini akan naik otomatis ke 10.000, 100.000, hingga Unlimited seiring meningkatnya reputasi pengiriman akun Anda.
+* **1.000 Percakapan Gratis / Bulan (Billing Free Tier):** Jatah pembebasan biaya tagihan rupiah setiap bulannya dari Meta.
+
+---
+
+### 5. Di Mana Saya Memeriksa & Mengatur Pembayaran Meta?
+Anda dapat memeriksa rincian pemakaian, faktur pajak resmi, dan mengatur kartu pembayaran langsung melalui portal resmi Meta:
+1. Kunjungi **[business.facebook.com](https://business.facebook.com/)**.
+2. Buka menu **Pengaturan Bisnis (Business Settings) ➔ Pembayaran (Billing & Payments)**.
+3. Tambahkan metode pembayaran resmi Anda (Kartu Debit / Kredit Visa & Mastercard). Meta akan mendebit biaya pemakaian secara langsung dan otomatis.
+
