@@ -55,13 +55,23 @@
   let messagesContainer = $state<HTMLDivElement | null>(null);
   let messageInputRef = $state<HTMLInputElement | null>(null);
 
-  function scrollToBottom(smooth = false) {
+  function isUserNearBottom(): boolean {
+    if (!messagesContainer) return true;
+    const threshold = 150; // px from bottom
+    const position = messagesContainer.scrollTop + messagesContainer.clientHeight;
+    const height = messagesContainer.scrollHeight;
+    return height - position <= threshold;
+  }
+
+  function scrollToBottom(force = false, smooth = false) {
     setTimeout(() => {
       if (messagesContainer) {
-        messagesContainer.scrollTo({
-          top: messagesContainer.scrollHeight,
-          behavior: smooth ? 'smooth' : 'auto',
-        });
+        if (force || isUserNearBottom()) {
+          messagesContainer.scrollTo({
+            top: messagesContainer.scrollHeight,
+            behavior: smooth ? 'smooth' : 'auto',
+          });
+        }
       }
     }, 60);
   }
@@ -208,7 +218,7 @@
         conversationList = res.items;
         if (conversationList.length > 0 && (!selectedConvId || !conversationList.some(c => c.id === selectedConvId))) {
           selectedConvId = conversationList[0].id;
-          loadMessages(conversationList[0].id);
+          loadMessages(conversationList[0].id, true);
         }
       }
     } catch (err) {
@@ -218,13 +228,20 @@
     }
   }
 
-  async function loadMessages(convId: string, shouldScroll = true) {
+  async function loadMessages(convId: string, forceScroll = false) {
     const res = await apiRequest<{ items: MessageItem[] }>(`/messages/${convId}`);
     if (res.success && res.items) {
       const prevCount = messageList.length;
-      messageList = [...res.items].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-      if (shouldScroll || messageList.length !== prevCount) {
-        scrollToBottom(false);
+      const sorted = [...res.items].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      
+      const wasNearBottom = isUserNearBottom();
+      messageList = sorted;
+
+      // Only scroll to bottom if explicitly requested (e.g. user selected conversation) OR (new message arrived AND user is already viewing the bottom)
+      if (forceScroll) {
+        scrollToBottom(true, false);
+      } else if (sorted.length > prevCount && wasNearBottom) {
+        scrollToBottom(false, true);
       }
     }
   }
