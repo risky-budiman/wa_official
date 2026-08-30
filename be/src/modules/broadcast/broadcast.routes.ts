@@ -74,8 +74,8 @@ export class BroadcastService {
       org?.accessToken && !org.accessToken.startsWith('EAAGm0PX4ZCBO')
         ? org.accessToken
         : env.META_ACCESS_TOKEN;
-
-    const activePhoneNumberId = phone?.phoneNumberId || env.META_PHONE_NUMBER_ID;
+    const activePhoneNumberId = env.META_PHONE_NUMBER_ID || phone?.phoneNumberId || '';
+    const dbPhoneId = phone?.id || phone?.phoneNumberId || env.META_PHONE_NUMBER_ID || 'default';
 
     // 3. Get Target Contacts
     const contactList = await db
@@ -89,6 +89,18 @@ export class BroadcastService {
 
     const campaignId = nanoid();
     const totalRecipients = contactList.length;
+
+    // Inspect variables in template body
+    let bodyVarsCount = 0;
+    if (Array.isArray(tmpl.components)) {
+      const bodyComp = tmpl.components.find((c: any) => (c.type || '').toUpperCase() === 'BODY');
+      if (bodyComp && typeof (bodyComp as any).text === 'string') {
+        const matches = (bodyComp as any).text.match(/\{\{\d+\}\}/g);
+        if (matches) {
+          bodyVarsCount = matches.length;
+        }
+      }
+    }
 
     // 4. Insert Initial Campaign Record (Starts with 0 counts)
     await db.insert(broadcastCampaigns).values({
@@ -118,14 +130,35 @@ export class BroadcastService {
         }
 
         try {
+          // Build component parameters if template has variables
+          const componentsPayload: any[] = [];
+          if (bodyVarsCount > 0) {
+            const parameters: any[] = [];
+            for (let i = 1; i <= bodyVarsCount; i++) {
+              if (i === 1) {
+                parameters.push({ type: 'text', text: contact.name || 'Pelanggan' });
+              } else if (i === 2) {
+                parameters.push({ type: 'text', text: 'Spesial Hari Ini' });
+              } else {
+                parameters.push({ type: 'text', text: '-' });
+              }
+            }
+            componentsPayload.push({
+              type: 'body',
+              parameters,
+            });
+          }
+
+          console.log(`🚀 Mengirim broadcast "${body.name}" template "${tmpl.name}" ke ${contact.waId}...`);
+
           // Send template message to WhatsApp Cloud API
           const metaRes = await MetaApiService.sendTemplateMessage(
             {
               phoneNumberId: activePhoneNumberId,
               recipientWaId: contact.waId,
               templateName: tmpl.name,
-              languageCode: tmpl.language || 'id',
-              components: [],
+              languageCode: (tmpl.language || 'id').toLowerCase().replace('_id', ''),
+              components: componentsPayload.length > 0 ? componentsPayload : undefined,
             },
             activeToken
           );
