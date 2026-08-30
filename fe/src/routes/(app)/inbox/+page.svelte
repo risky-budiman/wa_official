@@ -554,6 +554,8 @@
 
 
   onMount(() => {
+    selectedConvId = null;
+    messageList = [];
     loadConversations();
     loadAgents();
     loadTemplates();
