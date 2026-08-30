@@ -127,7 +127,7 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
     const [templateStats] = await db
       .select({
         templateCount: sql<number>`COALESCE(COUNT(*), 0)`,
-        uniqueTemplateConversations: sql<number>`COALESCE(COUNT(DISTINCT ${messages.conversationId}), 0)`,
+        uniqueTemplateContacts: sql<number>`COALESCE(COUNT(DISTINCT ${conversations.contactId}), 0)`,
       })
       .from(messages)
       .innerJoin(conversations, eq(messages.conversationId, conversations.id))
@@ -159,26 +159,13 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
         )
       );
 
-    // 3. Broadcast Campaign recipients in 24h
-    const [broadcastStats] = await db
-      .select({
-        broadcastSentCount: sql<number>`COALESCE(SUM(${broadcastCampaigns.sentCount}), 0)`,
-      })
-      .from(broadcastCampaigns)
-      .where(
-        and(
-          eq(broadcastCampaigns.organizationId, user.orgId),
-          gte(broadcastCampaigns.createdAt, twentyFourHoursAgo)
-        )
-      );
-
     const templateTotal = Number(templateStats?.templateCount || 0);
-    const broadcastTotal = Number(broadcastStats?.broadcastSentCount || 0);
+    const uniqueTemplateContacts = Number(templateStats?.uniqueTemplateContacts || 0);
     const csRepliesTotal = Number(csStats?.csReplyCount || 0);
     const uniqueContactsServed = Number(csStats?.uniqueCsConversations || 0);
 
-    // Only Business-Initiated (Broadcast + Template) consumes the 1,000 Meta tier quota
-    const totalUsed = Math.max(broadcastTotal + templateTotal, 0);
+    // Meta Tier Quota strictly measures unique business-initiated contacts reached in rolling 24 hours
+    const totalUsed = uniqueTemplateContacts;
     const remainingQuota = Math.max(0, dailyLimit - totalUsed);
     const usedPercentage = Math.min(100, Math.round((totalUsed / dailyLimit) * 100));
 
@@ -193,7 +180,7 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
         usedPercentage,
         uniqueContactsReached: uniqueContactsServed,
         csReplies24h: csRepliesTotal, // Live CS replies (Free / 0 Meta Limit consumption)
-        broadcastSent24h: broadcastTotal,
+        broadcastSent24h: templateTotal,
         templateSent24h: templateTotal,
         qualityRating,
         status: metaPhoneDetails?.status || phone?.status || 'CONNECTED',
