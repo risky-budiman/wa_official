@@ -297,13 +297,12 @@ export class ConversationService {
       // Insert system notification message in conversation
       await db.insert(messages).values({
         id: nanoid(),
-        organizationId: user.orgId,
         conversationId,
         senderType: 'SYSTEM',
         senderId: user.id,
         direction: 'OUTBOUND',
-        messageType: 'TEXT',
-        body: `👥 ${targetUser.fullName} (${targetUser.role}) ditambahkan ke obrolan oleh ${user.fullName || user.email}`,
+        messageType: 'text',
+        body: `👥 ${targetUser.fullName} (${targetUser.role}) ditambahkan ke obrolan oleh ${user.email}`,
         isInternalNote: true,
         status: 'SENT',
       });
@@ -476,13 +475,12 @@ export class ConversationService {
     // Insert internal log
     await db.insert(messages).values({
       id: nanoid(),
-      organizationId: user.orgId,
       conversationId: nextConv.id,
       senderType: 'SYSTEM',
       senderId: user.id,
       direction: 'OUTBOUND',
-      messageType: 'TEXT',
-      body: `📥 Percakapan ditarik dari antrean oleh ${user.fullName || user.email}`,
+      messageType: 'text',
+      body: `📥 Percakapan ditarik dari antrean oleh ${user.email}`,
       isInternalNote: true,
       status: 'SENT',
     });

@@ -51,7 +51,7 @@ export const messageRoutes = new Elysia({ prefix: '/messages' })
       }
 
       try {
-        const message = await MessageService.send(user, body);
+        const message = await MessageService.send(user, body as any);
         return {
           success: true,
           message,

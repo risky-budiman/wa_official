@@ -9,6 +9,7 @@ import { db } from '../../config/database';
 import { phoneNumbers, contacts, conversations, messages } from '../../db/schema';
 import { authPlugin } from '../../middleware/auth';
 import { ConversationService } from './conversation.service';
+import { MessageService } from '../messages/message.service';
 import type { ConversationStatus } from '../../db/schema/conversations';
 
 export const conversationRoutes = new Elysia({ prefix: '/conversations' })
@@ -103,8 +104,7 @@ export const conversationRoutes = new Elysia({ prefix: '/conversations' })
         const res = await ConversationService.addParticipant(
           user,
           params.id,
-          body.userId,
-          (body.roleInChat as any) || 'COLLABORATOR'
+          body.userId
         );
         return res;
       } catch (err: any) {
@@ -152,12 +152,11 @@ export const conversationRoutes = new Elysia({ prefix: '/conversations' })
       }
 
       try {
-        const res = await ConversationService.sendMessage(
-          user,
-          params.id,
-          body.body,
-          body.isInternalNote || false
-        );
+        const res = await MessageService.send(user, {
+          conversationId: params.id,
+          body: body.body,
+          isInternalNote: body.isInternalNote,
+        } as any);
         return res;
       } catch (err: any) {
         set.status = 400;
@@ -185,8 +184,7 @@ export const conversationRoutes = new Elysia({ prefix: '/conversations' })
         const res = await ConversationService.assign(
           user,
           params.id,
-          body.assignedUserId,
-          body.teamId
+          body
         );
         return res;
       } catch (err: any) {

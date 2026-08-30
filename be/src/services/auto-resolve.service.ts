@@ -48,12 +48,11 @@ export class AutoResolveService {
           // 2. Insert internal system note
           await db.insert(messages).values({
             id: nanoid(),
-            organizationId: org.id,
             conversationId: conv.id,
             senderType: 'SYSTEM',
             senderId: null,
             direction: 'OUTBOUND',
-            messageType: 'TEXT',
+            messageType: 'text',
             body: `⏱️ Obrolan otomatis diselesaikan (Auto-Resolved) karena tidak ada respon selama ${hours} jam.`,
             isInternalNote: true,
             status: 'SENT',

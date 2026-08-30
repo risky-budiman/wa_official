@@ -1,18 +1,20 @@
 <script lang="ts">
 import { apiRequest } from '$lib/api/client';
-import { onMount } from 'svelte';
-import { Radio, Plus, CheckCircle, Clock, Users, Send, X, Flame, AlertCircle, Sparkles } from 'lucide-svelte';
+import { onMount, onDestroy } from 'svelte';
+import { Radio, Plus, CheckCircle, Clock, Users, Send, X, Flame, AlertCircle, Sparkles, Trash2, RefreshCw } from 'lucide-svelte';
 
 interface CampaignItem {
   id: string;
   name: string;
-  status: 'COMPLETED' | 'PROCESSING' | 'DRAFT';
+  status: 'COMPLETED' | 'PROCESSING' | 'DRAFT' | 'FAILED';
   totalRecipients: number;
   sentCount: number;
   deliveredCount: number;
   readCount: number;
+  failedCount: number;
   createdAt: string;
   template: {
+    id: string;
     name: string;
     category: string;
   };
@@ -45,27 +47,44 @@ let campaignList = $state<CampaignItem[]>([]);
 let templateOptions = $state<TemplateOption[]>([]);
 let metaQuota = $state<MetaQuotaData | null>(null);
 let isLoading = $state(true);
+let isRefreshing = $state(false);
 let showModal = $state(false);
+let pollTimer: any = null;
 
 let newName = $state('');
 let selectedTemplateId = $state('');
 let isSubmitting = $state(false);
+let errorMessage = $state<string | null>(null);
 
-async function loadData() {
-  isLoading = true;
+// Dynamic Stats Computed from Real Data
+let totalSentSum = $derived(campaignList.reduce((acc, c) => acc + (c.sentCount || 0), 0));
+let totalDeliveredSum = $derived(campaignList.reduce((acc, c) => acc + (c.deliveredCount || 0), 0));
+let totalReadSum = $derived(campaignList.reduce((acc, c) => acc + (c.readCount || 0), 0));
+
+let avgDeliveryRate = $derived(
+  totalSentSum > 0 ? ((totalDeliveredSum / totalSentSum) * 100).toFixed(1) + '%' : '0.0%'
+);
+let avgReadRate = $derived(
+  totalSentSum > 0 ? ((totalReadSum / totalSentSum) * 100).toFixed(1) + '%' : '0.0%'
+);
+
+async function loadData(showLoader = true) {
+  if (showLoader) isLoading = true;
+  isRefreshing = true;
   const [cRes, tRes, qRes] = await Promise.all([
     apiRequest<{ items: CampaignItem[] }>('/broadcast'),
     apiRequest<{ items: TemplateOption[] }>('/templates'),
     apiRequest<{ quota: MetaQuotaData }>('/settings/waba/quota'),
   ]);
   isLoading = false;
+  isRefreshing = false;
 
   if (cRes.success && cRes.items) {
     campaignList = cRes.items;
   }
   if (tRes.success && tRes.items) {
     templateOptions = tRes.items;
-    if (templateOptions.length > 0) {
+    if (templateOptions.length > 0 && !selectedTemplateId) {
       selectedTemplateId = templateOptions[0].id;
     }
   }
@@ -78,6 +97,7 @@ async function createCampaign(e: Event) {
   e.preventDefault();
   if (!newName.trim() || !selectedTemplateId) return;
 
+  errorMessage = null;
   isSubmitting = true;
   const res = await apiRequest('/broadcast', {
     method: 'POST',
@@ -91,12 +111,33 @@ async function createCampaign(e: Event) {
   if (res.success) {
     showModal = false;
     newName = '';
-    loadData();
+    loadData(false);
+  } else {
+    errorMessage = res.error || 'Gagal membuat kampanye broadcast';
+  }
+}
+
+async function deleteCampaign(id: string) {
+  if (!confirm('Apakah Anda yakin ingin menghapus data kampanye ini?')) return;
+  const res = await apiRequest(`/broadcast/${id}`, { method: 'DELETE' });
+  if (res.success) {
+    loadData(false);
   }
 }
 
 onMount(() => {
   loadData();
+  // Auto poll every 6 seconds to update progress while broadcast is active
+  pollTimer = setInterval(() => {
+    const hasProcessing = campaignList.some((c) => c.status === 'PROCESSING');
+    if (hasProcessing) {
+      loadData(false);
+    }
+  }, 6000);
+});
+
+onDestroy(() => {
+  if (pollTimer) clearInterval(pollTimer);
 });
 </script>
 
@@ -104,16 +145,26 @@ onMount(() => {
   <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
     <div>
       <h2 class="text-xl font-extrabold text-slate-900 dark:text-white">Broadcast Campaign</h2>
-      <p class="text-xs text-slate-600 dark:text-slate-400">Jalankan pengiriman pesan massal resmi dengan Sliding Window Rate Limiter</p>
+      <p class="text-xs text-slate-600 dark:text-slate-400">Jalankan pengiriman pesan massal resmi dengan Sliding Window Rate Limiter Meta</p>
     </div>
 
-    <button
-      onclick={() => (showModal = true)}
-      class="py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-2 shadow-sm shadow-emerald-500/20 transition cursor-pointer"
-    >
-      <Plus class="w-4 h-4" />
-      Buat Kampanye Baru
-    </button>
+    <div class="flex items-center gap-2">
+      <button
+        onclick={() => loadData(false)}
+        disabled={isRefreshing}
+        class="py-2.5 px-3.5 rounded-xl bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs flex items-center gap-2 shadow-2xs transition cursor-pointer"
+      >
+        <RefreshCw class="w-3.5 h-3.5 {isRefreshing ? 'animate-spin text-emerald-500' : ''}" />
+        Segarkan
+      </button>
+      <button
+        onclick={() => (showModal = true)}
+        class="py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-2 shadow-sm shadow-emerald-500/20 transition cursor-pointer"
+      >
+        <Plus class="w-4 h-4" />
+        Buat Kampanye Baru
+      </button>
+    </div>
   </div>
 
   <!-- Meta 24-Hour Messaging Quota Widget -->
@@ -132,7 +183,7 @@ onMount(() => {
               </span>
             </div>
             <p class="text-[11px] text-slate-400">
-              Sisa kuota yang aman dikirim dalam 24 jam ini: <strong class="text-emerald-400">{metaQuota.remainingQuota.toLocaleString('id-ID')} Penerima</strong>
+              Sisa kuota aman yang tersedia: <strong class="text-emerald-400">{metaQuota.remainingQuota.toLocaleString('id-ID')} Penerima</strong>
             </p>
           </div>
         </div>
@@ -158,29 +209,29 @@ onMount(() => {
     </div>
   {/if}
 
-  <!-- Campaign Stats Overview -->
+  <!-- Campaign Stats Overview (Real Dynamic Counts) -->
   <div class="grid grid-cols-1 sm:grid-cols-3 gap-5">
     <div class="bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm">
       <span class="text-xs font-semibold text-slate-500 dark:text-slate-400">Total Kampanye</span>
       <div class="text-2xl font-black text-slate-900 dark:text-white mt-1">{campaignList.length}</div>
-      <span class="text-[11px] text-emerald-700 dark:text-emerald-400 font-bold">Aktif & Selesai</span>
+      <span class="text-[11px] text-emerald-700 dark:text-emerald-400 font-bold">Total {totalSentSum} Pesan Terkirim</span>
     </div>
     <div class="bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm">
       <span class="text-xs font-semibold text-slate-500 dark:text-slate-400">Rata-rata Delivery Rate</span>
-      <div class="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">98.8%</div>
-      <span class="text-[11px] text-slate-500 dark:text-slate-400">Terkirim ke WhatsApp Pelanggan</span>
+      <div class="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">{avgDeliveryRate}</div>
+      <span class="text-[11px] text-slate-500 dark:text-slate-400">{totalDeliveredSum} pesan sampai di HP pelanggan</span>
     </div>
     <div class="bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 p-5 rounded-2xl shadow-sm">
       <span class="text-xs font-semibold text-slate-500 dark:text-slate-400">Rata-rata Read Rate</span>
-      <div class="text-2xl font-black text-indigo-600 dark:text-indigo-400 mt-1">86.2%</div>
-      <span class="text-[11px] text-slate-500 dark:text-slate-400">Dibaca oleh Pelanggan</span>
+      <div class="text-2xl font-black text-indigo-600 dark:text-indigo-400 mt-1">{avgReadRate}</div>
+      <span class="text-[11px] text-slate-500 dark:text-slate-400">{totalReadSum} pesan dibaca oleh pelanggan</span>
     </div>
   </div>
 
   <!-- Campaign List Table -->
   <div class="bg-white dark:bg-slate-900/70 rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-sm">
     <div class="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-      <h3 class="text-sm font-bold text-slate-900 dark:text-white">Riwayat Kampanye</h3>
+      <h3 class="text-sm font-bold text-slate-900 dark:text-white">Riwayat Kampanye Broadcast</h3>
     </div>
 
     {#if isLoading}
@@ -196,9 +247,11 @@ onMount(() => {
               <th class="py-3 px-4">Template</th>
               <th class="py-3 px-4">Status</th>
               <th class="py-3 px-4">Penerima</th>
+              <th class="py-3 px-4">Terkirim</th>
               <th class="py-3 px-4">Delivered</th>
               <th class="py-3 px-4">Read</th>
               <th class="py-3 px-4">Tanggal</th>
+              <th class="py-3 px-4 text-center">Aksi</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
@@ -211,16 +264,30 @@ onMount(() => {
                     <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
                       Selesai
                     </span>
+                  {:else if c.status === 'FAILED'}
+                    <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+                      Gagal
+                    </span>
                   {:else}
-                    <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
-                      Diproses
+                    <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 animate-pulse">
+                      Diproses ({c.sentCount}/{c.totalRecipients})
                     </span>
                   {/if}
                 </td>
                 <td class="py-3.5 px-4 font-semibold">{c.totalRecipients} kontak</td>
+                <td class="py-3.5 px-4 text-slate-900 dark:text-white font-bold">{c.sentCount}</td>
                 <td class="py-3.5 px-4 text-emerald-700 dark:text-emerald-400 font-bold">{c.deliveredCount}</td>
                 <td class="py-3.5 px-4 text-indigo-700 dark:text-indigo-400 font-bold">{c.readCount}</td>
                 <td class="py-3.5 px-4 text-slate-500 dark:text-slate-400">{new Date(c.createdAt).toLocaleDateString('id-ID')}</td>
+                <td class="py-3.5 px-4 text-center">
+                  <button
+                    onclick={() => deleteCampaign(c.id)}
+                    class="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition cursor-pointer"
+                    title="Hapus riwayat kampanye ini"
+                  >
+                    <Trash2 class="w-4 h-4" />
+                  </button>
+                </td>
               </tr>
             {/each}
           </tbody>
@@ -267,6 +334,13 @@ onMount(() => {
             {/each}
           </select>
         </div>
+
+        {#if errorMessage}
+          <div class="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 text-xs font-semibold text-rose-700 dark:text-rose-300 flex items-center gap-2">
+            <AlertCircle class="w-4 h-4 shrink-0 text-rose-600" />
+            <span>{errorMessage}</span>
+          </div>
+        {/if}
 
         <div class="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-[11px] text-emerald-800 dark:text-emerald-300">
           💡 Pesan akan dikirim ke seluruh kontak menggunakan sliding-window rate limit resmi Meta WhatsApp API.
