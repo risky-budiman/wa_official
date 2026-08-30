@@ -30,7 +30,8 @@
     MoreVertical,
     Inbox,
     Bell,
-    Bot
+    Bot,
+    MessageSquare
   } from 'lucide-svelte';
   import { formatWhatsAppMarkdown } from '$lib/utils/whatsapp-formatter';
 
@@ -216,9 +217,10 @@
       const res = await apiRequest<{ items: ConversationItem[] }>('/conversations');
       if (res && res.success && Array.isArray(res.items)) {
         conversationList = res.items;
-        if (conversationList.length > 0 && (!selectedConvId || !conversationList.some(c => c.id === selectedConvId))) {
-          selectedConvId = conversationList[0].id;
-          loadMessages(conversationList[0].id, true);
+        // If a previously selected conversation no longer exists, reset selection
+        if (selectedConvId && !conversationList.some((c) => c.id === selectedConvId)) {
+          selectedConvId = null;
+          messageList = [];
         }
       }
     } catch (err) {
@@ -1102,8 +1104,14 @@
         {/if}
       </div>
     {:else}
-      <div class="flex-1 flex items-center justify-center text-xs text-slate-400">
-        Pilih percakapan dari daftar di sebelah kiri untuk melihat pesan
+      <div class="flex-1 flex flex-col items-center justify-center p-8 text-center bg-slate-50/50 dark:bg-slate-950/50">
+        <div class="w-16 h-16 rounded-2xl bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mb-4 shadow-sm border border-emerald-500/20">
+          <MessageSquare class="w-8 h-8" />
+        </div>
+        <h3 class="text-base font-bold text-slate-800 dark:text-slate-100 mb-1.5">Pilih Percakapan Pelanggan</h3>
+        <p class="text-xs text-slate-500 dark:text-slate-400 max-w-sm leading-relaxed">
+          Pilih salah satu kontak dari daftar di sebelah kiri untuk membuka ruang obrolan dan melihat riwayat pesan.
+        </p>
       </div>
     {/if}
   </div>
