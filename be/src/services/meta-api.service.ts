@@ -264,4 +264,78 @@ export class MetaApiService {
       return null;
     }
   }
+
+  /**
+   * Download Inbound Media (Images, Documents, Audio, Video) from WhatsApp Cloud API and save locally
+   */
+  static async downloadMedia(
+    mediaId: string,
+    accessToken = env.META_ACCESS_TOKEN
+  ): Promise<{ localUrl: string; mimeType: string; filename: string } | null> {
+    if (!mediaId || !accessToken) return null;
+
+    try {
+      // 1. Fetch download URL from Meta Graph API
+      const metaMediaUrl = `${this.baseUrl}/${mediaId}`;
+      const resMeta = await fetch(metaMediaUrl, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const metaData = await resMeta.json();
+
+      if (!resMeta.ok || !metaData.url) {
+        console.warn('⚠️ Meta get media URL failed:', metaData.error?.message || metaData);
+        return null;
+      }
+
+      const mimeType = (metaData.mime_type || 'image/jpeg').split(';')[0].trim();
+      let ext = 'bin';
+      if (mimeType.includes('jpeg') || mimeType.includes('jpg')) ext = 'jpg';
+      else if (mimeType.includes('png')) ext = 'png';
+      else if (mimeType.includes('webp')) ext = 'webp';
+      else if (mimeType.includes('gif')) ext = 'gif';
+      else if (mimeType.includes('pdf')) ext = 'pdf';
+      else if (mimeType.includes('mp4')) ext = 'mp4';
+      else if (mimeType.includes('ogg') || mimeType.includes('opus')) ext = 'ogg';
+      else if (mimeType.includes('mp3') || mimeType.includes('mpeg')) ext = 'mp3';
+      else if (mimeType.includes('msword') || mimeType.includes('document')) ext = 'docx';
+      else if (mimeType.includes('sheet') || mimeType.includes('excel')) ext = 'xlsx';
+
+      const filename = `${mediaId}.${ext}`;
+
+      // 2. Download binary payload from the temporary lookaside URL
+      const resBinary = await fetch(metaData.url, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+
+      if (!resBinary.ok) {
+        console.warn('⚠️ Failed to download media payload from Meta:', resBinary.statusText);
+        return null;
+      }
+
+      const buffer = await resBinary.arrayBuffer();
+
+      // 3. Ensure destination directory exists
+      const { join } = await import('path');
+      const { existsSync, mkdirSync } = await import('fs');
+      const uploadDir = join(process.cwd(), 'uploads', 'media');
+      if (!existsSync(uploadDir)) {
+        mkdirSync(uploadDir, { recursive: true });
+      }
+
+      // 4. Save file to disk
+      const filePath = join(uploadDir, filename);
+      await Bun.write(filePath, buffer);
+
+      console.log(`📸 Berhasil mengunduh media WhatsApp (${filename}, ${buffer.byteLength} bytes)`);
+
+      return {
+        localUrl: `/api/v1/media/${filename}`,
+        mimeType,
+        filename,
+      };
+    } catch (err: any) {
+      console.error('❌ Error downloading Meta media:', err.message);
+      return null;
+    }
+  }
 }

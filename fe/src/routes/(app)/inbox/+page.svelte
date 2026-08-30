@@ -113,7 +113,10 @@
     senderType: string;
     senderId: string | null;
     senderName?: string | null;
+    messageType?: string;
     body: string;
+    mediaUrl?: string | null;
+    mediaMimeType?: string | null;
     isInternalNote: boolean;
     status: string;
     createdAt: string;
@@ -854,9 +857,54 @@
                   <span class="text-slate-700 dark:text-slate-200">{selectedConv.contact.name}</span>
                   <span class="px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-700/80 text-slate-500 dark:text-slate-300 text-[9px] font-semibold">Pelanggan</span>
                 </div>
-                <div class="text-slate-800 dark:text-slate-100 leading-relaxed font-sans">
-                  {@html formatWhatsAppMarkdown(msg.body)}
-                </div>
+
+                <!-- Media Display (Image / Audio / Video / Document) -->
+                {#if msg.mediaUrl}
+                  {#if msg.mediaMimeType?.startsWith('image/') || msg.messageType === 'image' || msg.messageType === 'sticker'}
+                    <a
+                      href={msg.mediaUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="block rounded-xl overflow-hidden my-1 max-w-xs border border-slate-200 dark:border-slate-700 hover:opacity-90 transition shadow-sm group"
+                      title="Klik untuk melihat foto ukuran penuh"
+                    >
+                      <img
+                        src={msg.mediaUrl}
+                        alt="Foto dari pelanggan"
+                        class="w-full max-h-72 object-cover rounded-xl transition duration-200 group-hover:scale-[1.02]"
+                        loading="lazy"
+                      />
+                    </a>
+                  {:else if msg.mediaMimeType?.startsWith('audio/') || msg.messageType === 'audio' || msg.messageType === 'voice'}
+                    <div class="my-1.5 p-1 rounded-xl bg-slate-100 dark:bg-slate-700/50 max-w-xs">
+                      <audio controls src={msg.mediaUrl} class="w-full h-8"></audio>
+                    </div>
+                  {:else if msg.mediaMimeType?.startsWith('video/') || msg.messageType === 'video'}
+                    <div class="my-1.5 rounded-xl overflow-hidden max-w-xs border border-slate-200 dark:border-slate-700 shadow-sm">
+                      <video controls src={msg.mediaUrl} class="w-full max-h-72 object-cover rounded-xl"></video>
+                    </div>
+                  {:else}
+                    <a
+                      href={msg.mediaUrl}
+                      target="_blank"
+                      download
+                      class="flex items-center gap-2.5 p-2.5 my-1.5 rounded-xl bg-slate-100 dark:bg-slate-700/50 hover:bg-slate-200 dark:hover:bg-slate-700 transition border border-slate-200 dark:border-slate-600 max-w-xs text-slate-800 dark:text-slate-200"
+                    >
+                      <FileText class="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                      <div class="flex-1 min-w-0">
+                        <p class="font-bold text-xs truncate">{msg.body || 'Unduh Dokumen'}</p>
+                        <p class="text-[10px] text-slate-500 dark:text-slate-400">Klik untuk mengunduh</p>
+                      </div>
+                    </a>
+                  {/if}
+                {/if}
+
+                {#if msg.body && (!msg.mediaUrl || !['[Foto/Gambar]', '[Gambar]', '[Foto]', '[Stiker]', '[Pesan Suara / Audio]', '[Video]', '[DOCUMENT]'].includes(msg.body))}
+                  <div class="text-slate-800 dark:text-slate-100 leading-relaxed font-sans mt-1">
+                    {@html formatWhatsAppMarkdown(msg.body)}
+                  </div>
+                {/if}
+
                 <div class="text-[10px] text-slate-400 text-right mt-1.5">
                   {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </div>
@@ -874,6 +922,13 @@
                   </div>
                   <span class="px-1.5 py-0.5 rounded bg-indigo-500/60 text-white text-[9px] font-mono font-black">BOT</span>
                 </div>
+
+                {#if msg.mediaUrl}
+                  <a href={msg.mediaUrl} target="_blank" rel="noopener noreferrer" class="block rounded-xl overflow-hidden my-1 max-w-xs border border-white/20 hover:opacity-90 transition">
+                    <img src={msg.mediaUrl} alt="Foto AI" class="w-full max-h-72 object-cover rounded-xl" loading="lazy" />
+                  </a>
+                {/if}
+
                 <div class="text-white/95 leading-relaxed font-sans">
                   {@html formatWhatsAppMarkdown(msg.body)}
                 </div>
@@ -895,9 +950,26 @@
                   </div>
                   <span class="px-1.5 py-0.5 rounded bg-emerald-700/70 text-white text-[9px] font-bold">AGENT</span>
                 </div>
-                <div class="text-white/95 leading-relaxed font-sans">
-                  {@html formatWhatsAppMarkdown(msg.body)}
-                </div>
+
+                {#if msg.mediaUrl}
+                  {#if msg.mediaMimeType?.startsWith('image/') || msg.messageType === 'image'}
+                    <a href={msg.mediaUrl} target="_blank" rel="noopener noreferrer" class="block rounded-xl overflow-hidden my-1 max-w-xs border border-white/20 hover:opacity-90 transition">
+                      <img src={msg.mediaUrl} alt="Foto Agen" class="w-full max-h-72 object-cover rounded-xl" loading="lazy" />
+                    </a>
+                  {:else}
+                    <a href={msg.mediaUrl} target="_blank" download class="flex items-center gap-2 p-2 my-1 rounded-xl bg-emerald-700/50 text-white border border-white/20">
+                      <FileText class="w-4 h-4 shrink-0" />
+                      <span class="truncate font-semibold text-xs">{msg.body || 'Dokumen'}</span>
+                    </a>
+                  {/if}
+                {/if}
+
+                {#if msg.body && (!msg.mediaUrl || !['[Foto/Gambar]', '[Gambar]', '[Foto]', '[Stiker]', '[Pesan Suara / Audio]', '[Video]', '[DOCUMENT]'].includes(msg.body))}
+                  <div class="text-white/95 leading-relaxed font-sans">
+                    {@html formatWhatsAppMarkdown(msg.body)}
+                  </div>
+                {/if}
+
                 <div class="text-[10px] text-emerald-100 flex items-center justify-end gap-1 mt-1.5">
                   <span>{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                   <CheckCheck class="w-3.5 h-3.5 text-emerald-200" />

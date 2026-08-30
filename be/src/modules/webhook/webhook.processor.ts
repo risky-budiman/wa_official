@@ -17,6 +17,8 @@ import {
   organizations
 } from '../../db/schema';
 import { AiAgentService } from '../../services/ai-agent.service';
+import { MetaApiService } from '../../services/meta-api.service';
+import { env } from '../../config/env';
 import type { MetaWebhookBody } from './webhook.types';
 
 export class WebhookProcessor {
@@ -209,14 +211,20 @@ export class WebhookProcessor {
             .where(eq(contacts.organizationId, 'org-demo-default'));
         }
 
-        // Fetch Organization Care Window Settings
-        const [org] = await db
-          .select({ careWindowHours: organizations.careWindowHours })
+        // Fetch Organization Settings (Care Window, Access Token, Operating Hours)
+        const [orgFull] = await db
+          .select({
+            careWindowHours: organizations.careWindowHours,
+            accessToken: organizations.accessToken,
+            operatingHours: organizations.operatingHours,
+            aiAgentConfig: organizations.aiAgentConfig,
+          })
           .from(organizations)
           .where(eq(organizations.id, orgId))
           .limit(1);
 
-        const careHours = org?.careWindowHours ?? 24;
+        const careHours = orgFull?.careWindowHours ?? 24;
+        const activeAccessToken = orgFull?.accessToken || env.META_ACCESS_TOKEN;
         const windowExpiresAt = new Date(Date.now() + careHours * 60 * 60 * 1000); // Standard Meta 24-hr session window
 
         // 2. Handle Inbound Customer Messages
@@ -275,7 +283,69 @@ export class WebhookProcessor {
                 .where(eq(contacts.id, existingContact.id));
             }
 
-            // 2b. Find Active Conversation (Exclude RESOLVED tickets so new customer messages start a fresh session)
+            // 2b. Process Inbound Media & Text
+            let messageBody = '';
+            let mediaUrl: string | null = null;
+            let mediaMimeType: string | null = null;
+
+            if (msg.type === 'text' && msg.text) {
+              messageBody = msg.text.body;
+            } else if (msg.type === 'image' && msg.image) {
+              messageBody = msg.image.caption || '[Foto/Gambar]';
+              mediaMimeType = msg.image.mime_type || 'image/jpeg';
+              if (msg.image.id) {
+                const downloaded = await MetaApiService.downloadMedia(msg.image.id, activeAccessToken);
+                if (downloaded) {
+                  mediaUrl = downloaded.localUrl;
+                  mediaMimeType = downloaded.mimeType;
+                }
+              }
+            } else if (msg.type === 'document' && msg.document) {
+              const filename = msg.document.filename || 'dokumen.pdf';
+              messageBody = msg.document.caption ? `${msg.document.caption} (${filename})` : `[Dokumen: ${filename}]`;
+              mediaMimeType = msg.document.mime_type || 'application/pdf';
+              if (msg.document.id) {
+                const downloaded = await MetaApiService.downloadMedia(msg.document.id, activeAccessToken);
+                if (downloaded) {
+                  mediaUrl = downloaded.localUrl;
+                  mediaMimeType = downloaded.mimeType;
+                }
+              }
+            } else if (msg.type === 'audio' && msg.audio) {
+              messageBody = '[Pesan Suara / Audio]';
+              mediaMimeType = msg.audio.mime_type || 'audio/ogg';
+              if (msg.audio.id) {
+                const downloaded = await MetaApiService.downloadMedia(msg.audio.id, activeAccessToken);
+                if (downloaded) {
+                  mediaUrl = downloaded.localUrl;
+                  mediaMimeType = downloaded.mimeType;
+                }
+              }
+            } else if (msg.type === 'video' && msg.video) {
+              messageBody = msg.video.caption || '[Video]';
+              mediaMimeType = msg.video.mime_type || 'video/mp4';
+              if (msg.video.id) {
+                const downloaded = await MetaApiService.downloadMedia(msg.video.id, activeAccessToken);
+                if (downloaded) {
+                  mediaUrl = downloaded.localUrl;
+                  mediaMimeType = downloaded.mimeType;
+                }
+              }
+            } else if (msg.type === 'sticker' && msg.sticker) {
+              messageBody = '[Stiker]';
+              mediaMimeType = msg.sticker.mime_type || 'image/webp';
+              if (msg.sticker.id) {
+                const downloaded = await MetaApiService.downloadMedia(msg.sticker.id, activeAccessToken);
+                if (downloaded) {
+                  mediaUrl = downloaded.localUrl;
+                  mediaMimeType = downloaded.mimeType;
+                }
+              }
+            } else {
+              messageBody = `[${msg.type.toUpperCase()}]`;
+            }
+
+            // 2c. Find Active Conversation (Exclude RESOLVED tickets so new customer messages start a fresh session)
             const [activeConv] = await db
               .select()
               .from(conversations)
@@ -291,15 +361,6 @@ export class WebhookProcessor {
 
             let convId = activeConv?.id;
             let currentAssignedAgentId: string | null = null;
-
-            let messageBody = '';
-            if (msg.type === 'text' && msg.text) {
-              messageBody = msg.text.body;
-            } else if (msg.type === 'image') {
-              messageBody = msg.image?.caption || '[Gambar]';
-            } else {
-              messageBody = `[${msg.type.toUpperCase()}]`;
-            }
 
             if (!activeConv) {
               // 🆕 Start a NEW Conversation Session / Ticket
@@ -368,7 +429,7 @@ export class WebhookProcessor {
                 .where(eq(conversations.id, activeConv.id));
             }
 
-            // 2c. Save Message (Deduplicate via Meta wamid)
+            // 2d. Save Message (Deduplicate via Meta wamid)
             const wamId = msg.id || ('wamid.inbound_' + nanoid());
             const [existingMsg] = await db
               .select({ id: messages.id })
@@ -387,8 +448,8 @@ export class WebhookProcessor {
                   senderId: null,
                   messageType: msg.type,
                   body: messageBody,
-                  mediaUrl: null,
-                  mediaMimeType: null,
+                  mediaUrl: mediaUrl,
+                  mediaMimeType: mediaMimeType,
                   isInternalNote: false,
                   status: 'DELIVERED',
                   errorDetails: null,
