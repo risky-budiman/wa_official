@@ -876,12 +876,16 @@
                       />
                     </a>
                   {:else if msg.mediaMimeType?.startsWith('audio/') || msg.messageType === 'audio' || msg.messageType === 'voice'}
+                    <!-- svelte-ignore a11y_media_has_caption -->
                     <div class="my-1.5 p-1 rounded-xl bg-slate-100 dark:bg-slate-700/50 max-w-xs">
                       <audio controls src={msg.mediaUrl} class="w-full h-8"></audio>
                     </div>
                   {:else if msg.mediaMimeType?.startsWith('video/') || msg.messageType === 'video'}
+                    <!-- svelte-ignore a11y_media_has_caption -->
                     <div class="my-1.5 rounded-xl overflow-hidden max-w-xs border border-slate-200 dark:border-slate-700 shadow-sm">
-                      <video controls src={msg.mediaUrl} class="w-full max-h-72 object-cover rounded-xl"></video>
+                      <video controls src={msg.mediaUrl} class="w-full max-h-72 object-cover rounded-xl">
+                        <track kind="captions" />
+                      </video>
                     </div>
                   {:else}
                     <a
