@@ -177,6 +177,23 @@ export class TemplateService {
         }
       }
 
+      // Handle BUTTONS component
+      if (comp.type === 'BUTTONS' && Array.isArray(comp.buttons)) {
+        formatted.buttons = comp.buttons.map((btn: any) => {
+          const formattedBtn = { ...btn };
+          if (btn.type === 'URL') {
+            if (btn.url && btn.url.includes('{{1}}') && !btn.example) {
+              formattedBtn.example = ['https://example.com/item/INV-001'];
+            }
+          } else if (btn.type === 'COPY_CODE') {
+            if (!btn.example) {
+              formattedBtn.example = 'PROMO2026';
+            }
+          }
+          return formattedBtn;
+        });
+      }
+
       return formatted;
     });
   }

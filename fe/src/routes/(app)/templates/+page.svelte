@@ -23,7 +23,10 @@
     BookOpen,
     HelpCircle,
     SlidersHorizontal,
-    Send
+    Send,
+    Link,
+    Phone,
+    ExternalLink
   } from 'lucide-svelte';
 
   interface TemplateComponent {
@@ -231,6 +234,32 @@
     setTimeout(() => (feedbackMessage = null), 4500);
   }
 
+  interface TemplateButton {
+    type: 'URL' | 'QUICK_REPLY' | 'PHONE_NUMBER' | 'COPY_CODE';
+    text: string;
+    url?: string;
+    phone_number?: string;
+    example?: string;
+  }
+
+  let formButtons = $state<TemplateButton[]>([]);
+
+  function addButton() {
+    if (formButtons.length >= 3) return;
+    formButtons = [
+      ...formButtons,
+      {
+        type: 'URL',
+        text: 'Kunjungi Website',
+        url: 'https://',
+      },
+    ];
+  }
+
+  function removeButton(index: number) {
+    formButtons = formButtons.filter((_, i) => i !== index);
+  }
+
   function openCreateModal() {
     modalMode = 'create';
     editingId = null;
@@ -240,6 +269,7 @@
     formHeaderText = '';
     formBodyText = '';
     formFooterText = '';
+    formButtons = [];
     showModal = true;
   }
 
@@ -254,10 +284,12 @@
     const headerComp = tpl.components?.find((c) => c.type === 'HEADER');
     const bodyComp = tpl.components?.find((c) => c.type === 'BODY');
     const footerComp = tpl.components?.find((c) => c.type === 'FOOTER');
+    const btnComp = tpl.components?.find((c) => c.type === 'BUTTONS');
 
     formHeaderText = headerComp?.text || '';
     formBodyText = bodyComp?.text || '';
     formFooterText = footerComp?.text || '';
+    formButtons = (btnComp?.buttons as any[]) || [];
 
     showModal = true;
   }
@@ -270,6 +302,7 @@
     formHeaderText = preset.header;
     formBodyText = preset.body;
     formFooterText = preset.footer;
+    formButtons = [];
     previewVars = { ...previewVars, ...preset.sampleVariables };
   }
 
@@ -307,6 +340,22 @@
       components.push({
         type: 'FOOTER',
         text: formFooterText.trim()
+      });
+    }
+    if (formButtons.length > 0) {
+      components.push({
+        type: 'BUTTONS',
+        buttons: formButtons.map((b) => {
+          const btnObj: any = { type: b.type, text: b.text.trim() };
+          if (b.type === 'URL') {
+            btnObj.url = (b.url || 'https://example.com').trim();
+          } else if (b.type === 'PHONE_NUMBER') {
+            btnObj.phone_number = (b.phone_number || '+628123456789').trim();
+          } else if (b.type === 'COPY_CODE' && b.example) {
+            btnObj.example = b.example.trim();
+          }
+          return btnObj;
+        }),
       });
     }
 
@@ -914,6 +963,111 @@
                   class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
                 />
               </div>
+
+              <!-- Buttons Component Section (Optional) -->
+              <div class="space-y-3 pt-3 border-t border-slate-200 dark:border-slate-800">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <span class="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                      <Link class="w-3.5 h-3.5 text-indigo-500" />
+                      Tombol Interaktif (Maksimal 3 Tombol)
+                    </span>
+                    <p class="text-[10px] text-slate-400">Tambahkan tombol URL website, balasan cepat, atau panggilan telepon</p>
+                  </div>
+                  {#if formButtons.length < 3}
+                    <button
+                      type="button"
+                      onclick={addButton}
+                      class="py-1 px-2.5 rounded-lg bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-[10px] font-bold flex items-center gap-1 hover:bg-indigo-100 dark:hover:bg-indigo-900 transition cursor-pointer"
+                    >
+                      <Plus class="w-3 h-3" />
+                      <span>+ Tambah Tombol</span>
+                    </button>
+                  {/if}
+                </div>
+
+                {#if formButtons.length > 0}
+                  <div class="space-y-2.5">
+                    {#each formButtons as btn, idx}
+                      <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-2">
+                        <div class="flex items-center justify-between gap-2">
+                          <span class="text-[11px] font-bold text-slate-700 dark:text-slate-300 font-mono">
+                            Tombol #{idx + 1}
+                          </span>
+                          <button
+                            type="button"
+                            onclick={() => removeButton(idx)}
+                            class="text-rose-500 hover:text-rose-700 p-1 text-xs font-bold transition cursor-pointer"
+                            title="Hapus Tombol"
+                          >
+                            <Trash2 class="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                          <div>
+                            <label class="block text-[10px] text-slate-500 mb-0.5">Tipe Tombol</label>
+                            <select
+                              bind:value={btn.type}
+                              class="w-full px-2 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white"
+                            >
+                              <option value="URL">Tautan Website (URL)</option>
+                              <option value="QUICK_REPLY">Balasan Cepat (Quick Reply)</option>
+                              <option value="PHONE_NUMBER">Nomor Telepon (Call)</option>
+                              <option value="COPY_CODE">Salin Kode Promo (Copy Code)</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label class="block text-[10px] text-slate-500 mb-0.5">Teks Label Tombol</label>
+                            <input
+                              type="text"
+                              bind:value={btn.text}
+                              placeholder="e.g. Kunjungi Website"
+                              class="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white"
+                              required
+                            />
+                          </div>
+
+                          {#if btn.type === 'URL'}
+                            <div>
+                              <label class="block text-[10px] text-slate-500 mb-0.5">URL Target</label>
+                              <input
+                                type="text"
+                                bind:value={btn.url}
+                                placeholder="https://toko.com/inv/&#123;&#123;1&#125;&#125;"
+                                class="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white"
+                                required
+                              />
+                            </div>
+                          {:else if btn.type === 'PHONE_NUMBER'}
+                            <div>
+                              <label class="block text-[10px] text-slate-500 mb-0.5">Nomor (+62...)</label>
+                              <input
+                                type="text"
+                                bind:value={btn.phone_number}
+                                placeholder="+628123456789"
+                                class="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white"
+                                required
+                              />
+                            </div>
+                          {:else if btn.type === 'COPY_CODE'}
+                            <div>
+                              <label class="block text-[10px] text-slate-500 mb-0.5">Contoh Kode Voucher</label>
+                              <input
+                                type="text"
+                                bind:value={btn.example}
+                                placeholder="e.g. DISKON30"
+                                class="w-full px-2.5 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white"
+                              />
+                            </div>
+                          {/if}
+                        </div>
+                      </div>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
             </div>
 
             <!-- Live WhatsApp Preview (Right 5 Cols) -->
@@ -955,6 +1109,26 @@
                       <span>10:30</span>
                       <span class="text-[#53bdeb]">✓✓</span>
                     </div>
+
+                    <!-- Interactive Buttons in Preview Bubble -->
+                    {#if formButtons.length > 0}
+                      <div class="pt-2 border-t border-slate-700/60 space-y-1.5">
+                        {#each formButtons as btn}
+                          <div class="py-1.5 px-3 rounded-lg bg-[#2a3942] hover:bg-[#32444f] text-[#53bdeb] text-xs font-bold text-center flex items-center justify-center gap-1.5 transition">
+                            {#if btn.type === 'URL'}
+                              <ExternalLink class="w-3.5 h-3.5" />
+                            {:else if btn.type === 'PHONE_NUMBER'}
+                              <Phone class="w-3.5 h-3.5" />
+                            {:else if btn.type === 'COPY_CODE'}
+                              <Copy class="w-3.5 h-3.5" />
+                            {:else}
+                              <MessageSquare class="w-3.5 h-3.5" />
+                            {/if}
+                            <span>{btn.text || 'Tombol Aksi'}</span>
+                          </div>
+                        {/each}
+                      </div>
+                    {/if}
                   </div>
 
                   <!-- Dynamic Simulation Variables Inputs -->
