@@ -47,43 +47,47 @@ https://domain-crm-anda.com/api/v1/external
 
 ---
 
-### 1. Kirim Pesan Template Resmi (OTP / Invoice / Resi / Notifikasi)
-Gunakan endpoint ini untuk mengirim template pesan resmi Meta yang sudah berstatus `APPROVED`.
+### 1. Kirim Pesan Template Resmi (OTP / Invoice / Resi / Notifikasi / Tombol Dinamis)
+Gunakan endpoint ini untuk mengirim template pesan resmi Meta yang sudah berstatus `APPROVED`. Mendukung variabel teks tanpa batas (`{{1}}`, `{{2}}`, dst.) dan tombol interaktif dinamis (*Dynamic URL Button*).
 
 * **Metode:** `POST`
 * **URL:** `https://domain-crm-anda.com/api/v1/external/messages/send-template`
 * **Header:** `X-API-Key: wacrm_live_xxxxxxxx`
 
-#### Contoh Body Permintaan (JSON):
+#### Contoh Body Permintaan (JSON) Lengkap dengan Tombol Dinamis:
 ```json
 {
   "to": "081234567890",
-  "templateName": "order_confirmation",
+  "templateName": "konfirmasi_pembayaran_v1",
   "language": "id",
   "recipientName": "Budi Santoso",
   "bodyParameters": [
-    "Budi Santoso",
-    "INV-2026-8899",
-    "Rp 250.000"
+    "Budi Santoso",            // {{1}} Nama Pelanggan
+    "Sepatu Sneakers Hitam",   // {{2}} Nama Produk
+    "INV-2026-8899",           // {{3}} Nomor Invoice
+    "Rp 450.000",              // {{4}} Total Pembayaran
+    "31 Agustus 2026"          // {{5}} Batas Pembayaran
   ],
   "buttonParameters": [
     {
-      "index": "0",
-      "text": "INV-2026-8899"
+      "index": 0,
+      "parameter": "INV-2026-8899" // << Nilai dinamis untuk tombol URL: https://tokosaya.com/pay/{{1}}
     }
   ]
 }
 ```
 
 #### Penjelasan Parameter:
-| Nama Field | Tipe | Wajib? | Keterangan |
+| Nama Field | Tipe Data | Wajib? | Keterangan |
 |---|---|---|---|
 | `to` | String | **Wajib** | Nomor WhatsApp tujuan. Sistem otomatis mengenali format `0812...`, `62812...`, atau `+62812...`. |
-| `templateName` | String | **Wajib** | Nama template WhatsApp resmi yang sudah disetujui di Meta (contoh: `order_confirmation`, `otp_login`). |
-| `language` | String | Opsional | Kode bahasa template (default: `id` untuk Bahasa Indonesia). |
+| `templateName` | String | **Wajib** | Nama template WhatsApp resmi yang sudah disetujui di Meta (contoh: `konfirmasi_pembayaran_v1`, `otp_login`). |
+| `language` | String | Opsional | Kode bahasa template (default: `id` untuk Bahasa Indonesia, `en_US` untuk Bahasa Inggris). |
 | `recipientName` | String | Opsional | Nama penerima untuk otomatis didaftarkan ke buku kontak CRM. |
-| `bodyParameters` | Array String | Opsional | Nilai variabel teks pengganti `{{1}}`, `{{2}}`, `{{3}}` di template Anda. |
-| `buttonParameters` | Array Object | Opsional | Parameter teks untuk tombol URL dinamis (misal tautan invoice `https://toko.com/inv/{{1}}`). |
+| `bodyParameters` | Array String | Opsional | Nilai variabel pengganti `{{1}}`, `{{2}}`, `{{3}}`, ..., `{{N}}` pada isi pesan. Urutkan sesuai urutan nomor variabel di template Anda. |
+| `buttonParameters` | Array Object | Opsional | Nilai dinamis untuk tombol interaktif (misal link invoice spesifik untuk tombol *Dynamic URL*). |
+| `buttonParameters[].index` | Number / String | Opsional | Indeks tombol di template Anda (Tombol pertama = `0`, tombol kedua = `1`). |
+| `buttonParameters[].parameter` | String | Opsional | Nilai variabel untuk tombol URL dinamis (misal kode invoice yang akan disematkan ke URL `https://tokosaya.com/pay/{{1}}`). |
 
 #### Contoh Respon Berhasil (`200 OK`):
 ```json
@@ -94,7 +98,7 @@ Gunakan endpoint ini untuk mengirim template pesan resmi Meta yang sudah berstat
     "messageId": "msg_abc123",
     "wamId": "wamid.HBgMNjI4MTEzMjQ0MzIxFQIAERgSM...",
     "recipient": "6281234567890",
-    "templateName": "order_confirmation",
+    "templateName": "konfirmasi_pembayaran_v1",
     "sentAt": "2026-08-30T12:00:00.000Z"
   }
 }

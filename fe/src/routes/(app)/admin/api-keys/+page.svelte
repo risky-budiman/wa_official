@@ -778,13 +778,13 @@ console.log(await res.json());`;
                 <td class="py-2.5 px-3.5 font-mono font-bold text-indigo-600 dark:text-indigo-400">bodyParameters</td>
                 <td class="py-2.5 px-3.5 font-mono">Array String</td>
                 <td class="py-2.5 px-3.5"><span class="text-slate-400">Opsional</span></td>
-                <td class="py-2.5 px-3.5">Daftar teks variabel pengganti <code>{`{{1}}`}</code>, <code>{`{{2}}`}</code>, <code>{`{{3}}`}</code> pada isi teks template Anda.</td>
+                <td class="py-2.5 px-3.5">Daftar nilai variabel dinamis tanpa batas pengganti <code>{`{{1}}`}</code>, <code>{`{{2}}`}</code>, <code>{`{{3}}`}</code>, ..., <code>{`{{N}}`}</code> sesuai urutan nomor variabel di template Anda.</td>
               </tr>
               <tr>
                 <td class="py-2.5 px-3.5 font-mono font-bold text-indigo-600 dark:text-indigo-400">buttonParameters</td>
                 <td class="py-2.5 px-3.5 font-mono">Array Object</td>
                 <td class="py-2.5 px-3.5"><span class="text-slate-400">Opsional</span></td>
-                <td class="py-2.5 px-3.5">Parameter untuk tombol URL dinamis (contoh: <code>[{`{"index": "0", "text": "INV-123"}`}]</code>).</td>
+                <td class="py-2.5 px-3.5">Nilai dinamis untuk tombol URL (contoh invoice: <code>[{`{"index": 0, "parameter": "INV-2026-8899"}`}]</code>).</td>
               </tr>
             </tbody>
           </table>
@@ -795,7 +795,7 @@ console.log(await res.json());`;
           <span class="text-xs font-semibold text-slate-700 dark:text-slate-300">Contoh Request Body (JSON):</span>
           <pre class="bg-slate-950 text-emerald-400 p-4 rounded-xl overflow-x-auto text-xs font-mono border border-slate-800"><code>{`{
   "to": "081234567890",
-  "templateName": "order_confirmation",
+  "templateName": "konfirmasi_pembayaran_v1",
   "language": "id",
   "recipientName": "Budi Santoso",
   "bodyParameters": [
@@ -805,8 +805,8 @@ console.log(await res.json());`;
   ],
   "buttonParameters": [
     {
-      "index": "0",
-      "text": "INV-2026-8899"
+      "index": 0,
+      "parameter": "INV-2026-8899"
     }
   ]
 }`}</code></pre>
