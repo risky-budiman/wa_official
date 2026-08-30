@@ -216,9 +216,20 @@
     try {
       const res = await apiRequest<{ items: ConversationItem[] }>('/conversations');
       if (res && res.success && Array.isArray(res.items)) {
-        conversationList = res.items;
+        // Shallow diffing to prevent unnecessary Svelte reactive DOM re-renders
+        const isDifferent =
+          conversationList.length !== res.items.length ||
+          conversationList.some((c, idx) => {
+            const n = res.items[idx];
+            return !n || c.id !== n.id || c.status !== n.status || c.lastMessageAt !== n.lastMessageAt || c.assignedUser?.id !== n.assignedUser?.id;
+          });
+
+        if (isDifferent) {
+          conversationList = res.items;
+        }
+
         // If a previously selected conversation no longer exists, reset selection
-        if (selectedConvId && !conversationList.some((c) => c.id === selectedConvId)) {
+        if (selectedConvId && !res.items.some((c) => c.id === selectedConvId)) {
           selectedConvId = null;
           messageList = [];
         }
@@ -231,20 +242,31 @@
   }
 
   async function loadMessages(convId: string, forceScroll = false) {
-    const res = await apiRequest<{ items: MessageItem[] }>(`/messages/${convId}`);
-    if (res.success && res.items) {
-      const prevCount = messageList.length;
-      const sorted = [...res.items].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-      
-      const wasNearBottom = isUserNearBottom();
-      messageList = sorted;
+    try {
+      const res = await apiRequest<{ items: MessageItem[] }>(`/messages/${convId}`);
+      if (res.success && res.items) {
+        const prevCount = messageList.length;
+        const sorted = [...res.items].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+        const wasNearBottom = isUserNearBottom();
 
-      // Only scroll to bottom if explicitly requested (e.g. user selected conversation) OR (new message arrived AND user is already viewing the bottom)
-      if (forceScroll) {
-        scrollToBottom(true, false);
-      } else if (sorted.length > prevCount && wasNearBottom) {
-        scrollToBottom(false, true);
+        const isDiff =
+          sorted.length !== messageList.length ||
+          (sorted.length > 0 && messageList.length > 0 && (
+            sorted[sorted.length - 1].id !== messageList[messageList.length - 1].id ||
+            sorted[sorted.length - 1].status !== messageList[messageList.length - 1].status
+          ));
+
+        if (isDiff || forceScroll) {
+          messageList = sorted;
+          if (forceScroll) {
+            scrollToBottom(true, false);
+          } else if (sorted.length > prevCount && wasNearBottom) {
+            scrollToBottom(false, true);
+          }
+        }
       }
+    } catch (err) {
+      console.error('Failed to load messages:', err);
     }
   }
 
@@ -556,19 +578,32 @@
   onMount(() => {
     selectedConvId = null;
     messageList = [];
-    loadConversations();
-    loadAgents();
-    loadTemplates();
-    loadQueueStats();
 
-    // Auto-refresh conversations, queue stats, and messages every 3 seconds in background (silently)
-    const refreshTimer = setInterval(() => {
-      loadQueueStats();
-      loadConversations(true);
-      if (selectedConvId) {
-        loadMessages(selectedConvId);
+    // Parallel initial load for fastest render
+    Promise.all([
+      loadConversations(),
+      loadAgents(),
+      loadTemplates(),
+      loadQueueStats(),
+    ]);
+
+    // Smart throttled auto-refresh (4 seconds, pauses when tab is in background)
+    let isPolling = false;
+    const refreshTimer = setInterval(async () => {
+      if (isPolling || (typeof document !== 'undefined' && document.hidden)) return;
+      isPolling = true;
+      try {
+        await Promise.all([
+          loadQueueStats(),
+          loadConversations(true),
+          selectedConvId ? loadMessages(selectedConvId, false) : Promise.resolve(),
+        ]);
+      } catch (err) {
+        // Silently ignore background polling errors
+      } finally {
+        isPolling = false;
       }
-    }, 3000);
+    }, 4000);
 
     return () => {
       clearInterval(refreshTimer);
