@@ -3,7 +3,7 @@
 // ===========================================
 
 import { Worker, Job } from 'bullmq';
-import { eq, and, sql, desc, ne } from 'drizzle-orm';
+import { eq, and, or, sql, desc, ne } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { redis } from '../../config/redis';
 import { db } from '../../config/database';
@@ -14,7 +14,8 @@ import {
   messages,
   users,
   activityLogs,
-  organizations
+  organizations,
+  messageTemplates
 } from '../../db/schema';
 import { AiAgentService } from '../../services/ai-agent.service';
 import { MetaApiService } from '../../services/meta-api.service';
@@ -122,6 +123,47 @@ export class WebhookProcessor {
         if (!value) continue;
 
         console.log(`📩 Webhook Event: field="${change.field}", msgs=${value.messages?.length || 0}, statuses=${value.statuses?.length || 0}, phoneId=${value.metadata?.phone_number_id || 'none'}`);
+
+        // Handle Meta Template Status Update Webhook Event (e.g. APPROVED, REJECTED, DELETED, PAUSED, DISABLED)
+        if (change.field === 'message_template_status_update') {
+          const tplEvent = ((value as any).event || '').toUpperCase();
+          const tplName = (value as any).message_template_name;
+          const tplMetaId = (value as any).message_template_id ? String((value as any).message_template_id) : null;
+
+          console.log(`📋 Meta Template Webhook: event=${tplEvent}, name=${tplName}, metaId=${tplMetaId}, reason=${(value as any).reason || 'none'}`);
+
+          if (tplName || tplMetaId) {
+            if (tplEvent === 'DELETED') {
+              const deleteCondition = tplMetaId
+                ? or(eq(messageTemplates.metaTemplateId, tplMetaId), eq(messageTemplates.name, tplName))
+                : eq(messageTemplates.name, tplName);
+
+              await db.delete(messageTemplates).where(deleteCondition);
+              console.log(`🗑️ Webhook: Template "${tplName || tplMetaId}" berhasil dihapus dari database karena dihapus di Meta.`);
+            } else {
+              const statusMap: Record<string, 'APPROVED' | 'PENDING' | 'REJECTED' | 'PAUSED'> = {
+                APPROVED: 'APPROVED',
+                PENDING: 'PENDING',
+                REJECTED: 'REJECTED',
+                PAUSED: 'PAUSED',
+                DISABLED: 'REJECTED',
+              };
+
+              const newStatus = statusMap[tplEvent] || 'PENDING';
+              const updateCondition = tplMetaId
+                ? or(eq(messageTemplates.metaTemplateId, tplMetaId), eq(messageTemplates.name, tplName))
+                : eq(messageTemplates.name, tplName);
+
+              await db
+                .update(messageTemplates)
+                .set({ status: newStatus })
+                .where(updateCondition);
+
+              console.log(`✨ Webhook: Template "${tplName}" status diperbarui menjadi ${newStatus}.`);
+            }
+          }
+          continue;
+        }
 
         const phoneNumberId = value.metadata?.phone_number_id;
         if (!phoneNumberId) continue;

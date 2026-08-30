@@ -75,6 +75,9 @@ export class TemplateService {
       }
 
       if (data?.data && Array.isArray(data.data)) {
+        const activeMetaNames = new Set(data.data.map((t: any) => t.name));
+
+        // 1. Upsert templates from Meta
         for (const metaTpl of data.data) {
           const existing = await db
             .select()
@@ -118,6 +121,26 @@ export class TemplateService {
             });
           }
         }
+
+        // 2. Prune / Delete local templates that were removed on Meta
+        const currentLocal = await db
+          .select({ id: messageTemplates.id, name: messageTemplates.name })
+          .from(messageTemplates)
+          .where(eq(messageTemplates.organizationId, orgId));
+
+        for (const localTpl of currentLocal) {
+          if (!activeMetaNames.has(localTpl.name)) {
+            console.log(`🗑️ Menghapus template lokal "${localTpl.name}" karena sudah dihapus di Meta.`);
+            await db
+              .delete(messageTemplates)
+              .where(
+                and(
+                  eq(messageTemplates.id, localTpl.id),
+                  eq(messageTemplates.organizationId, orgId)
+                )
+              );
+          }
+        }
       }
       return { success: true, count: data?.data?.length || 0 };
     } catch (err: any) {
@@ -143,16 +166,34 @@ export class TemplateService {
       .where(eq(organizations.id, orgId))
       .limit(1);
 
+    const activeToken = org?.accessToken && !org.accessToken.startsWith('EAAGm0PX4ZCBO')
+      ? org.accessToken
+      : env.META_ACCESS_TOKEN;
+
+    let activeWabaId = org?.wabaId && org.wabaId.length > 8
+      ? org.wabaId
+      : env.META_WABA_ID;
+
+    // Fallback: Resolve WABA ID from Phone Number ID if token is available
+    if (activeToken && (!activeWabaId || activeWabaId === '1386698372551547') && env.META_PHONE_NUMBER_ID) {
+      try {
+        const resolvedWaba = await MetaApiService.fetchWabaIdFromPhoneNumberId(env.META_PHONE_NUMBER_ID, activeToken);
+        if (resolvedWaba) {
+          activeWabaId = resolvedWaba;
+        }
+      } catch (_) {}
+    }
+
     let metaTemplateId: string | null = null;
     let templateStatus: TemplateStatus = 'APPROVED';
 
     // Submit live to Meta Graph API if authentic token exists
-    if (org?.wabaId && org?.accessToken && !org.accessToken.startsWith('EAAGm0PX4ZCBO')) {
+    if (activeWabaId && activeToken && !activeToken.startsWith('EAAGm0PX4ZCBO')) {
       try {
-        const metaRes = await fetch(`https://graph.facebook.com/v20.0/${org.wabaId}/message_templates`, {
+        const metaRes = await fetch(`https://graph.facebook.com/v20.0/${activeWabaId}/message_templates`, {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${org.accessToken}`,
+            'Authorization': `Bearer ${activeToken}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
@@ -163,12 +204,18 @@ export class TemplateService {
           }),
         });
         const metaData = await metaRes.json();
+        console.log('📡 Meta template create response:', metaData);
         if (metaData?.id) {
           metaTemplateId = metaData.id;
           templateStatus = metaData.status || 'PENDING';
+        } else if (metaData?.error) {
+          throw new Error(`Meta API Error: ${metaData.error.message}`);
         }
-      } catch (err) {
-        console.warn('Meta template submit notice:', err);
+      } catch (err: any) {
+        console.warn('Meta template submit notice:', err.message);
+        if (err.message?.startsWith('Meta API Error:')) {
+          throw err;
+        }
       }
     }
 
@@ -215,15 +262,19 @@ export class TemplateService {
       .where(eq(organizations.id, orgId))
       .limit(1);
 
+    const activeToken = org?.accessToken && !org.accessToken.startsWith('EAAGm0PX4ZCBO')
+      ? org.accessToken
+      : env.META_ACCESS_TOKEN;
+
     let templateStatus: TemplateStatus = existing.status || 'APPROVED';
 
     // If connected to live Meta Graph API and has valid metaTemplateId
-    if (org?.accessToken && !org.accessToken.startsWith('EAAGm0PX4ZCBO') && existing.metaTemplateId && !existing.metaTemplateId.startsWith('meta_')) {
+    if (activeToken && !activeToken.startsWith('EAAGm0PX4ZCBO') && existing.metaTemplateId && !existing.metaTemplateId.startsWith('meta_')) {
       try {
         const metaRes = await fetch(`https://graph.facebook.com/v20.0/${existing.metaTemplateId}`, {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${org.accessToken}`,
+            'Authorization': `Bearer ${activeToken}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
@@ -385,12 +436,44 @@ export class TemplateService {
         .where(eq(organizations.id, orgId))
         .limit(1);
 
-      if (org?.wabaId && org?.accessToken && !org.accessToken.startsWith('EAAGm0PX4ZCBO')) {
+      const activeToken = org?.accessToken && !org.accessToken.startsWith('EAAGm0PX4ZCBO')
+        ? org.accessToken
+        : env.META_ACCESS_TOKEN;
+
+      let activeWabaId = org?.wabaId && org.wabaId.length > 8
+        ? org.wabaId
+        : env.META_WABA_ID;
+
+      // Fallback: Resolve WABA ID from Phone Number ID if token is available
+      if (activeToken && (!activeWabaId || activeWabaId === '1386698372551547') && env.META_PHONE_NUMBER_ID) {
         try {
-          await fetch(`https://graph.facebook.com/v20.0/${org.wabaId}/message_templates?name=${existing.name}&access_token=${org.accessToken}`, {
-            method: 'DELETE',
-          });
+          const resolvedWaba = await MetaApiService.fetchWabaIdFromPhoneNumberId(env.META_PHONE_NUMBER_ID, activeToken);
+          if (resolvedWaba) {
+            activeWabaId = resolvedWaba;
+          }
         } catch (_) {}
+      }
+
+      if (activeWabaId && activeToken && !activeToken.startsWith('EAAGm0PX4ZCBO')) {
+        try {
+          const apiVersion = env.META_API_VERSION || 'v20.0';
+          let deleteUrl = `https://graph.facebook.com/${apiVersion}/${activeWabaId}/message_templates?name=${encodeURIComponent(existing.name)}`;
+          if (existing.metaTemplateId && /^\d+$/.test(existing.metaTemplateId)) {
+            deleteUrl += `&hsm_id=${existing.metaTemplateId}`;
+          }
+
+          console.log(`🌐 Mengirim DELETE template ke Meta: ${deleteUrl}`);
+          const res = await fetch(deleteUrl, {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${activeToken}`,
+            },
+          });
+          const metaRes = await res.json();
+          console.log(`📡 Respon hapus template Meta:`, metaRes);
+        } catch (err: any) {
+          console.warn('⚠️ Gagal menghapus template di Meta:', err.message);
+        }
       }
 
       await db
