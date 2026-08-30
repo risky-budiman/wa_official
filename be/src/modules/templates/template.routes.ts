@@ -148,6 +148,39 @@ export class TemplateService {
     }
   }
 
+  static formatMetaComponents(components: Record<string, any>[]): Record<string, any>[] {
+    return components.map((comp) => {
+      const formatted = { ...comp };
+      const text = typeof comp.text === 'string' ? comp.text : '';
+
+      // Find all {{1}}, {{2}}, etc. variables
+      const matches = Array.from(text.matchAll(/\{\{(\d+)\}\}/g));
+      if (matches.length > 0) {
+        // Find unique variable indices sorted numerically
+        const indices = Array.from(new Set(matches.map((m) => parseInt(m[1], 10)))).sort((a, b) => a - b);
+        const sampleValues = indices.map((idx) => {
+          if (idx === 1) return 'Budi Santoso';
+          if (idx === 2) return 'ORD-9821';
+          if (idx === 3) return '250.000';
+          if (idx === 4) return '1 September 2026';
+          return `Contoh_${idx}`;
+        });
+
+        if (comp.type === 'BODY' && !comp.example) {
+          formatted.example = {
+            body_text: [sampleValues],
+          };
+        } else if (comp.type === 'HEADER' && comp.format === 'TEXT' && !comp.example) {
+          formatted.example = {
+            header_text: sampleValues,
+          };
+        }
+      }
+
+      return formatted;
+    });
+  }
+
   static async create(orgId: string, body: {
     name: string;
     category: TemplateCategory;
@@ -155,7 +188,8 @@ export class TemplateService {
     components: Record<string, unknown>[];
   }) {
     const id = nanoid();
-    const formattedName = body.name.toLowerCase().replace(/\s+/g, '_');
+    // Meta requires template names to be lowercase alphanumeric + underscores only
+    const formattedName = body.name.toLowerCase().trim().replace(/[^a-z0-9_]/g, '_').replace(/_+/g, '_');
 
     const [org] = await db
       .select({
@@ -187,6 +221,8 @@ export class TemplateService {
     let metaTemplateId: string | null = null;
     let templateStatus: TemplateStatus = 'APPROVED';
 
+    const formattedComponents = TemplateService.formatMetaComponents(body.components);
+
     // Submit live to Meta Graph API if authentic token exists
     if (activeWabaId && activeToken && !activeToken.startsWith('EAAGm0PX4ZCBO')) {
       try {
@@ -200,7 +236,7 @@ export class TemplateService {
             name: formattedName,
             category: body.category,
             language: body.language || 'id',
-            components: body.components,
+            components: formattedComponents,
           }),
         });
         const metaData = await metaRes.json();
@@ -226,7 +262,7 @@ export class TemplateService {
       category: body.category,
       language: body.language || 'id',
       status: templateStatus,
-      components: body.components,
+      components: formattedComponents,
       metaTemplateId: metaTemplateId || `meta_${nanoid(8)}`,
     });
 
@@ -267,6 +303,7 @@ export class TemplateService {
       : env.META_ACCESS_TOKEN;
 
     let templateStatus: TemplateStatus = existing.status || 'APPROVED';
+    const formattedComponents = TemplateService.formatMetaComponents(body.components);
 
     // If connected to live Meta Graph API and has valid metaTemplateId
     if (activeToken && !activeToken.startsWith('EAAGm0PX4ZCBO') && existing.metaTemplateId && !existing.metaTemplateId.startsWith('meta_')) {
@@ -278,7 +315,7 @@ export class TemplateService {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            components: body.components,
+            components: formattedComponents,
           }),
         });
         const metaData = await metaRes.json();
@@ -297,7 +334,7 @@ export class TemplateService {
       .set({
         category: body.category || existing.category,
         language: body.language || existing.language,
-        components: body.components,
+        components: formattedComponents,
         status: templateStatus,
       })
       .where(
