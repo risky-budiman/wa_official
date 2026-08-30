@@ -2,10 +2,14 @@
   import { authStore } from '$lib/stores/auth.svelte';
   import { themeStore } from '$lib/stores/theme.svelte';
   import { channelStore } from '$lib/stores/channel.svelte';
+  import { notificationStore } from '$lib/stores/notifications.svelte';
   import { apiRequest } from '$lib/api/client';
   import { onMount } from 'svelte';
+  import { goto } from '$app/navigation';
   import {
     Bell,
+    Volume2,
+    VolumeX,
     ShieldCheck,
     Sun,
     Moon,
@@ -31,41 +35,10 @@
   let showSecurityModal = $state(false);
   let showWabaModal = $state(false);
 
-  let notifications = $state([
-    {
-      id: 1,
-      title: 'Pesan Baru dari Rian Pratama',
-      desc: 'Apakah produk varian hitam masih tersedia stoknya?',
-      time: 'Baru saja',
-      unread: true,
-      type: 'chat',
-    },
-    {
-      id: 2,
-      title: 'Kolaborasi Ditambahkan',
-      desc: 'Anda ditambahkan ke percakapan Siti Aminah oleh SPV.',
-      time: '5 menit lalu',
-      unread: true,
-      type: 'collab',
-    },
-    {
-      id: 3,
-      title: 'Broadcast Campaign Selesai',
-      desc: 'Promo Flash Sale: 1,500 pesan terkirim (Delivery: 98.8%).',
-      time: '1 jam lalu',
-      unread: false,
-      type: 'broadcast',
-    },
-  ]);
-
-  const unreadCount = $derived(notifications.filter((n) => n.unread).length);
-
-  function markAllAsRead() {
-    notifications = notifications.map((n) => ({ ...n, unread: false }));
-  }
-
   onMount(() => {
     channelStore.checkStatus();
+    notificationStore.startPolling();
+    notificationStore.requestBrowserPermission();
   });
 </script>
 
@@ -134,16 +107,18 @@
       <ShieldCheck class="w-4 h-4 stroke-[2.5]" />
     </button>
 
-    <!-- 🔔 Notification Bell (Clickable) -->
+    <!-- 🔔 Notification Bell (Clickable with Live Badge) -->
     <div class="relative">
       <button
         onclick={() => (showNotifications = !showNotifications)}
         class="relative p-2 rounded-xl text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-700 transition cursor-pointer"
-        title="Notifikasi"
+        title="Notifikasi Aktivitas & Pesan Masuk"
       >
-        <Bell class="w-4 h-4" />
-        {#if unreadCount > 0}
-          <span class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-rose-500"></span>
+        <Bell class="w-4 h-4 {notificationStore.unreadCount > 0 ? 'text-amber-500 animate-bounce' : ''}" />
+        {#if notificationStore.unreadCount > 0}
+          <span class="absolute -top-1 -right-1 px-1.5 py-0.2 min-w-[18px] text-[9px] font-bold rounded-full bg-rose-500 text-white flex items-center justify-center shadow-md">
+            {notificationStore.unreadCount > 9 ? '9+' : notificationStore.unreadCount}
+          </span>
         {/if}
       </button>
 
@@ -152,40 +127,72 @@
         <div class="absolute right-0 top-12 w-80 sm:w-96 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-150">
           <div class="p-3.5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-950/60">
             <div class="flex items-center gap-2">
-              <h4 class="text-xs font-bold text-slate-900 dark:text-white">Notifikasi Aktivitas</h4>
-              {#if unreadCount > 0}
+              <h4 class="text-xs font-bold text-slate-900 dark:text-white">Pemberitahuan Pesan</h4>
+              {#if notificationStore.unreadCount > 0}
                 <span class="px-1.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold">
-                  {unreadCount} baru
+                  {notificationStore.unreadCount} baru
                 </span>
               {/if}
             </div>
-            <button
-              onclick={markAllAsRead}
-              class="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
-            >
-              Tandai Dibaca
-            </button>
+            
+            <div class="flex items-center gap-2">
+              <!-- Suara Notifikasi Toggle -->
+              <button
+                onclick={() => notificationStore.toggleSound()}
+                class="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-800 dark:hover:text-white transition"
+                title={notificationStore.soundEnabled ? 'Suara Aktif (Klik untuk mute)' : 'Suara Mute (Klik untuk aktifkan)'}
+              >
+                {#if notificationStore.soundEnabled}
+                  <Volume2 class="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                {:else}
+                  <VolumeX class="w-3.5 h-3.5 text-slate-400" />
+                {/if}
+              </button>
+
+              {#if notificationStore.unreadCount > 0}
+                <button
+                  onclick={() => notificationStore.markAllAsRead()}
+                  class="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
+                >
+                  Tandai Dibaca
+                </button>
+              {/if}
+            </div>
           </div>
 
           <div class="max-h-80 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/60">
-            {#each notifications as n}
-              <div class="p-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition {n.unread ? 'bg-emerald-50/30 dark:bg-emerald-950/10' : ''}">
-                <div class="flex items-start justify-between gap-2 mb-1">
-                  <span class="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                    {#if n.type === 'chat'}
-                      <MessageSquare class="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                    {:else if n.type === 'collab'}
-                      <UserCheck class="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                    {:else}
-                      <Radio class="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-                    {/if}
-                    {n.title}
-                  </span>
-                  <span class="text-[10px] text-slate-500 shrink-0">{n.time}</span>
-                </div>
-                <p class="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">{n.desc}</p>
+            {#if notificationStore.items.length === 0}
+              <div class="p-6 text-center text-xs text-slate-400">
+                <Bell class="w-8 h-8 mx-auto mb-2 opacity-30 text-slate-400" />
+                <p>Belum ada notifikasi pesan baru.</p>
               </div>
-            {/each}
+            {:else}
+              {#each notificationStore.items as n}
+                <button
+                  onclick={() => {
+                    notificationStore.markAsRead(n.id);
+                    showNotifications = false;
+                    goto('/inbox');
+                  }}
+                  class="w-full text-left p-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition cursor-pointer {n.unread ? 'bg-emerald-50/30 dark:bg-emerald-950/20' : ''}"
+                >
+                  <div class="flex items-start justify-between gap-2 mb-1">
+                    <span class="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                      {#if n.type === 'chat'}
+                        <MessageSquare class="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                      {:else if n.type === 'collab'}
+                        <UserCheck class="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
+                      {:else}
+                        <Radio class="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                      {/if}
+                      <span class="truncate">{n.title}</span>
+                    </span>
+                    <span class="text-[10px] text-slate-400 shrink-0">{n.time}</span>
+                  </div>
+                  <p class="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed truncate">{n.desc}</p>
+                </button>
+              {/each}
+            {/if}
           </div>
         </div>
       {/if}

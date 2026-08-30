@@ -1,5 +1,6 @@
 <script lang="ts">
   import { authStore } from '$lib/stores/auth.svelte';
+  import { notificationStore } from '$lib/stores/notifications.svelte';
   import { apiRequest } from '$lib/api/client';
   import { onMount } from 'svelte';
   import {
@@ -257,6 +258,19 @@
           ));
 
         if (isDiff || forceScroll) {
+          // If new inbound customer message arrived in active chat
+          if (sorted.length > prevCount && prevCount > 0) {
+            const latestMsg = sorted[sorted.length - 1];
+            if (latestMsg.senderType === 'CONTACT') {
+              notificationStore.playChime();
+              notificationStore.triggerDesktopNotification(
+                `Pesan Baru: ${selectedConv?.contact.name || 'Pelanggan'}`,
+                latestMsg.body,
+                convId
+              );
+            }
+          }
+
           messageList = sorted;
           if (forceScroll) {
             scrollToBottom(true, false);
