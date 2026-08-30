@@ -108,7 +108,7 @@ export class MetaApiService {
     if (!accessToken || !phoneNumberId) return null;
 
     try {
-      const url = `${this.baseUrl}/${phoneNumberId}?fields=id,verified_name,display_phone_number,quality_rating,status`;
+      const url = `${this.baseUrl}/${phoneNumberId}?fields=id,verified_name,display_phone_number,quality_rating,status,messaging_limit_tier,throughput`;
       const res = await fetch(url, {
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -118,7 +118,7 @@ export class MetaApiService {
       if (!res.ok) {
         // Try fallback with basic fields if requested fields don't exist on this node
         if (data.error?.code === 100) {
-          const fallbackRes = await fetch(`${this.baseUrl}/${phoneNumberId}?fields=id,display_phone_number`, {
+          const fallbackRes = await fetch(`${this.baseUrl}/${phoneNumberId}?fields=id,display_phone_number,quality_rating`, {
             headers: { Authorization: `Bearer ${accessToken}` },
           });
           const fallbackData = await fallbackRes.json();
@@ -139,7 +139,7 @@ export class MetaApiService {
     if (!accessToken || !wabaId) return null;
 
     try {
-      const url = `${this.baseUrl}/${wabaId}/phone_numbers?fields=id,verified_name,display_phone_number,quality_rating,status`;
+      const url = `${this.baseUrl}/${wabaId}/phone_numbers?fields=id,verified_name,display_phone_number,quality_rating,status,messaging_limit_tier,throughput`;
       const res = await fetch(url, {
         headers: {
           Authorization: `Bearer ${accessToken}`,

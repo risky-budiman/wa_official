@@ -3,11 +3,11 @@
 // ===========================================
 
 import { Elysia, t } from 'elysia';
-import { eq } from 'drizzle-orm';
+import { eq, and, gte, sql, desc } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { env } from '../../config/env';
 import { db } from '../../config/database';
-import { organizations, phoneNumbers } from '../../db/schema';
+import { organizations, phoneNumbers, messages, conversations, broadcastCampaigns } from '../../db/schema';
 import { authPlugin } from '../../middleware/auth';
 import { MetaApiService } from '../../services/meta-api.service';
 
@@ -52,6 +52,133 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
             qualityRating: phone?.qualityRating || 'GREEN',
           }
         : null,
+    };
+  })
+
+  // ─── GET /settings/waba/quota (Live Meta 24-Hour Messaging Quota & Usage Monitor) ──
+  .get('/waba/quota', async ({ user, set }) => {
+    if (!user) {
+      set.status = 401;
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const [org] = await db
+      .select({
+        id: organizations.id,
+        name: organizations.name,
+        wabaId: organizations.wabaId,
+        accessToken: organizations.accessToken,
+      })
+      .from(organizations)
+      .where(eq(organizations.id, user.orgId))
+      .limit(1);
+
+    const phones = await db
+      .select()
+      .from(phoneNumbers)
+      .where(eq(phoneNumbers.organizationId, user.orgId));
+
+    const phone = phones.length > 0 ? phones[0] : null;
+
+    const activeToken = org?.accessToken && !org.accessToken.startsWith('EAAGm0PX4ZCBO')
+      ? org.accessToken
+      : env.META_ACCESS_TOKEN;
+
+    const activePhoneNumberId = phone?.phoneNumberId || env.META_PHONE_NUMBER_ID;
+
+    let metaPhoneDetails: any = null;
+    if (activeToken && activePhoneNumberId) {
+      try {
+        metaPhoneDetails = await MetaApiService.fetchPhoneNumberDetails(activePhoneNumberId, activeToken);
+      } catch (_) {}
+    }
+
+    // Determine Meta Limit Tier
+    const tierRaw = metaPhoneDetails?.messaging_limit_tier || 'TIER_1K';
+    let dailyLimit = 1000;
+    let tierDisplay = 'TIER_1K (1.000 Chat / 24 Jam)';
+
+    if (tierRaw === 'TIER_50') {
+      dailyLimit = 50;
+      tierDisplay = 'TIER_50 (50 Chat / 24 Jam)';
+    } else if (tierRaw === 'TIER_250') {
+      dailyLimit = 250;
+      tierDisplay = 'TIER_250 (250 Chat / 24 Jam)';
+    } else if (tierRaw === 'TIER_1K' || tierRaw === '1000') {
+      dailyLimit = 1000;
+      tierDisplay = 'TIER_1K (1.000 Chat / 24 Jam)';
+    } else if (tierRaw === 'TIER_10K' || tierRaw === '10000') {
+      dailyLimit = 10000;
+      tierDisplay = 'TIER_10K (10.000 Chat / 24 Jam)';
+    } else if (tierRaw === 'TIER_100K' || tierRaw === '100000') {
+      dailyLimit = 100000;
+      tierDisplay = 'TIER_100K (100.000 Chat / 24 Jam)';
+    } else if (tierRaw === 'TIER_UNLIMITED') {
+      dailyLimit = 1000000;
+      tierDisplay = 'TIER_UNLIMITED (Tanpa Batas Kuota)';
+    }
+
+    const qualityRating = metaPhoneDetails?.quality_rating || phone?.qualityRating || 'GREEN';
+
+    // Calculate Outbound / Business-Initiated Messages in the last 24 rolling hours
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    // 1. Outbound messages in 24h
+    const [msgStats] = await db
+      .select({
+        outboundCount: sql<number>`COALESCE(COUNT(*), 0)`,
+        uniqueConversations: sql<number>`COALESCE(COUNT(DISTINCT ${messages.conversationId}), 0)`,
+      })
+      .from(messages)
+      .innerJoin(conversations, eq(messages.conversationId, conversations.id))
+      .where(
+        and(
+          eq(conversations.organizationId, user.orgId),
+          eq(messages.direction, 'OUTBOUND'),
+          eq(messages.isInternalNote, false),
+          gte(messages.createdAt, twentyFourHoursAgo)
+        )
+      );
+
+    // 2. Broadcast Campaign recipients in 24h
+    const [broadcastStats] = await db
+      .select({
+        broadcastSentCount: sql<number>`COALESCE(SUM(${broadcastCampaigns.sentCount}), 0)`,
+      })
+      .from(broadcastCampaigns)
+      .where(
+        and(
+          eq(broadcastCampaigns.organizationId, user.orgId),
+          gte(broadcastCampaigns.createdAt, twentyFourHoursAgo)
+        )
+      );
+
+    const outboundTotal = Number(msgStats?.outboundCount || 0);
+    const broadcastTotal = Number(broadcastStats?.broadcastSentCount || 0);
+    const uniqueContactsReached = Number(msgStats?.uniqueConversations || 0);
+
+    const totalUsed = Math.max(outboundTotal, uniqueContactsReached, broadcastTotal);
+    const remainingQuota = Math.max(0, dailyLimit - totalUsed);
+    const usedPercentage = Math.min(100, Math.round((totalUsed / dailyLimit) * 100));
+
+    return {
+      success: true,
+      quota: {
+        dailyLimit,
+        tier: tierRaw,
+        tierDisplay,
+        totalUsed,
+        remainingQuota,
+        usedPercentage,
+        uniqueContactsReached,
+        outboundMessages24h: outboundTotal,
+        broadcastSent24h: broadcastTotal,
+        qualityRating,
+        status: metaPhoneDetails?.status || phone?.status || 'CONNECTED',
+        verifiedName: metaPhoneDetails?.verified_name || phone?.verifiedName || org?.name || '',
+        displayPhoneNumber: metaPhoneDetails?.display_phone_number || phone?.displayPhoneNumber || '',
+        resetWindow: 'Rolling 24-Jam (Otomatis pulih secara bergulir)',
+      },
     };
   })
 

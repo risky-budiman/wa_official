@@ -1,80 +1,102 @@
 <script lang="ts">
-  import { apiRequest } from '$lib/api/client';
-  import { onMount } from 'svelte';
-  import { Radio, Plus, CheckCircle, Clock, Users, Send, X } from 'lucide-svelte';
+import { apiRequest } from '$lib/api/client';
+import { onMount } from 'svelte';
+import { Radio, Plus, CheckCircle, Clock, Users, Send, X, Flame, AlertCircle, Sparkles } from 'lucide-svelte';
 
-  interface CampaignItem {
-    id: string;
+interface CampaignItem {
+  id: string;
+  name: string;
+  status: 'COMPLETED' | 'PROCESSING' | 'DRAFT';
+  totalRecipients: number;
+  sentCount: number;
+  deliveredCount: number;
+  readCount: number;
+  createdAt: string;
+  template: {
     name: string;
-    status: 'COMPLETED' | 'PROCESSING' | 'DRAFT';
-    totalRecipients: number;
-    sentCount: number;
-    deliveredCount: number;
-    readCount: number;
-    createdAt: string;
-    template: {
-      name: string;
-      category: string;
-    };
+    category: string;
+  };
+}
+
+interface TemplateOption {
+  id: string;
+  name: string;
+}
+
+interface MetaQuotaData {
+  dailyLimit: number;
+  tier: string;
+  tierDisplay: string;
+  totalUsed: number;
+  remainingQuota: number;
+  usedPercentage: number;
+  uniqueContactsReached: number;
+  outboundMessages24h: number;
+  broadcastSent24h: number;
+  qualityRating: string;
+  status: string;
+  verifiedName: string;
+  displayPhoneNumber: string;
+  resetWindow: string;
+}
+
+let campaignList = $state<CampaignItem[]>([]);
+let templateOptions = $state<TemplateOption[]>([]);
+let metaQuota = $state<MetaQuotaData | null>(null);
+let isLoading = $state(true);
+let showModal = $state(false);
+
+let newName = $state('');
+let selectedTemplateId = $state('');
+let isSubmitting = $state(false);
+
+async function loadData() {
+  isLoading = true;
+  const [cRes, tRes, qRes] = await Promise.all([
+    apiRequest<{ items: CampaignItem[] }>('/broadcast'),
+    apiRequest<{ items: TemplateOption[] }>('/templates'),
+    apiRequest<{ quota: MetaQuotaData }>('/settings/waba/quota'),
+  ]);
+  isLoading = false;
+
+  if (cRes.success && cRes.items) {
+    campaignList = cRes.items;
   }
-
-  interface TemplateOption {
-    id: string;
-    name: string;
-  }
-
-  let campaignList = $state<CampaignItem[]>([]);
-  let templateOptions = $state<TemplateOption[]>([]);
-  let isLoading = $state(true);
-  let showModal = $state(false);
-
-  let newName = $state('');
-  let selectedTemplateId = $state('');
-  let isSubmitting = $state(false);
-
-  async function loadData() {
-    isLoading = true;
-    const [cRes, tRes] = await Promise.all([
-      apiRequest<{ items: CampaignItem[] }>('/broadcast'),
-      apiRequest<{ items: TemplateOption[] }>('/templates'),
-    ]);
-    isLoading = false;
-
-    if (cRes.success && cRes.items) {
-      campaignList = cRes.items;
-    }
-    if (tRes.success && tRes.items) {
-      templateOptions = tRes.items;
-      if (templateOptions.length > 0) {
-        selectedTemplateId = templateOptions[0].id;
-      }
-    }
-  }
-
-  async function createCampaign(e: Event) {
-    e.preventDefault();
-    if (!newName.trim() || !selectedTemplateId) return;
-
-    isSubmitting = true;
-    const res = await apiRequest('/broadcast', {
-      method: 'POST',
-      body: JSON.stringify({
-        name: newName.trim(),
-        templateId: selectedTemplateId,
-      }),
-    });
-    isSubmitting = false;
-
-    if (res.success) {
-      showModal = false;
-      newName = '';
-      loadData();
+  if (tRes.success && tRes.items) {
+    templateOptions = tRes.items;
+    if (templateOptions.length > 0) {
+      selectedTemplateId = templateOptions[0].id;
     }
   }
+  if (qRes.success && qRes.quota) {
+    metaQuota = qRes.quota;
+  }
+}
 
-  onMount(() => {
-    loadData();
+async function createCampaign(e: Event) {
+  e.preventDefault();
+  if (!newName.trim() || !selectedTemplateId) return;
+
+  isSubmitting = true;
+  const res = await apiRequest('/broadcast', {
+    method: 'POST',
+    body: JSON.stringify({
+      name: newName.trim(),
+      templateId: selectedTemplateId,
+    }),
   });
+  isSubmitting = false;
+
+  if (res.success) {
+    showModal = false;
+    newName = '';
+    loadData();
+  }
+}
+
+onMount(() => {
+  loadData();
+});
 </script>
 
 <div class="p-8 max-w-7xl mx-auto space-y-6">
@@ -92,6 +114,48 @@
       Buat Kampanye Baru
     </button>
   </div>
+
+  <!-- Meta 24-Hour Messaging Quota Widget -->
+  {#if metaQuota}
+    <div class="p-5 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900 to-indigo-950/90 border border-indigo-500/20 text-white shadow-md space-y-3">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div class="flex items-center gap-2.5">
+          <div class="p-2 rounded-xl bg-amber-500/20 text-amber-400">
+            <Flame class="w-4 h-4" />
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-bold text-white">Sisa Kuota Broadcast Meta (24 Jam):</span>
+              <span class="px-2 py-0.2 rounded bg-indigo-500/30 text-indigo-300 text-[10px] font-mono font-bold">
+                {metaQuota.tierDisplay}
+              </span>
+            </div>
+            <p class="text-[11px] text-slate-400">
+              Sisa kuota yang aman dikirim dalam 24 jam ini: <strong class="text-emerald-400">{metaQuota.remainingQuota.toLocaleString('id-ID')} Penerima</strong>
+            </p>
+          </div>
+        </div>
+
+        <div class="text-right font-mono text-xs">
+          <span class="font-bold {metaQuota.usedPercentage >= 90 ? 'text-rose-400' : metaQuota.usedPercentage >= 70 ? 'text-amber-400' : 'text-emerald-400'}">
+            {metaQuota.totalUsed.toLocaleString('id-ID')} / {metaQuota.dailyLimit.toLocaleString('id-ID')} ({metaQuota.usedPercentage}%)
+          </span>
+        </div>
+      </div>
+
+      <!-- Meter Progress Bar -->
+      <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden p-0.2 border border-slate-700">
+        <div
+          class="h-full rounded-full transition-all duration-700 bg-gradient-to-r {metaQuota.usedPercentage >= 90
+            ? 'from-amber-500 to-rose-500'
+            : metaQuota.usedPercentage >= 70
+              ? 'from-emerald-500 to-amber-500'
+              : 'from-indigo-500 to-emerald-400'}"
+          style="width: {Math.max(metaQuota.usedPercentage, 2)}%"
+        ></div>
+      </div>
+    </div>
+  {/if}
 
   <!-- Campaign Stats Overview -->
   <div class="grid grid-cols-1 sm:grid-cols-3 gap-5">

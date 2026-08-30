@@ -89,8 +89,26 @@
     createdAt: string;
   }
 
+  interface MetaQuotaData {
+    dailyLimit: number;
+    tier: string;
+    tierDisplay: string;
+    totalUsed: number;
+    remainingQuota: number;
+    usedPercentage: number;
+    uniqueContactsReached: number;
+    outboundMessages24h: number;
+    broadcastSent24h: number;
+    qualityRating: string;
+    status: string;
+    verifiedName: string;
+    displayPhoneNumber: string;
+    resetWindow: string;
+  }
+
   let activeChats = $state<MonitoringItem[]>([]);
   let teamUsers = $state<TeamUser[]>([]);
+  let metaQuota = $state<MetaQuotaData | null>(null);
   let isLoading = $state(true);
   let isRefreshing = $state(false);
   let autoRefreshEnabled = $state(true);
@@ -126,9 +144,10 @@
     isRefreshing = true;
 
     try {
-      const [convRes, usersRes] = await Promise.all([
+      const [convRes, usersRes, quotaRes] = await Promise.all([
         apiRequest<{ items: MonitoringItem[] }>('/conversations?limit=100'),
         apiRequest<{ items: TeamUser[] }>('/users'),
+        apiRequest<{ quota: MetaQuotaData }>('/settings/waba/quota'),
       ]);
 
       if (convRes.success && convRes.items) {
@@ -136,6 +155,9 @@
       }
       if (usersRes.success && usersRes.items) {
         teamUsers = usersRes.items;
+      }
+      if (quotaRes.success && quotaRes.quota) {
+        metaQuota = quotaRes.quota;
       }
     } catch (err) {
       console.error('Error loading monitoring data:', err);
@@ -407,6 +429,85 @@
       <button onclick={() => (feedbackToast = null)} class="text-slate-400 hover:text-slate-600 cursor-pointer">
         <X class="w-4 h-4" />
       </button>
+    </div>
+  {/if}
+
+  <!-- Meta 24-Hour Messaging Limit Quota Monitor Card -->
+  {#if metaQuota}
+    <div class="p-5 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900 to-indigo-950/90 border border-indigo-500/20 text-white shadow-md space-y-4">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div class="flex items-center gap-3">
+          <div class="p-2.5 rounded-2xl bg-amber-500/10 text-amber-400 border border-amber-500/20 shrink-0">
+            <Flame class="w-5 h-5" />
+          </div>
+          <div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <h3 class="text-sm font-bold text-white tracking-wide">Monitor Limit Pesan Meta (24 Jam)</h3>
+              <span class="px-2 py-0.5 rounded-md bg-indigo-500/30 text-indigo-300 text-[10px] font-mono font-bold border border-indigo-500/40">
+                {metaQuota.tierDisplay}
+              </span>
+            </div>
+            <p class="text-xs text-slate-400 mt-0.5">
+              Jendela bergulir 24 jam untuk pesan bisnis ({metaQuota.resetWindow})
+            </p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <!-- Quality Rating Badge -->
+          <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800/90 border border-slate-700 text-xs">
+            <span class="text-slate-400 text-[11px]">Kualitas Nomor:</span>
+            <span class="font-bold flex items-center gap-1 font-mono {metaQuota.qualityRating === 'GREEN' ? 'text-emerald-400' : metaQuota.qualityRating === 'YELLOW' ? 'text-amber-400' : 'text-rose-400'}">
+              <span class="w-2 h-2 rounded-full {metaQuota.qualityRating === 'GREEN' ? 'bg-emerald-400 animate-pulse' : metaQuota.qualityRating === 'YELLOW' ? 'bg-amber-400' : 'bg-rose-400'}"></span>
+              {metaQuota.qualityRating === 'GREEN' ? 'TINGGI (GREEN)' : metaQuota.qualityRating === 'YELLOW' ? 'SEDANG (YELLOW)' : 'RENDAH (RED)'}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quota Meter Progress & Breakdown Grid -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center pt-3 border-t border-slate-800">
+        <!-- Progress Bar & Percentage (Left 7 Cols) -->
+        <div class="lg:col-span-7 space-y-2">
+          <div class="flex items-center justify-between text-xs">
+            <div class="flex items-center gap-2">
+              <span class="text-slate-300 font-semibold">Penggunaan Kuota:</span>
+              <span class="text-white font-black text-sm font-mono">{metaQuota.totalUsed.toLocaleString('id-ID')} / {metaQuota.dailyLimit.toLocaleString('id-ID')} Chat</span>
+            </div>
+            <span class="font-mono font-bold {metaQuota.usedPercentage >= 90 ? 'text-rose-400' : metaQuota.usedPercentage >= 70 ? 'text-amber-400' : 'text-emerald-400'}">
+              {metaQuota.usedPercentage}% Terpakai ({metaQuota.remainingQuota.toLocaleString('id-ID')} Sisa)
+            </span>
+          </div>
+
+          <!-- Dynamic Multi-stage Progress Bar -->
+          <div class="w-full h-3 bg-slate-800 rounded-full overflow-hidden p-0.5 border border-slate-700/80">
+            <div
+              class="h-full rounded-full transition-all duration-700 bg-gradient-to-r {metaQuota.usedPercentage >= 90
+                ? 'from-amber-500 to-rose-500'
+                : metaQuota.usedPercentage >= 70
+                  ? 'from-emerald-500 to-amber-500'
+                  : 'from-indigo-500 to-emerald-400'}"
+              style="width: {Math.max(metaQuota.usedPercentage, 2)}%"
+            ></div>
+          </div>
+        </div>
+
+        <!-- Breakdown Stats (Right 5 Cols) -->
+        <div class="lg:col-span-5 grid grid-cols-3 gap-2 text-center">
+          <div class="p-2.5 rounded-xl bg-slate-800/70 border border-slate-700/60">
+            <span class="text-[10px] text-slate-400 block font-semibold">Kontak Unik</span>
+            <span class="text-xs font-bold text-white font-mono">{metaQuota.uniqueContactsReached.toLocaleString('id-ID')}</span>
+          </div>
+          <div class="p-2.5 rounded-xl bg-slate-800/70 border border-slate-700/60">
+            <span class="text-[10px] text-slate-400 block font-semibold">Pesan Outbound</span>
+            <span class="text-xs font-bold text-emerald-400 font-mono">{metaQuota.outboundMessages24h.toLocaleString('id-ID')}</span>
+          </div>
+          <div class="p-2.5 rounded-xl bg-slate-800/70 border border-slate-700/60">
+            <span class="text-[10px] text-slate-400 block font-semibold">Broadcast 24j</span>
+            <span class="text-xs font-bold text-indigo-400 font-mono">{metaQuota.broadcastSent24h.toLocaleString('id-ID')}</span>
+          </div>
+        </div>
+      </div>
     </div>
   {/if}
 
