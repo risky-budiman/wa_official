@@ -31,8 +31,9 @@ interface MetaQuotaData {
   remainingQuota: number;
   usedPercentage: number;
   uniqueContactsReached: number;
-  outboundMessages24h: number;
+  csReplies24h: number;
   broadcastSent24h: number;
+  templateSent24h: number;
   qualityRating: string;
   status: string;
   verifiedName: string;

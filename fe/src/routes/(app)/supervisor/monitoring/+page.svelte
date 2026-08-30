@@ -97,8 +97,9 @@
     remainingQuota: number;
     usedPercentage: number;
     uniqueContactsReached: number;
-    outboundMessages24h: number;
+    csReplies24h: number;
     broadcastSent24h: number;
+    templateSent24h: number;
     qualityRating: string;
     status: string;
     verifiedName: string;
@@ -495,16 +496,16 @@
         <!-- Breakdown Stats (Right 5 Cols) -->
         <div class="lg:col-span-5 grid grid-cols-3 gap-2 text-center">
           <div class="p-2.5 rounded-xl bg-slate-800/70 border border-slate-700/60">
-            <span class="text-[10px] text-slate-400 block font-semibold">Kontak Unik</span>
+            <span class="text-[10px] text-slate-400 block font-semibold">Kontak Dilayani</span>
             <span class="text-xs font-bold text-white font-mono">{metaQuota.uniqueContactsReached.toLocaleString('id-ID')}</span>
           </div>
-          <div class="p-2.5 rounded-xl bg-slate-800/70 border border-slate-700/60">
-            <span class="text-[10px] text-slate-400 block font-semibold">Pesan Outbound</span>
-            <span class="text-xs font-bold text-emerald-400 font-mono">{metaQuota.outboundMessages24h.toLocaleString('id-ID')}</span>
+          <div class="p-2.5 rounded-xl bg-slate-800/70 border border-slate-700/60" title="Balasan chat langsung oleh CS tidak memotong batas kuota 1.000 Meta">
+            <span class="text-[10px] text-emerald-400 block font-semibold">Balasan CS (Bebas)</span>
+            <span class="text-xs font-bold text-emerald-400 font-mono">{metaQuota.csReplies24h.toLocaleString('id-ID')}</span>
           </div>
-          <div class="p-2.5 rounded-xl bg-slate-800/70 border border-slate-700/60">
-            <span class="text-[10px] text-slate-400 block font-semibold">Broadcast 24j</span>
-            <span class="text-xs font-bold text-indigo-400 font-mono">{metaQuota.broadcastSent24h.toLocaleString('id-ID')}</span>
+          <div class="p-2.5 rounded-xl bg-slate-800/70 border border-slate-700/60" title="Broadcast & Notifikasi Bisnis yang memotong batas kuota 1.000 Meta">
+            <span class="text-[10px] text-amber-400 block font-semibold">Broadcast (Limit)</span>
+            <span class="text-xs font-bold text-amber-400 font-mono">{metaQuota.broadcastSent24h.toLocaleString('id-ID')}</span>
           </div>
         </div>
       </div>

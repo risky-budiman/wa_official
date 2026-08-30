@@ -123,11 +123,11 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
     // Calculate Outbound / Business-Initiated Messages in the last 24 rolling hours
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-    // 1. Outbound messages in 24h
-    const [msgStats] = await db
+    // 1. Template Messages (Business-Initiated Outbound) in 24h
+    const [templateStats] = await db
       .select({
-        outboundCount: sql<number>`COALESCE(COUNT(*), 0)`,
-        uniqueConversations: sql<number>`COALESCE(COUNT(DISTINCT ${messages.conversationId}), 0)`,
+        templateCount: sql<number>`COALESCE(COUNT(*), 0)`,
+        uniqueTemplateConversations: sql<number>`COALESCE(COUNT(DISTINCT ${messages.conversationId}), 0)`,
       })
       .from(messages)
       .innerJoin(conversations, eq(messages.conversationId, conversations.id))
@@ -135,12 +135,31 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
         and(
           eq(conversations.organizationId, user.orgId),
           eq(messages.direction, 'OUTBOUND'),
+          eq(messages.messageType, 'template'),
           eq(messages.isInternalNote, false),
           gte(messages.createdAt, twentyFourHoursAgo)
         )
       );
 
-    // 2. Broadcast Campaign recipients in 24h
+    // 2. Regular Customer Service Replies in 24h (User-Initiated / Service Session - Free / 0 quota consumption)
+    const [csStats] = await db
+      .select({
+        csReplyCount: sql<number>`COALESCE(COUNT(*), 0)`,
+        uniqueCsConversations: sql<number>`COALESCE(COUNT(DISTINCT ${messages.conversationId}), 0)`,
+      })
+      .from(messages)
+      .innerJoin(conversations, eq(messages.conversationId, conversations.id))
+      .where(
+        and(
+          eq(conversations.organizationId, user.orgId),
+          eq(messages.direction, 'OUTBOUND'),
+          sql`${messages.messageType} != 'template'`,
+          eq(messages.isInternalNote, false),
+          gte(messages.createdAt, twentyFourHoursAgo)
+        )
+      );
+
+    // 3. Broadcast Campaign recipients in 24h
     const [broadcastStats] = await db
       .select({
         broadcastSentCount: sql<number>`COALESCE(SUM(${broadcastCampaigns.sentCount}), 0)`,
@@ -153,11 +172,13 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
         )
       );
 
-    const outboundTotal = Number(msgStats?.outboundCount || 0);
+    const templateTotal = Number(templateStats?.templateCount || 0);
     const broadcastTotal = Number(broadcastStats?.broadcastSentCount || 0);
-    const uniqueContactsReached = Number(msgStats?.uniqueConversations || 0);
+    const csRepliesTotal = Number(csStats?.csReplyCount || 0);
+    const uniqueContactsServed = Number(csStats?.uniqueCsConversations || 0);
 
-    const totalUsed = Math.max(outboundTotal, uniqueContactsReached, broadcastTotal);
+    // Only Business-Initiated (Broadcast + Template) consumes the 1,000 Meta tier quota
+    const totalUsed = Math.max(broadcastTotal + templateTotal, 0);
     const remainingQuota = Math.max(0, dailyLimit - totalUsed);
     const usedPercentage = Math.min(100, Math.round((totalUsed / dailyLimit) * 100));
 
@@ -167,17 +188,18 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
         dailyLimit,
         tier: tierRaw,
         tierDisplay,
-        totalUsed,
+        totalUsed, // Consuming the 1,000 Meta limit
         remainingQuota,
         usedPercentage,
-        uniqueContactsReached,
-        outboundMessages24h: outboundTotal,
+        uniqueContactsReached: uniqueContactsServed,
+        csReplies24h: csRepliesTotal, // Live CS replies (Free / 0 Meta Limit consumption)
         broadcastSent24h: broadcastTotal,
+        templateSent24h: templateTotal,
         qualityRating,
         status: metaPhoneDetails?.status || phone?.status || 'CONNECTED',
         verifiedName: metaPhoneDetails?.verified_name || phone?.verifiedName || org?.name || '',
         displayPhoneNumber: metaPhoneDetails?.display_phone_number || phone?.displayPhoneNumber || '',
-        resetWindow: 'Rolling 24-Jam (Otomatis pulih secara bergulir)',
+        resetWindow: 'Rolling 24-Jam (Hanya membatasi Broadcast & Notifikasi Bisnis)',
       },
     };
   })
