@@ -903,7 +903,14 @@
                   {/if}
                 {/if}
 
-                {#if msg.body && (!msg.mediaUrl || !['[Foto/Gambar]', '[Gambar]', '[Foto]', '[Stiker]', '[Pesan Suara / Audio]', '[Video]', '[DOCUMENT]'].includes(msg.body))}
+                {#if !msg.mediaUrl && (msg.body === '[Gambar]' || msg.body === '[Foto/Gambar]' || msg.messageType === 'image')}
+                  <div class="flex items-center gap-2 p-2.5 my-1 rounded-xl bg-slate-100 dark:bg-slate-700/50 text-slate-600 dark:text-slate-300 text-xs border border-slate-200 dark:border-slate-700">
+                    <Image class="w-4 h-4 text-emerald-500 shrink-0" />
+                    <span>Foto / Gambar WhatsApp (Pesan Lama)</span>
+                  </div>
+                {/if}
+
+                {#if msg.body && (!msg.mediaUrl || !['[Foto/Gambar]', '[Gambar]', '[Foto]', '[Stiker]', '[Pesan Suara / Audio]', '[Video]', '[DOCUMENT]'].includes(msg.body)) && msg.body !== '[Gambar]' && msg.body !== '[Foto/Gambar]'}
                   <div class="text-slate-800 dark:text-slate-100 leading-relaxed font-sans mt-1">
                     {@html formatWhatsAppMarkdown(msg.body)}
                   </div>

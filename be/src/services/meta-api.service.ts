@@ -278,7 +278,10 @@ export class MetaApiService {
       // 1. Fetch download URL from Meta Graph API
       const metaMediaUrl = `${this.baseUrl}/${mediaId}`;
       const resMeta = await fetch(metaMediaUrl, {
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'User-Agent': 'curl/7.64.1',
+        },
       });
       const metaData = await resMeta.json();
 
@@ -304,11 +307,14 @@ export class MetaApiService {
 
       // 2. Download binary payload from the temporary lookaside URL
       const resBinary = await fetch(metaData.url, {
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'User-Agent': 'curl/7.64.1',
+        },
       });
 
       if (!resBinary.ok) {
-        console.warn('⚠️ Failed to download media payload from Meta:', resBinary.statusText);
+        console.warn('⚠️ Failed to download media payload from Meta:', resBinary.status, resBinary.statusText);
         return null;
       }
 
