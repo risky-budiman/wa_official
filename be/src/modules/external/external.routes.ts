@@ -157,27 +157,30 @@ export const externalRoutes = new Elysia({ prefix: '/external' })
         });
       }
 
-      // Button Parameters
+      // Button Parameters (Dynamic URL Button)
       if (body.buttonParameters && Array.isArray(body.buttonParameters) && body.buttonParameters.length > 0) {
-        for (const btn of body.buttonParameters) {
-          componentsPayload.push({
-            type: 'button',
-            sub_type: 'url',
-            index: String(btn.index || '0'),
-            parameters: [{ type: 'text', text: String(btn.text) }],
-          });
+        for (const btn of body.buttonParameters as any[]) {
+          const paramValue = btn.parameter || btn.text || btn.value || '';
+          if (paramValue) {
+            componentsPayload.push({
+              type: 'button',
+              sub_type: 'url',
+              index: String(btn.index !== undefined ? btn.index : '0'),
+              parameters: [{ type: 'text', text: String(paramValue) }],
+            });
+          }
         }
       } else if (Array.isArray(tmpl.components)) {
-        // Auto-inject URL buttons if present in template
+        // Auto-inject dynamic URL buttons only if the template URL has {{1}} variable
         const btnComp = tmpl.components.find((c: any) => (c.type || '').toUpperCase() === 'BUTTONS');
         if (btnComp && Array.isArray(btnComp.buttons)) {
           btnComp.buttons.forEach((btn: any, btnIndex: number) => {
-            if ((btn.type || '').toUpperCase() === 'URL') {
+            if ((btn.type || '').toUpperCase() === 'URL' && btn.url && btn.url.includes('{{1}}')) {
               componentsPayload.push({
                 type: 'button',
                 sub_type: 'url',
                 index: String(btnIndex),
-                parameters: [{ type: 'text', text: 'promo' }],
+                parameters: [{ type: 'text', text: 'order' }],
               });
             }
           });
@@ -272,8 +275,10 @@ export const externalRoutes = new Elysia({ prefix: '/external' })
         buttonParameters: t.Optional(
           t.Array(
             t.Object({
-              index: t.String(),
-              text: t.String(),
+              index: t.Optional(t.Union([t.String(), t.Number()])),
+              parameter: t.Optional(t.String()),
+              text: t.Optional(t.String()),
+              value: t.Optional(t.String()),
             })
           )
         ),
