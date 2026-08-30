@@ -30,7 +30,12 @@ export class UserService {
       })
       .from(users)
       .leftJoin(teams, eq(users.teamId, teams.id))
-      .where(eq(users.organizationId, orgId))
+      .where(
+        and(
+          eq(users.organizationId, orgId),
+          sql`${users.role} != 'SUPER_ADMIN'`
+        )
+      )
       .orderBy(desc(users.createdAt));
   }
 
@@ -41,6 +46,10 @@ export class UserService {
     role: UserRole;
     teamId?: string;
   }) {
+    if ((body.role as string) === 'SUPER_ADMIN') {
+      throw new Error('Role SUPER_ADMIN tidak dapat dibuat melalui menu staf tenant.');
+    }
+
     const cleanEmail = body.email.toLowerCase().trim();
     const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, cleanEmail)).limit(1);
     if (existing) {
@@ -74,6 +83,10 @@ export class UserService {
     teamId?: string | null;
     password?: string;
   }) {
+    if ((body.role as string) === 'SUPER_ADMIN') {
+      throw new Error('Role SUPER_ADMIN tidak dapat ditetapkan melalui menu staf tenant.');
+    }
+
     const updatePayload: Record<string, any> = {};
     if (body.fullName !== undefined) updatePayload.fullName = body.fullName.trim();
     if (body.email !== undefined) updatePayload.email = body.email.trim();
@@ -92,7 +105,8 @@ export class UserService {
       .where(
         and(
           eq(users.id, userId),
-          eq(users.organizationId, orgId)
+          eq(users.organizationId, orgId),
+          sql`${users.role} != 'SUPER_ADMIN'`
         )
       );
 
@@ -105,7 +119,8 @@ export class UserService {
       .where(
         and(
           eq(users.id, userId),
-          eq(users.organizationId, orgId)
+          eq(users.organizationId, orgId),
+          sql`${users.role} != 'SUPER_ADMIN'`
         )
       );
 

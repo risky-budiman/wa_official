@@ -217,9 +217,9 @@
   // Midtrans Key Visibility
   let showMidtransServerKey = $state(false);
 
-  // Check if authenticated as SUPER_ADMIN
+  // Check if authenticated STRICTLY as SUPER_ADMIN (Platform Master Only)
   const isSuperAdminLoggedIn = $derived(
-    !!authStore.token && (authStore.user?.role === 'SUPER_ADMIN' || authStore.user?.role === 'ADMINISTRATOR')
+    !!authStore.token && authStore.user?.role === 'SUPER_ADMIN'
   );
 
   // Filters & Search for Tenants
@@ -276,7 +276,11 @@
   onMount(async () => {
     if (authStore.token) {
       await authStore.fetchFreshProfile();
-      await loadData();
+      if (authStore.user?.role === 'SUPER_ADMIN') {
+        await loadData();
+      } else {
+        isLoading = false;
+      }
     } else {
       isLoading = false;
     }
@@ -340,6 +344,11 @@
 
     if (res.success) {
       await authStore.fetchFreshProfile();
+      if (authStore.user?.role !== 'SUPER_ADMIN') {
+        authStore.logout();
+        loginError = 'Akses Ditolak: Halaman Master Control Administrator ini khusus untuk Pemilik Platform (Super Admin). Akun staf/admin penyewa (tenant) silakan login melalui halaman login utama (/login).';
+        return;
+      }
       await loadData();
     } else {
       loginError = res.error || 'Login gagal. Periksa kembali email dan kata sandi Anda.';
@@ -347,7 +356,7 @@
   }
 
   async function loadData() {
-    if (!authStore.token) return;
+    if (!authStore.token || authStore.user?.role !== 'SUPER_ADMIN') return;
     isLoading = true;
     try {
       const [overviewRes, orgsRes, settingsRes] = await Promise.all([
