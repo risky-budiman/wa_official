@@ -67,9 +67,9 @@ export async function testConnection(): Promise<void> {
       } catch (_) {}
     }
 
-    // Auto-migration: Update role enum in users to allow SUPER_ADMIN & promote root admin
+    // Auto-migration: Update role column in users to allow SUPER_ADMIN & promote root admin
     try {
-      await connection.query(`ALTER TABLE users MODIFY COLUMN role ENUM('SUPER_ADMIN', 'ADMINISTRATOR', 'SUPERVISOR', 'AGENT') NOT NULL DEFAULT 'AGENT';`);
+      await connection.query(`ALTER TABLE users MODIFY COLUMN role VARCHAR(50) NOT NULL DEFAULT 'AGENT';`);
       await connection.query(`UPDATE users SET role = 'SUPER_ADMIN' WHERE role = 'ADMINISTRATOR' ORDER BY created_at ASC LIMIT 1;`);
     } catch (_) {}
 
