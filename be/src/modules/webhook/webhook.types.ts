@@ -21,17 +21,49 @@ export interface MetaWebhookEntry {
         from: string;
         id: string;
         timestamp: string;
-        type: 'text' | 'image' | 'document' | 'audio' | 'interactive' | 'location' | 'button';
+        type: 'text' | 'image' | 'document' | 'audio' | 'video' | 'sticker' | 'voice' | 'interactive' | 'location' | 'button' | string;
         text?: {
           body: string;
         };
         image?: {
           id: string;
           mime_type: string;
-          sha256: string;
+          sha256?: string;
           caption?: string;
         };
+        document?: {
+          id: string;
+          mime_type: string;
+          sha256?: string;
+          filename?: string;
+          caption?: string;
+        };
+        audio?: {
+          id: string;
+          mime_type: string;
+          sha256?: string;
+          voice?: boolean;
+        };
+        video?: {
+          id: string;
+          mime_type: string;
+          sha256?: string;
+          caption?: string;
+        };
+        sticker?: {
+          id: string;
+          mime_type: string;
+          sha256?: string;
+          animated?: boolean;
+        };
+        voice?: {
+          id: string;
+          mime_type: string;
+          sha256?: string;
+        };
         interactive?: any;
+        location?: any;
+        button?: any;
       }>;
       statuses?: Array<{
         id: string;
