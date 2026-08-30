@@ -167,7 +167,7 @@ export class BroadcastService {
               phoneNumberId: activePhoneNumberId,
               recipientWaId: contact.waId,
               templateName: tmpl.name,
-              languageCode: (tmpl.language || 'id').toLowerCase().replace('_id', ''),
+              languageCode: tmpl.language || 'id',
               components: componentsPayload.length > 0 ? componentsPayload : undefined,
             },
             activeToken
