@@ -7,7 +7,7 @@ import { eq, and, gte, sql, desc } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { env } from '../../config/env';
 import { db } from '../../config/database';
-import { organizations, phoneNumbers, messages, conversations, broadcastCampaigns, apiKeys } from '../../db/schema';
+import { organizations, phoneNumbers, messages, conversations, broadcastCampaigns, apiKeys, users } from '../../db/schema';
 import { authPlugin } from '../../middleware/auth';
 import { MetaApiService } from '../../services/meta-api.service';
 
@@ -1034,4 +1034,136 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
       success: true,
       message: 'API Key berhasil dicabut / dihapus',
     };
-  });
+  })
+
+  // ─── GET /settings/subscription (Tenant Plan & Subscription Details) ──
+  .get('/subscription', async ({ user, set }) => {
+    if (!user) {
+      set.status = 401;
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    const [org] = await db
+      .select()
+      .from(organizations)
+      .where(eq(organizations.id, user.orgId))
+      .limit(1);
+
+    if (!org) {
+      set.status = 404;
+      return { success: false, error: 'Organisasi tidak ditemukan' };
+    }
+
+    // Compute Days Remaining
+    let daysRemaining: number | null = null;
+    let isExpired = false;
+    if (org.expiresAt) {
+      const now = new Date();
+      const exp = new Date(org.expiresAt);
+      const diffMs = exp.getTime() - now.getTime();
+      daysRemaining = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+      isExpired = daysRemaining <= 0;
+    }
+
+    // Usage Counts
+    const { users } = await import('../../db/schema/users');
+    const [userCountRes] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(users)
+      .where(eq(users.organizationId, user.orgId));
+
+    const [convCountRes] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(conversations)
+      .where(eq(conversations.organizationId, user.orgId));
+
+    // Get Platform Settings for Plans & Midtrans
+    const { platformSettings } = await import('../../db/schema/settings');
+    const [plansSetting] = await db
+      .select()
+      .from(platformSettings)
+      .where(eq(platformSettings.key, 'saas_plans'))
+      .limit(1);
+
+    const [midtransSetting] = await db
+      .select()
+      .from(platformSettings)
+      .where(eq(platformSettings.key, 'midtrans_payment'))
+      .limit(1);
+
+    return {
+      success: true,
+      subscription: {
+        organizationId: org.id,
+        organizationName: org.name,
+        status: org.status,
+        plan: org.plan,
+        maxAgents: org.maxAgents || 5,
+        maxBroadcastPerMonth: org.maxBroadcastPerMonth || 10000,
+        expiresAt: org.expiresAt,
+        daysRemaining,
+        isExpired,
+        usage: {
+          currentUsers: Number(userCountRes?.count || 0),
+          currentConversations: Number(convCountRes?.count || 0),
+        },
+      },
+      availablePlans: ((plansSetting?.value as any[]) || []).filter((p: any) => p.isActive !== false && p.isPublic !== false),
+      paymentGateway: midtransSetting?.value || { isEnabled: false },
+    };
+  })
+
+  // ─── POST /settings/subscription/renew-request ──
+  .post(
+    '/subscription/renew-request',
+    async ({ user, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { success: false, error: 'Unauthorized' };
+      }
+
+      const [org] = await db
+        .select()
+        .from(organizations)
+        .where(eq(organizations.id, user.orgId))
+        .limit(1);
+
+      if (!org) {
+        set.status = 404;
+        return { success: false, error: 'Organisasi tidak ditemukan' };
+      }
+
+      const [dbUser] = await db
+        .select({ fullName: users.fullName, email: users.email })
+        .from(users)
+        .where(eq(users.id, user.id))
+        .limit(1);
+
+      const applicantName = dbUser?.fullName || user.email || 'Admin';
+      const applicantEmail = dbUser?.email || user.email;
+      const planName = body.planName || org.plan;
+      const duration = body.duration || '1 Bulan';
+
+      const waMessage =
+        `Halo Super Admin,\n\n` +
+        `Kami ingin mengajukan perpanjangan/upgrade paket sewa WhatsApp CRM:\n` +
+        `- Organisasi: *${org.name}* (ID: ${org.id})\n` +
+        `- Pemohon: ${applicantName} (${applicantEmail})\n` +
+        `- Pilihan Paket: *${planName}*\n` +
+        `- Durasi: *${duration}*\n\n` +
+        `Mohon info rekening pembayaran dan konfirmasi aktivasi perpanjangan. Terima kasih!`;
+
+      return {
+        success: true,
+        message: 'Permohonan perpanjangan berhasil diproses!',
+        whatsappUrl: `https://wa.me/?text=${encodeURIComponent(waMessage)}`,
+        waMessage,
+      };
+    },
+    {
+      body: t.Object({
+        planName: t.Optional(t.String()),
+        duration: t.Optional(t.String()),
+      }),
+    }
+  );

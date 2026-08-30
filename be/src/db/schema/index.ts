@@ -38,3 +38,6 @@ export type { ConversationParticipant, NewConversationParticipant } from './conv
 export { apiKeys } from './api-keys';
 export type { ApiKey, NewApiKey } from './api-keys';
 
+export { platformSettings } from './settings';
+export type { PlatformSetting, SaaSPlanConfig, MidtransConfig } from './settings';
+

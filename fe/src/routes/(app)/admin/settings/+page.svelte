@@ -388,7 +388,7 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
     if (channelStore.channel?.companyName) {
       companyName = channelStore.channel.companyName;
     }
-    if (authStore.role !== 'ADMINISTRATOR') return;
+    if (authStore.role !== 'ADMINISTRATOR' && authStore.role !== 'SUPER_ADMIN') return;
 
     const res = await apiRequest<any>('/settings/waba');
     if (res.success) {
@@ -607,7 +607,7 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
 </script>
 
 <div class="p-8 max-w-4xl mx-auto space-y-6">
-  {#if authStore.role && authStore.role !== 'ADMINISTRATOR'}
+  {#if authStore.role && authStore.role !== 'ADMINISTRATOR' && authStore.role !== 'SUPER_ADMIN'}
     <!-- Access Denied View for Non-Admins -->
     <div class="p-10 max-w-md mx-auto text-center space-y-4 py-16">
       <div class="w-16 h-16 rounded-2xl bg-rose-500/10 text-rose-600 dark:text-rose-400 mx-auto flex items-center justify-center border border-rose-500/20 shadow-lg shadow-rose-500/10">

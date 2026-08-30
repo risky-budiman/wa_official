@@ -41,6 +41,12 @@ export class UserService {
     role: UserRole;
     teamId?: string;
   }) {
+    const cleanEmail = body.email.toLowerCase().trim();
+    const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, cleanEmail)).limit(1);
+    if (existing) {
+      throw new Error(`Email "${body.email}" sudah digunakan oleh akun lain di sistem.`);
+    }
+
     const passwordHash = await hash(body.password || 'admin12345');
     const id = nanoid();
 
@@ -48,14 +54,14 @@ export class UserService {
       id,
       organizationId: orgId,
       teamId: body.teamId || null,
-      email: body.email,
+      email: cleanEmail,
       passwordHash,
       fullName: body.fullName,
       role: body.role || 'AGENT',
       status: 'ACTIVE',
     });
 
-    return { id, email: body.email, fullName: body.fullName, role: body.role };
+    return { id, email: cleanEmail, fullName: body.fullName, role: body.role };
   }
 
   static async update(orgId: string, userId: string, body: {
@@ -116,7 +122,7 @@ export const userRoutes = new Elysia({ prefix: '/users' })
       set.status = 401;
       return { success: false, error: 'Unauthorized' };
     }
-    if (user.role !== 'ADMINISTRATOR' && user.role !== 'SUPERVISOR') {
+    if (user.role !== 'ADMINISTRATOR' && user.role !== 'SUPER_ADMIN' && user.role !== 'SUPERVISOR') {
       set.status = 403;
       return { success: false, error: 'Akses dibatasi' };
     }
@@ -133,7 +139,7 @@ export const userRoutes = new Elysia({ prefix: '/users' })
         set.status = 401;
         return { success: false, error: 'Unauthorized' };
       }
-      if (user.role !== 'ADMINISTRATOR') {
+      if (user.role !== 'ADMINISTRATOR' && user.role !== 'SUPER_ADMIN') {
         set.status = 403;
         return { success: false, error: 'Hanya Administrator yang dapat menambah anggota baru' };
       }
@@ -169,7 +175,8 @@ export const userRoutes = new Elysia({ prefix: '/users' })
     }
     // Allow admin to update any user, or any user to update their own online status
     const isSelf = params.id === user.id;
-    if (!isSelf && user.role !== 'ADMINISTRATOR') {
+    const isAdmin = user.role === 'ADMINISTRATOR' || user.role === 'SUPER_ADMIN';
+    if (!isSelf && !isAdmin) {
       set.status = 403;
       return { success: false, error: 'Hanya Administrator yang dapat mengubah data pengguna lain' };
     }
@@ -184,7 +191,7 @@ export const userRoutes = new Elysia({ prefix: '/users' })
       set.status = 401;
       return { success: false, error: 'Unauthorized' };
     }
-    if (user.role !== 'ADMINISTRATOR') {
+    if (user.role !== 'ADMINISTRATOR' && user.role !== 'SUPER_ADMIN') {
       set.status = 403;
       return { success: false, error: 'Hanya Administrator yang dapat menghapus pengguna' };
     }

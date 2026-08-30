@@ -14,38 +14,64 @@
     Settings,
     Key,
     LogOut,
-    Bot
+    Bot,
+    Building2,
+    ShieldAlert,
+    ArrowLeft,
+    CreditCard
   } from 'lucide-svelte';
 
   const menuItems = $derived([
     {
       label: 'Main',
       items: [
-        { name: 'Live Inbox', path: '/inbox', icon: MessageSquare, roles: ['ADMINISTRATOR', 'SUPERVISOR', 'AGENT'] },
-        { name: 'Kontak Pelanggan', path: '/contacts', icon: Contact, roles: ['ADMINISTRATOR', 'SUPERVISOR', 'AGENT'] },
-        { name: 'Template WA', path: '/templates', icon: FileText, roles: ['ADMINISTRATOR', 'SUPERVISOR'] },
-        { name: 'Broadcast', path: '/broadcast', icon: Radio, roles: ['ADMINISTRATOR', 'SUPERVISOR'] },
-        { name: 'Laporan & SLA', path: '/reports', icon: BarChart3, roles: ['ADMINISTRATOR', 'SUPERVISOR'] }
+        { name: 'Live Inbox', path: '/inbox', icon: MessageSquare, roles: ['SUPER_ADMIN', 'ADMINISTRATOR', 'SUPERVISOR', 'AGENT'] },
+        { name: 'Kontak Pelanggan', path: '/contacts', icon: Contact, roles: ['SUPER_ADMIN', 'ADMINISTRATOR', 'SUPERVISOR', 'AGENT'] },
+        { name: 'Template WA', path: '/templates', icon: FileText, roles: ['SUPER_ADMIN', 'ADMINISTRATOR', 'SUPERVISOR'] },
+        { name: 'Broadcast', path: '/broadcast', icon: Radio, roles: ['SUPER_ADMIN', 'ADMINISTRATOR', 'SUPERVISOR'] },
+        { name: 'Laporan & SLA', path: '/reports', icon: BarChart3, roles: ['SUPER_ADMIN', 'ADMINISTRATOR', 'SUPERVISOR'] }
       ]
     },
     {
       label: 'Supervisor',
       items: [
-        { name: 'Monitoring Tim', path: '/supervisor/monitoring', icon: Eye, roles: ['ADMINISTRATOR', 'SUPERVISOR'] }
+        { name: 'Monitoring Tim', path: '/supervisor/monitoring', icon: Eye, roles: ['SUPER_ADMIN', 'ADMINISTRATOR', 'SUPERVISOR'] }
       ]
     },
     {
       label: 'Administration',
       items: [
-        { name: 'Kelola Tim & Agen', path: '/admin/users', icon: Users, roles: ['ADMINISTRATOR'] },
-        { name: 'Pengaturan WABA', path: '/admin/settings', icon: Settings, roles: ['ADMINISTRATOR'] },
-        { name: 'API Key & Developer', path: '/admin/api-keys', icon: Key, roles: ['ADMINISTRATOR'] }
+        { name: 'Kelola Tim & Agen', path: '/admin/users', icon: Users, roles: ['SUPER_ADMIN', 'ADMINISTRATOR'] },
+        { name: 'Paket & Langganan', path: '/admin/subscription', icon: CreditCard, roles: ['SUPER_ADMIN', 'ADMINISTRATOR'] },
+        { name: 'Pengaturan WABA', path: '/admin/settings', icon: Settings, roles: ['SUPER_ADMIN', 'ADMINISTRATOR'] },
+        { name: 'API Key & Developer', path: '/admin/api-keys', icon: Key, roles: ['SUPER_ADMIN', 'ADMINISTRATOR'] }
       ]
     }
   ]);
 </script>
 
 <aside class="w-64 bg-white dark:bg-slate-900/95 backdrop-blur border-r border-slate-200 dark:border-slate-800 flex flex-col h-full shrink-0">
+  <!-- Impersonation Active Banner -->
+  {#if authStore.isImpersonating}
+    <div class="m-3 p-3 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-900 dark:text-amber-300 text-xs space-y-2">
+      <div class="flex items-center gap-1.5 font-bold">
+        <ShieldAlert class="w-4 h-4 text-amber-500 shrink-0" />
+        <span>Mode Akses Tenant</span>
+      </div>
+      <p class="text-[11px] leading-tight text-slate-600 dark:text-slate-400">
+        Anda sedang masuk ke akun tenant <strong>{authStore.user?.organizationName || 'Klien'}</strong>.
+      </p>
+      <button
+        type="button"
+        onclick={() => authStore.revertImpersonation()}
+        class="w-full py-1.5 px-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-[11px] flex items-center justify-center gap-1 transition cursor-pointer"
+      >
+        <ArrowLeft class="w-3.5 h-3.5" />
+        <span>Kembali ke Portal /administrator</span>
+      </button>
+    </div>
+  {/if}
+
   <!-- Brand Logo -->
   <div class="p-5 border-b border-slate-200 dark:border-slate-800 flex items-center gap-3">
     <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-600 to-emerald-400 flex items-center justify-center shadow-lg shadow-emerald-500/20 text-slate-950">

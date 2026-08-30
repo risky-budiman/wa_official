@@ -7,7 +7,7 @@ import { sql } from 'drizzle-orm';
 import { organizations } from './organizations';
 import { teams } from './teams';
 
-export const userRoleEnum = ['ADMINISTRATOR', 'SUPERVISOR', 'AGENT'] as const;
+export const userRoleEnum = ['SUPER_ADMIN', 'ADMINISTRATOR', 'SUPERVISOR', 'AGENT'] as const;
 export const userStatusEnum = ['ACTIVE', 'INACTIVE', 'SUSPENDED'] as const;
 
 export type UserRole = (typeof userRoleEnum)[number];

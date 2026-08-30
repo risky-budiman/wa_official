@@ -23,9 +23,23 @@ export interface AiAgentConfig {
   staticMessage?: string;
 }
 
+export const orgStatusEnum = ['ACTIVE', 'SUSPENDED', 'TRIAL', 'EXPIRED'] as const;
+
+export type OrgStatus = (typeof orgStatusEnum)[number];
+export type OrgPlan = string;
+
 export const organizations = mysqlTable('organizations', {
   id: varchar('id', { length: 36 }).primaryKey(), // UUID v4
   name: varchar('name', { length: 255 }).notNull(),
+  status: varchar('status', { length: 30 }).default('ACTIVE').notNull(), // 'ACTIVE' | 'SUSPENDED' | 'TRIAL' | 'EXPIRED'
+  plan: varchar('plan', { length: 100 }).default('STARTER').notNull(), // Bebas / custom string nama paket
+  maxAgents: int('max_agents').default(5), // Agent seat limit
+  maxBroadcastPerMonth: int('max_broadcast_per_month').default(10000), // Monthly broadcast quota
+  expiresAt: datetime('expires_at'), // Subscription expiry date
+  ownerName: varchar('owner_name', { length: 255 }), // PIC Name
+  ownerPhone: varchar('owner_phone', { length: 50 }), // PIC WhatsApp Phone
+  ownerEmail: varchar('owner_email', { length: 255 }), // PIC Email
+  notes: text('notes'), // Internal admin notes / billing info
   wabaId: varchar('waba_id', { length: 100 }),
   appId: varchar('app_id', { length: 100 }),
   accessToken: text('access_token'), // Encrypted System User Token

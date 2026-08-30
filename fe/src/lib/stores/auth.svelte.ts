@@ -5,7 +5,7 @@ export interface User {
   id: string;
   email: string;
   fullName: string;
-  role: 'ADMINISTRATOR' | 'SUPERVISOR' | 'AGENT';
+  role: 'SUPER_ADMIN' | 'ADMINISTRATOR' | 'SUPERVISOR' | 'AGENT';
   organizationId: string;
   organizationName?: string;
   isOnline?: boolean;
@@ -14,18 +14,31 @@ export interface User {
 class AuthStore {
   user = $state<User | null>(null);
   token = $state<string | null>(null);
+  impersonatorToken = $state<string | null>(null);
+  impersonatorUser = $state<User | null>(null);
   isLoading = $state<boolean>(true);
 
   constructor() {
     if (typeof window !== 'undefined') {
       const savedToken = localStorage.getItem('wa_crm_token');
       const savedUser = localStorage.getItem('wa_crm_user');
+      const savedImpToken = localStorage.getItem('wa_crm_imp_token');
+      const savedImpUser = localStorage.getItem('wa_crm_imp_user');
+
+      if (savedImpToken && savedImpUser) {
+        try {
+          this.impersonatorToken = savedImpToken;
+          this.impersonatorUser = JSON.parse(savedImpUser);
+        } catch (_) {}
+      }
+
       if (savedToken && savedUser) {
         try {
           this.token = savedToken;
           const parsed = JSON.parse(savedUser);
           if (parsed.isOnline === undefined) parsed.isOnline = true;
           this.user = parsed;
+          this.fetchFreshProfile();
         } catch {
           this.logout();
         }
@@ -34,12 +47,33 @@ class AuthStore {
     }
   }
 
+  async fetchFreshProfile() {
+    if (!this.token) return;
+    try {
+      const res = await apiRequest<{ user: User }>('/auth/me');
+      if (res.success && res.user) {
+        this.user = res.user;
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('wa_crm_user', JSON.stringify(res.user));
+        }
+      }
+    } catch (_) {}
+  }
+
   get isAuthenticated(): boolean {
     return !!this.token && !!this.user;
   }
 
-  get role(): 'ADMINISTRATOR' | 'SUPERVISOR' | 'AGENT' | null {
+  get role(): 'SUPER_ADMIN' | 'ADMINISTRATOR' | 'SUPERVISOR' | 'AGENT' | null {
     return this.user?.role || null;
+  }
+
+  get isSuperAdmin(): boolean {
+    return this.user?.role === 'SUPER_ADMIN' || this.user?.role === 'ADMINISTRATOR';
+  }
+
+  get isImpersonating(): boolean {
+    return !!this.impersonatorToken;
   }
 
   get isOnline(): boolean {
@@ -53,6 +87,34 @@ class AuthStore {
     if (typeof window !== 'undefined') {
       localStorage.setItem('wa_crm_token', token);
       localStorage.setItem('wa_crm_user', JSON.stringify(user));
+    }
+  }
+
+  impersonate(tenantToken: string, tenantUser: User) {
+    if (typeof window !== 'undefined') {
+      // Save current master session if not already impersonating
+      if (!this.impersonatorToken && this.token && this.user) {
+        this.impersonatorToken = this.token;
+        this.impersonatorUser = this.user;
+        localStorage.setItem('wa_crm_imp_token', this.token);
+        localStorage.setItem('wa_crm_imp_user', JSON.stringify(this.user));
+      }
+      this.setAuth(tenantToken, tenantUser);
+    }
+  }
+
+  revertImpersonation() {
+    if (this.impersonatorToken && this.impersonatorUser) {
+      const origToken = this.impersonatorToken;
+      const origUser = this.impersonatorUser;
+      this.impersonatorToken = null;
+      this.impersonatorUser = null;
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('wa_crm_imp_token');
+        localStorage.removeItem('wa_crm_imp_user');
+      }
+      this.setAuth(origToken, origUser);
+      goto('/administrator');
     }
   }
 
@@ -104,9 +166,13 @@ class AuthStore {
   logout() {
     this.token = null;
     this.user = null;
+    this.impersonatorToken = null;
+    this.impersonatorUser = null;
     if (typeof window !== 'undefined') {
       localStorage.removeItem('wa_crm_token');
       localStorage.removeItem('wa_crm_user');
+      localStorage.removeItem('wa_crm_imp_token');
+      localStorage.removeItem('wa_crm_imp_user');
       goto('/login');
     }
   }
