@@ -7,7 +7,7 @@ import { eq, and, gte, sql, desc } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { env } from '../../config/env';
 import { db } from '../../config/database';
-import { organizations, phoneNumbers, messages, conversations, broadcastCampaigns } from '../../db/schema';
+import { organizations, phoneNumbers, messages, conversations, broadcastCampaigns, apiKeys } from '../../db/schema';
 import { authPlugin } from '../../middleware/auth';
 import { MetaApiService } from '../../services/meta-api.service';
 
@@ -927,4 +927,111 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
         model: t.Optional(t.String()),
       }),
     }
-  );
+  )
+
+  // ─── GET /settings/api-keys (List API Keys) ──
+  .get('/api-keys', async ({ user, set }) => {
+    if (!user) {
+      set.status = 401;
+      return { success: false, error: 'Unauthorized' };
+    }
+    if (user.role !== 'ADMINISTRATOR') {
+      set.status = 403;
+      return { success: false, error: 'Hanya Administrator yang dapat mengelola API Key' };
+    }
+
+    const keys = await db
+      .select({
+        id: apiKeys.id,
+        name: apiKeys.name,
+        keyPrefix: apiKeys.keyPrefix,
+        permissions: apiKeys.permissions,
+        lastUsedAt: apiKeys.lastUsedAt,
+        expiresAt: apiKeys.expiresAt,
+        createdAt: apiKeys.createdAt,
+      })
+      .from(apiKeys)
+      .where(eq(apiKeys.organizationId, user.orgId))
+      .orderBy(desc(apiKeys.createdAt));
+
+    return {
+      success: true,
+      items: keys,
+    };
+  })
+
+  // ─── POST /settings/api-keys (Generate New API Key) ──
+  .post(
+    '/api-keys',
+    async ({ user, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { success: false, error: 'Unauthorized' };
+      }
+      if (user.role !== 'ADMINISTRATOR') {
+        set.status = 403;
+        return { success: false, error: 'Hanya Administrator yang dapat membuat API Key' };
+      }
+
+      // Generate secret key
+      const randomSecret = nanoid(32) + nanoid(16);
+      const fullKey = `wacrm_live_${randomSecret}`;
+      const prefix = `wacrm_live_${randomSecret.slice(0, 6)}...${randomSecret.slice(-4)}`;
+      const keyId = nanoid();
+
+      const permissions = body.permissions && body.permissions.length > 0
+        ? body.permissions
+        : ['messages:send', 'templates:send', 'contacts:read', 'contacts:write'];
+
+      await db.insert(apiKeys).values({
+        id: keyId,
+        organizationId: user.orgId,
+        name: body.name.trim(),
+        key: fullKey,
+        keyPrefix: prefix,
+        permissions,
+        expiresAt: body.expiresAt ? new Date(body.expiresAt) : null,
+      });
+
+      return {
+        success: true,
+        message: 'API Key berhasil dibuat. Harap salin dan simpan key ini karena tidak akan ditampilkan lagi!',
+        apiKey: {
+          id: keyId,
+          name: body.name.trim(),
+          key: fullKey,
+          keyPrefix: prefix,
+          permissions,
+          createdAt: new Date(),
+        },
+      };
+    },
+    {
+      body: t.Object({
+        name: t.String({ minLength: 2 }),
+        permissions: t.Optional(t.Array(t.String())),
+        expiresAt: t.Optional(t.String()),
+      }),
+    }
+  )
+
+  // ─── DELETE /settings/api-keys/:id (Revoke API Key) ──
+  .delete('/api-keys/:id', async ({ user, params, set }) => {
+    if (!user) {
+      set.status = 401;
+      return { success: false, error: 'Unauthorized' };
+    }
+    if (user.role !== 'ADMINISTRATOR') {
+      set.status = 403;
+      return { success: false, error: 'Hanya Administrator yang dapat menghapus API Key' };
+    }
+
+    await db
+      .delete(apiKeys)
+      .where(and(eq(apiKeys.id, params.id), eq(apiKeys.organizationId, user.orgId)));
+
+    return {
+      success: true,
+      message: 'API Key berhasil dicabut / dihapus',
+    };
+  });

@@ -12,6 +12,7 @@
     Eye,
     Users,
     Settings,
+    Key,
     LogOut,
     Bot
   } from 'lucide-svelte';
@@ -37,7 +38,8 @@
       label: 'Administration',
       items: [
         { name: 'Kelola Tim & Agen', path: '/admin/users', icon: Users, roles: ['ADMINISTRATOR'] },
-        { name: 'Pengaturan WABA', path: '/admin/settings', icon: Settings, roles: ['ADMINISTRATOR'] }
+        { name: 'Pengaturan WABA', path: '/admin/settings', icon: Settings, roles: ['ADMINISTRATOR'] },
+        { name: 'API Key & Developer', path: '/admin/api-keys', icon: Key, roles: ['ADMINISTRATOR'] }
       ]
     }
   ]);

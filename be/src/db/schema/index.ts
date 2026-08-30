@@ -35,3 +35,6 @@ export type { ActivityLog, NewActivityLog } from './activity-logs';
 export { conversationParticipants, participantRoleEnum } from './conversation-participants';
 export type { ConversationParticipant, NewConversationParticipant } from './conversation-participants';
 
+export { apiKeys } from './api-keys';
+export type { ApiKey, NewApiKey } from './api-keys';
+
