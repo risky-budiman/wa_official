@@ -90,7 +90,7 @@ export class MetaApiService {
     }
 
     const url = `${this.baseUrl}/${params.phoneNumberId}/messages`;
-    const res = await fetch(url, {
+    let res = await fetch(url, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
@@ -105,7 +105,38 @@ export class MetaApiService {
       }),
     });
 
-    const data = await res.json();
+    let data = await res.json();
+
+    // Auto-heal retry: If Meta requires a URL button parameter that was missing
+    if (!res.ok && data.error?.error_data?.details?.includes('Button at index')) {
+      const match = data.error.error_data.details.match(/index (\d+)/);
+      const btnIdx = match ? match[1] : '0';
+      if (!templateObj.components) templateObj.components = [];
+      templateObj.components.push({
+        type: 'button',
+        sub_type: 'url',
+        index: btnIdx,
+        parameters: [{ type: 'text', text: 'promo' }],
+      });
+
+      console.log(`🔄 Auto-healing button parameter at index ${btnIdx} and retrying...`);
+      res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: targetNumber,
+          type: 'template',
+          template: templateObj,
+        }),
+      });
+      data = await res.json();
+    }
+
     if (!res.ok) {
       console.error('❌ Meta sendTemplateMessage error:', JSON.stringify(data));
       throw new Error(data.error?.message || 'Gagal mengirim template ke Meta WhatsApp API');

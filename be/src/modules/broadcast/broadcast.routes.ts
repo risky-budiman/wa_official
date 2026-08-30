@@ -100,17 +100,80 @@ export class BroadcastService {
     const campaignId = nanoid();
     const totalRecipients = contactList.length;
 
-    // Inspect variables in template body
-    let bodyVarsCount = 0;
-    if (Array.isArray(tmpl.components)) {
-      const bodyComp = tmpl.components.find((c: any) => (c.type || '').toUpperCase() === 'BODY');
-      if (bodyComp && typeof (bodyComp as any).text === 'string') {
-        const matches = (bodyComp as any).text.match(/\{\{\d+\}\}/g);
-        if (matches) {
-          bodyVarsCount = matches.length;
+    // Helper to dynamically build required Meta parameters (Header, Body, Buttons)
+    const buildComponentsPayload = (tmplComponents: any, contactName: string) => {
+      if (!Array.isArray(tmplComponents) || tmplComponents.length === 0) return [];
+      const result: any[] = [];
+
+      for (const comp of tmplComponents) {
+        const compType = (comp.type || '').toUpperCase();
+
+        // 1. Header with dynamic variable
+        if (compType === 'HEADER') {
+          const format = (comp.format || '').toUpperCase();
+          if (format === 'TEXT' && typeof comp.text === 'string') {
+            const headerMatches = comp.text.match(/\{\{\d+\}\}/g);
+            if (headerMatches && headerMatches.length > 0) {
+              result.push({
+                type: 'header',
+                parameters: headerMatches.map(() => ({
+                  type: 'text',
+                  text: contactName || 'Pelanggan',
+                })),
+              });
+            }
+          }
+        }
+
+        // 2. Body with dynamic variables
+        if (compType === 'BODY' && typeof comp.text === 'string') {
+          const bodyMatches = comp.text.match(/\{\{\d+\}\}/g);
+          if (bodyMatches && bodyMatches.length > 0) {
+            result.push({
+              type: 'body',
+              parameters: bodyMatches.map((_: any, idx: number) => ({
+                type: 'text',
+                text: idx === 0 ? (contactName || 'Pelanggan') : 'Spesial Hari Ini',
+              })),
+            });
+          }
+        }
+
+        // 3. Buttons (Dynamic URL / Copy Code)
+        if (compType === 'BUTTONS' && Array.isArray(comp.buttons)) {
+          comp.buttons.forEach((btn: any, btnIndex: number) => {
+            const btnType = (btn.type || '').toUpperCase();
+            if (btnType === 'URL') {
+              result.push({
+                type: 'button',
+                sub_type: 'url',
+                index: String(btnIndex),
+                parameters: [
+                  {
+                    type: 'text',
+                    text: 'promo',
+                  },
+                ],
+              });
+            } else if (btnType === 'COPY_CODE') {
+              result.push({
+                type: 'button',
+                sub_type: 'copy_code',
+                index: String(btnIndex),
+                parameters: [
+                  {
+                    type: 'coupon_code',
+                    coupon_code: 'PROMO2026',
+                  },
+                ],
+              });
+            }
+          });
         }
       }
-    }
+
+      return result;
+    };
 
     // 4. Insert Initial Campaign Record (Starts with 0 counts)
     await db.insert(broadcastCampaigns).values({
@@ -140,24 +203,7 @@ export class BroadcastService {
         }
 
         try {
-          // Build component parameters if template has variables
-          const componentsPayload: any[] = [];
-          if (bodyVarsCount > 0) {
-            const parameters: any[] = [];
-            for (let i = 1; i <= bodyVarsCount; i++) {
-              if (i === 1) {
-                parameters.push({ type: 'text', text: contact.name || 'Pelanggan' });
-              } else if (i === 2) {
-                parameters.push({ type: 'text', text: 'Spesial Hari Ini' });
-              } else {
-                parameters.push({ type: 'text', text: '-' });
-              }
-            }
-            componentsPayload.push({
-              type: 'body',
-              parameters,
-            });
-          }
+          const componentsPayload = buildComponentsPayload(tmpl.components, contact.name || 'Pelanggan');
 
           console.log(`🚀 Mengirim broadcast "${body.name}" template "${tmpl.name}" ke ${contact.waId}...`);
 
