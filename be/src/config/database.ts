@@ -62,8 +62,8 @@ export async function testConnection(): Promise<void> {
           expires_at DATETIME NULL,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
           updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP NOT NULL,
-          FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+          INDEX idx_api_keys_org (organization_id)
+        ) ENGINE=InnoDB;
       `);
     } catch (err: any) {
       console.warn('api_keys table check notice:', err?.message || err);

@@ -158,6 +158,23 @@
     '{{4}}': '1 September 2026'
   });
 
+  // Dynamically detect all {{N}} variables in body text
+  const detectedVariables = $derived.by(() => {
+    const matches = formBodyText.match(/\{\{(\d+)\}\}/g) || [];
+    const unique = Array.from(new Set(matches)).sort((a, b) => {
+      const numA = parseInt(a.replace(/\D/g, ''), 10);
+      const numB = parseInt(b.replace(/\D/g, ''), 10);
+      return numA - numB;
+    });
+    for (const v of unique) {
+      if (!previewVars[v]) {
+        const num = v.replace(/\D/g, '');
+        previewVars[v] = num === '1' ? 'Budi Santoso' : num === '2' ? 'INV-2026-08' : `Nilai ${num}`;
+      }
+    }
+    return unique;
+  });
+
   // Copied indicator
   let copiedId = $state<string | null>(null);
 
@@ -940,18 +957,35 @@
                     </div>
                   </div>
 
-                  <!-- Simulation Variables Note -->
-                  <div class="mt-4 pt-3 border-t border-slate-800 text-[10px] text-slate-400 space-y-1">
-                    <div class="font-bold text-slate-300 flex items-center gap-1">
-                      <HelpCircle class="w-3 h-3 text-emerald-400" />
-                      Variabel Pengujian Pratinjau:
+                  <!-- Dynamic Simulation Variables Inputs -->
+                  <div class="mt-4 pt-3 border-t border-slate-800 text-[10px] text-slate-400 space-y-2">
+                    <div class="font-bold text-slate-300 flex items-center justify-between">
+                      <span class="flex items-center gap-1 text-emerald-400 font-bold">
+                        <HelpCircle class="w-3.5 h-3.5" />
+                        Isi Nilai Uji Coba ({detectedVariables.length} Variabel):
+                      </span>
+                      <span class="text-[9px] text-slate-500 font-normal">Edit untuk lihat di live preview</span>
                     </div>
-                    <div class="grid grid-cols-2 gap-1 font-mono text-[9px]">
-                      <div>&#123;&#123;1&#125;&#125; : {previewVars['{{1}}'] || 'Nama'}</div>
-                      <div>&#123;&#123;2&#125;&#125; : {previewVars['{{2}}'] || 'Parameter 2'}</div>
-                      <div>&#123;&#123;3&#125;&#125; : {previewVars['{{3}}'] || 'Parameter 3'}</div>
-                      <div>&#123;&#123;4&#125;&#125; : {previewVars['{{4}}'] || 'Parameter 4'}</div>
-                    </div>
+
+                    {#if detectedVariables.length > 0}
+                      <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-[140px] overflow-y-auto pr-1">
+                        {#each detectedVariables as v}
+                          <div class="flex items-center gap-1 bg-slate-900/90 p-1.5 rounded-lg border border-slate-800">
+                            <span class="font-mono font-bold text-emerald-400 text-[10px] shrink-0">{v} :</span>
+                            <input
+                              type="text"
+                              bind:value={previewVars[v]}
+                              placeholder={`Nilai untuk ${v}`}
+                              class="w-full px-1.5 py-0.5 rounded bg-slate-950 border border-slate-700/60 text-[10px] text-white focus:outline-none focus:border-emerald-500 font-sans"
+                            />
+                          </div>
+                        {/each}
+                      </div>
+                    {:else}
+                      <div class="text-[10px] text-slate-500 italic py-1">
+                        Belum ada variabel &#123;&#123;1&#125;&#125;. Klik "+ Sisipkan Variabel" untuk menambahkan.
+                      </div>
+                    {/if}
                   </div>
                 </div>
               </div>
