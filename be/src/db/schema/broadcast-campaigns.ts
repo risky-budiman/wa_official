@@ -17,8 +17,7 @@ export const broadcastCampaigns = mysqlTable('broadcast_campaigns', {
     .notNull()
     .references(() => organizations.id, { onDelete: 'cascade' }),
   createdById: varchar('created_by_id', { length: 36 })
-    .notNull()
-    .references(() => users.id),
+    .references(() => users.id, { onDelete: 'set null' }),
   templateId: varchar('template_id', { length: 36 })
     .notNull()
     .references(() => messageTemplates.id),

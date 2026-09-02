@@ -76,6 +76,10 @@ export async function testConnection(): Promise<void> {
       await connection.query(`ALTER TABLE users MODIFY COLUMN role VARCHAR(50) NOT NULL DEFAULT 'AGENT';`);
     } catch (_) {}
 
+    try {
+      await connection.query(`ALTER TABLE broadcast_campaigns MODIFY COLUMN created_by_id VARCHAR(36) NULL;`);
+    } catch (_) {}
+
     // Auto-detach platform admin accounts from any tenant/organization
     try {
       // Ensure admin@perusahaan.com is set as standalone SUPER_ADMIN
