@@ -152,11 +152,16 @@ export async function testConnection(): Promise<void> {
           created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
           updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
           INDEX idx_order_org (organization_id, created_at),
-          INDEX idx_order_status (payment_status),
-          CONSTRAINT fk_orders_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
-          CONSTRAINT fk_orders_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+          INDEX idx_order_status (payment_status)
+        ) ENGINE=InnoDB;
       `);
+      // Try add FK if compatible
+      try {
+        await connection.query(`ALTER TABLE subscription_orders ADD CONSTRAINT fk_orders_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE;`);
+      } catch (_) {}
+      try {
+        await connection.query(`ALTER TABLE subscription_orders ADD CONSTRAINT fk_orders_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL;`);
+      } catch (_) {}
     } catch (err: any) {
       console.warn('subscription_orders table check notice:', err?.message || err);
     }
