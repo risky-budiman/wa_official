@@ -22,15 +22,11 @@
     isLoading = true;
     errorMsg = null;
 
-    const res = await authStore.login({ email, password });
+    const res = await authStore.login({ email, password, portalType: 'TENANT' });
     isLoading = false;
 
     if (res.success) {
-      if (authStore.isPlatformStaff) {
-        goto('/administrator');
-      } else {
-        goto('/inbox');
-      }
+      goto('/inbox');
     } else {
       errorMsg = res.error || 'Login gagal';
     }
@@ -67,8 +63,8 @@
 
     <!-- Login Card -->
     <div class="glass-panel rounded-2xl p-7 shadow-2xl">
-      <h2 class="text-lg font-bold text-slate-900 dark:text-white mb-1">Masuk ke Akun Anda</h2>
-      <p class="text-xs text-slate-500 dark:text-slate-400 mb-6">Pilih portal Agen, Supervisor, atau Administrator</p>
+      <h2 class="text-lg font-bold text-slate-900 dark:text-white mb-1">Portal Tim Tenant Klien</h2>
+      <p class="text-xs text-slate-500 dark:text-slate-400 mb-6">Akses Live Chat, Kontak, & CRM Organisasi Anda</p>
 
       {#if errorMsg}
         <div class="mb-5 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-start gap-2.5 text-xs text-rose-600 dark:text-rose-400">
@@ -162,11 +158,20 @@
       </div>
       {/if}
 
-      <div class="mt-4 text-center">
+      <div class="mt-4 text-center space-y-2">
         <p class="text-xs text-slate-500 dark:text-slate-400">
           Belum punya organisasi?
           <a href="/register" class="text-emerald-600 dark:text-emerald-400 hover:underline font-semibold ml-1">Daftar sekarang</a>
         </p>
+        <div class="pt-2 border-t border-slate-200/80 dark:border-slate-800/80">
+          <a
+            href="/administrator/login"
+            class="text-[11px] font-semibold text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 transition inline-flex items-center gap-1"
+          >
+            <span>Administrator Platform?</span>
+            <span class="font-bold underline text-indigo-600 dark:text-indigo-400">Portal Master Admin →</span>
+          </a>
+        </div>
       </div>
     </div>
   </div>

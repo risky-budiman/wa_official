@@ -93,6 +93,7 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
         email: t.String({ format: 'email' }),
         password: t.String(),
         organizationId: t.Optional(t.String()),
+        portalType: t.Optional(t.Union([t.Literal('TENANT'), t.Literal('PLATFORM')])),
       }),
     }
   )

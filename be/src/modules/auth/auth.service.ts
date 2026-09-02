@@ -139,6 +139,25 @@ export class AuthService {
       throw new Error('Email atau password salah');
     }
 
+    // Strictly isolate Platform Administrator vs Tenant Portal Logins
+    const isPlatformStaff =
+      user.role === 'SUPER_ADMIN' ||
+      user.role === 'ADMIN_FINANCE' ||
+      user.role === 'ADMIN_SUPPORT' ||
+      user.organizationId === null;
+
+    if (body.portalType === 'TENANT' && isPlatformStaff) {
+      throw new Error(
+        'Akun Administrator Platform tidak dapat login melalui portal tenant. Silakan masuk melalui portal khusus Administrator di /administrator/login.'
+      );
+    }
+
+    if (body.portalType === 'PLATFORM' && !isPlatformStaff) {
+      throw new Error(
+        'Akses ditolak. Akun Anda adalah akun pengguna tenant klien. Silakan masuk melalui portal utama di /login.'
+      );
+    }
+
     // Get org name if user belongs to an organization
     let orgName = 'Platform Administrator (Independen)';
     if (user.organizationId) {

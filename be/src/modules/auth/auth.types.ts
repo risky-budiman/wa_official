@@ -19,6 +19,7 @@ export interface LoginBody {
   email: string;
   password: string;
   organizationId?: string;
+  portalType?: 'TENANT' | 'PLATFORM';
 }
 
 /** Response from successful auth */

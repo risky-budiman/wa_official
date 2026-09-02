@@ -3,6 +3,7 @@
   import { authStore } from "$lib/stores/auth.svelte";
   import { themeStore } from "$lib/stores/theme.svelte";
   import { onMount } from "svelte";
+  import { goto } from "$app/navigation";
   import RoleBadge from "$lib/components/layout/RoleBadge.svelte";
   import {
     Building2,
@@ -797,10 +798,10 @@
       if (authStore.isPlatformStaff) {
         await loadData();
       } else {
-        isLoading = false;
+        goto("/administrator/login");
       }
     } else {
-      isLoading = false;
+      goto("/administrator/login");
     }
   });
 
@@ -2492,7 +2493,10 @@
 
             <!-- Logout Button -->
             <button
-              onclick={() => authStore.logout()}
+              onclick={() => {
+                authStore.logout();
+                goto("/administrator/login");
+              }}
               class="p-2 sm:p-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/20 transition cursor-pointer"
               title="Keluar / Logout"
             >

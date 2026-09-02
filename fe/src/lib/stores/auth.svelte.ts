@@ -139,7 +139,12 @@ class AuthStore {
     });
   }
 
-  async login(body: { email: string; password: string; organizationId?: string }) {
+  async login(body: {
+    email: string;
+    password: string;
+    organizationId?: string;
+    portalType?: 'TENANT' | 'PLATFORM';
+  }) {
     const res = await apiRequest('/auth/login', {
       method: 'POST',
       body: JSON.stringify(body)
