@@ -74,7 +74,7 @@ class AuthStore {
   }
 
   get isPrimaryAdmin(): boolean {
-    return Boolean(this.user?.isPrimaryAdmin || (this.user?.role === 'SUPER_ADMIN' && !this.user?.organizationId));
+    return this.user?.isPrimaryAdmin === true;
   }
 
   get isPlatformStaff(): boolean {

@@ -4073,7 +4073,8 @@
               class="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 font-semibold"
             >
               <option value="ALL">Semua Peran ({staffList.length})</option>
-              <option value="SUPER_ADMIN">Master Super Admin</option>
+              <option value="SUPER_ADMIN">Master Super Admin (Utama)</option>
+              <option value="CO_SUPER_ADMIN">Co-Super Administrator</option>
               <option value="ADMIN_FINANCE">Finance (Keuangan)</option>
               <option value="ADMIN_SUPPORT">Support / Teknis</option>
             </select>
@@ -4137,9 +4138,11 @@
                             class="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs uppercase shadow-xs shrink-0 {staff.role ===
                             'SUPER_ADMIN'
                               ? 'bg-indigo-600 text-white'
-                              : staff.role === 'ADMIN_FINANCE'
-                                ? 'bg-emerald-600 text-white'
-                                : 'bg-cyan-600 text-white'}"
+                              : staff.role === 'CO_SUPER_ADMIN'
+                                ? 'bg-violet-600 text-white'
+                                : staff.role === 'ADMIN_FINANCE'
+                                  ? 'bg-emerald-600 text-white'
+                                  : 'bg-cyan-600 text-white'}"
                           >
                             {staff.fullName.charAt(0)}
                           </div>

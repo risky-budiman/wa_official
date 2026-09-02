@@ -92,11 +92,11 @@ export async function testConnection(): Promise<void> {
         SET organization_id = NULL, role = 'SUPER_ADMIN', is_primary_admin = 1 
         WHERE email = 'admin@perusahaan.com' OR email = 'admin@ids.net.id' OR email = 'riskybudiman1@gmail.com';
       `);
-      // Ensure all other SUPER_ADMIN, ADMIN_FINANCE, ADMIN_SUPPORT have organization_id = NULL
+      // Ensure all other SUPER_ADMIN, CO_SUPER_ADMIN, ADMIN_FINANCE, ADMIN_SUPPORT have organization_id = NULL
       await connection.query(`
         UPDATE users 
         SET organization_id = NULL 
-        WHERE role IN ('SUPER_ADMIN', 'ADMIN_FINANCE', 'ADMIN_SUPPORT');
+        WHERE role IN ('SUPER_ADMIN', 'CO_SUPER_ADMIN', 'ADMIN_FINANCE', 'ADMIN_SUPPORT');
       `);
     } catch (_) {}
 
