@@ -7,7 +7,14 @@ import { sql } from 'drizzle-orm';
 import { organizations } from './organizations';
 import { teams } from './teams';
 
-export const userRoleEnum = ['SUPER_ADMIN', 'ADMINISTRATOR', 'SUPERVISOR', 'AGENT'] as const;
+export const userRoleEnum = [
+  'SUPER_ADMIN',
+  'ADMIN_FINANCE',
+  'ADMIN_SUPPORT',
+  'ADMINISTRATOR',
+  'SUPERVISOR',
+  'AGENT',
+] as const;
 export const userStatusEnum = ['ACTIVE', 'INACTIVE', 'SUSPENDED'] as const;
 
 export type UserRole = (typeof userRoleEnum)[number];
@@ -16,7 +23,6 @@ export type UserStatus = (typeof userStatusEnum)[number];
 export const users = mysqlTable('users', {
   id: varchar('id', { length: 36 }).primaryKey(),
   organizationId: varchar('organization_id', { length: 36 })
-    .notNull()
     .references(() => organizations.id, { onDelete: 'cascade' }),
   teamId: varchar('team_id', { length: 36 })
     .references(() => teams.id, { onDelete: 'set null' }),

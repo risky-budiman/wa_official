@@ -70,7 +70,7 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
         // Generate JWT token
         const token = await jwt.sign({
           id: user.id,
-          orgId: user.organizationId,
+          orgId: user.organizationId || '',
           role: user.role,
           email: user.email,
         });
@@ -106,7 +106,7 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
 
     try {
       const [dbUser] = await db.select().from(users).where(eq(users.id, user.id)).limit(1);
-      const [org] = dbUser
+      const [org] = (dbUser?.organizationId)
         ? await db.select().from(organizations).where(eq(organizations.id, dbUser.organizationId)).limit(1)
         : [null];
 
@@ -117,8 +117,8 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
           email: dbUser?.email || user.email,
           fullName: dbUser?.fullName || user.email || 'Admin',
           role: dbUser?.role || user.role,
-          organizationId: dbUser?.organizationId || user.orgId,
-          organizationName: org?.name || 'WhatsApp CRM',
+          organizationId: dbUser?.organizationId || null,
+          organizationName: org?.name || 'Platform Administrator (Independen)',
           isOnline: dbUser?.isOnline ?? true,
         },
       };
@@ -130,8 +130,8 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
           email: user.email,
           fullName: user.email || 'Admin',
           role: user.role,
-          organizationId: user.orgId,
-          organizationName: 'WhatsApp CRM',
+          organizationId: user.orgId || null,
+          organizationName: 'Platform Administrator (Independen)',
           isOnline: true,
         },
       };
@@ -201,7 +201,7 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
       const finalEmail = updateData.email || dbUser.email;
       const newToken = await jwt.sign({
         id: dbUser.id,
-        orgId: dbUser.organizationId,
+        orgId: dbUser.organizationId || '',
         role: dbUser.role,
         email: finalEmail,
       });
@@ -215,7 +215,7 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
           email: finalEmail,
           fullName: updateData.fullName || dbUser.fullName,
           role: dbUser.role,
-          organizationId: dbUser.organizationId,
+          organizationId: dbUser.organizationId || null,
         },
       };
     },

@@ -26,7 +26,11 @@
     isLoading = false;
 
     if (res.success) {
-      goto('/inbox');
+      if (authStore.isPlatformStaff) {
+        goto('/administrator');
+      } else {
+        goto('/inbox');
+      }
     } else {
       errorMsg = res.error || 'Login gagal';
     }

@@ -1,14 +1,24 @@
 <script lang="ts">
   interface Props {
-    role?: 'SUPER_ADMIN' | 'ADMINISTRATOR' | 'SUPERVISOR' | 'AGENT' | null;
+    role?: 'SUPER_ADMIN' | 'ADMIN_FINANCE' | 'ADMIN_SUPPORT' | 'ADMINISTRATOR' | 'SUPERVISOR' | 'AGENT' | null;
   }
   let { role = 'AGENT' }: Props = $props();
 </script>
 
 {#if role === 'SUPER_ADMIN'}
-  <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-500/20 text-purple-400 border border-purple-500/30">
-    <span class="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
-    Super Admin
+  <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-500/20 text-indigo-500 dark:text-indigo-400 border border-indigo-500/30">
+    <span class="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
+    Master Super Admin
+  </span>
+{:else if role === 'ADMIN_FINANCE'}
+  <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+    Finance Staff
+  </span>
+{:else if role === 'ADMIN_SUPPORT'}
+  <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30">
+    <span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+    Support Staff
   </span>
 {:else if role === 'ADMINISTRATOR'}
   <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-500/15 text-rose-400 border border-rose-500/20">

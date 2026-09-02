@@ -30,7 +30,7 @@ export interface AuthResponse {
     email: string;
     fullName: string;
     role: UserRole;
-    organizationId: string;
+    organizationId: string | null;
     organizationName: string;
   };
 }

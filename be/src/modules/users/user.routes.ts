@@ -33,7 +33,7 @@ export class UserService {
       .where(
         and(
           eq(users.organizationId, orgId),
-          sql`${users.role} != 'SUPER_ADMIN'`
+          sql`${users.role} NOT IN ('SUPER_ADMIN', 'ADMIN_FINANCE', 'ADMIN_SUPPORT')`
         )
       )
       .orderBy(desc(users.createdAt));
@@ -46,8 +46,8 @@ export class UserService {
     role: UserRole;
     teamId?: string;
   }) {
-    if ((body.role as string) === 'SUPER_ADMIN') {
-      throw new Error('Role SUPER_ADMIN tidak dapat dibuat melalui menu staf tenant.');
+    if (['SUPER_ADMIN', 'ADMIN_FINANCE', 'ADMIN_SUPPORT'].includes(body.role as string)) {
+      throw new Error('Role staf platform tidak dapat dibuat melalui menu staf tenant.');
     }
 
     const cleanEmail = body.email.toLowerCase().trim();
@@ -83,8 +83,8 @@ export class UserService {
     teamId?: string | null;
     password?: string;
   }) {
-    if ((body.role as string) === 'SUPER_ADMIN') {
-      throw new Error('Role SUPER_ADMIN tidak dapat ditetapkan melalui menu staf tenant.');
+    if (['SUPER_ADMIN', 'ADMIN_FINANCE', 'ADMIN_SUPPORT'].includes(body.role as string)) {
+      throw new Error('Role staf platform tidak dapat ditetapkan melalui menu staf tenant.');
     }
 
     const updatePayload: Record<string, any> = {};
@@ -106,7 +106,7 @@ export class UserService {
         and(
           eq(users.id, userId),
           eq(users.organizationId, orgId),
-          sql`${users.role} != 'SUPER_ADMIN'`
+          sql`${users.role} NOT IN ('SUPER_ADMIN', 'ADMIN_FINANCE', 'ADMIN_SUPPORT')`
         )
       );
 
@@ -120,7 +120,7 @@ export class UserService {
         and(
           eq(users.id, userId),
           eq(users.organizationId, orgId),
-          sql`${users.role} != 'SUPER_ADMIN'`
+          sql`${users.role} NOT IN ('SUPER_ADMIN', 'ADMIN_FINANCE', 'ADMIN_SUPPORT')`
         )
       );
 

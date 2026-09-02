@@ -19,6 +19,7 @@ import { webhookRoutes } from './modules/webhook/webhook.routes';
 import { mediaRoutes } from './modules/media/media.routes';
 import { externalRoutes } from './modules/external/external.routes';
 import { superAdminRoutes } from './modules/super-admin/super-admin.routes';
+import { billingRoutes } from './modules/billing/billing.routes';
 import { wsPlugin } from './websocket/ws.server';
 import './modules/webhook/webhook.processor'; // Initialize BullMQ worker
 import { AutoResolveService } from './services/auto-resolve.service';
@@ -69,6 +70,7 @@ const app = new Elysia()
       .use(mediaRoutes)
       .use(externalRoutes)
       .use(superAdminRoutes)
+      .use(billingRoutes)
   )
 
   // ─── Global Error Handler ──────────────────

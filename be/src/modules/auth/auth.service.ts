@@ -124,18 +124,31 @@ export class AuthService {
       throw new Error('Akun Anda tidak aktif. Hubungi administrator.');
     }
 
-    // Verify password
-    const isPasswordValid = await verify(user.passwordHash, body.password);
+    // Verify password (supports Argon2 and Bun bcrypt)
+    let isPasswordValid = false;
+    try {
+      isPasswordValid = await verify(user.passwordHash, body.password);
+    } catch (_) {}
+    if (!isPasswordValid) {
+      try {
+        isPasswordValid = await Bun.password.verify(body.password, user.passwordHash);
+      } catch (_) {}
+    }
+
     if (!isPasswordValid) {
       throw new Error('Email atau password salah');
     }
 
-    // Get org name
-    const [org] = await db
-      .select({ name: organizations.name })
-      .from(organizations)
-      .where(eq(organizations.id, user.organizationId))
-      .limit(1);
+    // Get org name if user belongs to an organization
+    let orgName = 'Platform Administrator (Independen)';
+    if (user.organizationId) {
+      const [org] = await db
+        .select({ name: organizations.name })
+        .from(organizations)
+        .where(eq(organizations.id, user.organizationId))
+        .limit(1);
+      if (org?.name) orgName = org.name;
+    }
 
     // Update online status
     await db
@@ -148,8 +161,8 @@ export class AuthService {
       email: user.email,
       fullName: user.fullName,
       role: user.role,
-      organizationId: user.organizationId,
-      organizationName: org?.name || '',
+      organizationId: user.organizationId || null,
+      organizationName: orgName,
     };
   }
 

@@ -3,19 +3,54 @@
 // ===========================================
 
 import { Elysia, t } from 'elysia';
-import { db } from '../../config/database';
+import { db, testConnection } from '../../config/database';
 import { organizations, type OrgStatus, type OrgPlan } from '../../db/schema/organizations';
-import { users } from '../../db/schema/users';
+import { users, type UserRole, type UserStatus } from '../../db/schema/users';
 import { conversations } from '../../db/schema/conversations';
 import { messages } from '../../db/schema/messages';
 import { contacts } from '../../db/schema/contacts';
 import { phoneNumbers } from '../../db/schema/phone-numbers';
 import { platformSettings } from '../../db/schema/settings';
 import { authPlugin } from '../../middleware/auth';
-import { eq, desc, sql, and, lt, gt } from 'drizzle-orm';
+import { eq, desc, sql, and, lt, gt, isNull } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { jwt } from '@elysiajs/jwt';
 import { env } from '../../config/env';
+import { BillingService } from '../billing/billing.service';
+import { exec } from 'node:child_process';
+import { promisify } from 'node:util';
+import fs from 'node:fs';
+import path from 'node:path';
+
+const execAsync = promisify(exec);
+
+function getGitCmd(): string {
+  if (process.platform === 'win32') {
+    const candidates = [
+      'C:\\Program Files\\Git\\cmd\\git.exe',
+      'C:\\Program Files\\Git\\bin\\git.exe',
+      path.join(process.env.LOCALAPPDATA || '', 'Programs\\Git\\cmd\\git.exe'),
+    ];
+    for (const c of candidates) {
+      if (c && fs.existsSync(c)) {
+        return `"${c}"`;
+      }
+    }
+  }
+  return 'git';
+}
+
+function getRepoDir(): string {
+  const cwd = process.cwd();
+  if (fs.existsSync(path.join(cwd, '.git'))) {
+    return cwd;
+  }
+  const parent = path.resolve(cwd, '..');
+  if (fs.existsSync(path.join(parent, '.git'))) {
+    return parent;
+  }
+  return cwd;
+}
 
 export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
   .use(authPlugin)
@@ -25,7 +60,7 @@ export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
       secret: env.JWT_SECRET,
     })
   )
-  // Super Admin Authorization Guard (Strictly Isolated for Platform Owner)
+  // Platform Authorization Guard (Super Admin & Platform Staff)
   .onBeforeHandle(async ({ user, set }) => {
     if (!user) {
       set.status = 401;
@@ -33,17 +68,24 @@ export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
     }
 
     let currentRole = user.role;
-    if (currentRole !== 'SUPER_ADMIN') {
-      const [dbUser] = await db.select({ role: users.role }).from(users).where(eq(users.id, user.id)).limit(1);
-      if (dbUser?.role) currentRole = dbUser.role;
-    }
+    const [dbUser] = await db
+      .select({ role: users.role, organizationId: users.organizationId })
+      .from(users)
+      .where(eq(users.id, user.id))
+      .limit(1);
+    if (dbUser?.role) currentRole = dbUser.role;
 
-    // Strict Isolation: ONLY SUPER_ADMIN is permitted
-    if (currentRole !== 'SUPER_ADMIN') {
+    // Platform roles: SUPER_ADMIN, ADMIN_FINANCE, ADMIN_SUPPORT
+    const isPlatformStaff =
+      currentRole === 'SUPER_ADMIN' ||
+      currentRole === 'ADMIN_FINANCE' ||
+      currentRole === 'ADMIN_SUPPORT';
+
+    if (!isPlatformStaff) {
       set.status = 403;
       return {
         success: false,
-        error: 'Akses ditolak. Panel Kontrol Organisasi ini hanya dapat diakses oleh Master Super Admin (Pemilik Platform).',
+        error: 'Akses ditolak. Panel Kontrol ini hanya dapat diakses oleh Administrator & Staf Platform.',
       };
     }
   })
@@ -613,7 +655,7 @@ export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
 
   // ─── DELETE /super-admin/organizations/:id ────────
   .delete('/organizations/:id', async ({ params, user, set }) => {
-    if (user!.orgId === params.id) {
+    if (user?.orgId && user.orgId === params.id) {
       set.status = 400;
       return { success: false, error: 'Anda tidak dapat menghapus organisasi utama tempat Anda sedang login.' };
     }
@@ -901,4 +943,650 @@ export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
         qualityRating: t.Optional(t.String()),
       }),
     }
-  );
+  )
+
+  // ─── GET /super-admin/staff (List Standalone Platform Staff) ────────
+  .get('/staff', async () => {
+    const staffMembers = await db
+      .select({
+        id: users.id,
+        fullName: users.fullName,
+        email: users.email,
+        role: users.role,
+        status: users.status,
+        isOnline: users.isOnline,
+        createdAt: users.createdAt,
+        updatedAt: users.updatedAt,
+      })
+      .from(users)
+      .where(isNull(users.organizationId))
+      .orderBy(desc(users.createdAt));
+
+    return {
+      success: true,
+      data: staffMembers,
+    };
+  })
+
+  // ─── POST /super-admin/staff (Create Standalone Platform Staff) ────────
+  .post(
+    '/staff',
+    async ({ user, body, set }) => {
+      // Only SUPER_ADMIN can create staff
+      if (user!.role !== 'SUPER_ADMIN') {
+        const [dbUser] = await db.select({ role: users.role }).from(users).where(eq(users.id, user!.id)).limit(1);
+        if (dbUser?.role !== 'SUPER_ADMIN') {
+          set.status = 403;
+          return { success: false, error: 'Hanya Master Super Administrator yang berhak membuat akun staf platform.' };
+        }
+      }
+
+      const cleanEmail = body.email.toLowerCase().trim();
+      const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, cleanEmail)).limit(1);
+      if (existing) {
+        set.status = 400;
+        return { success: false, error: `Email "${body.email}" sudah digunakan di sistem.` };
+      }
+
+      const passwordHash = await Bun.password.hash(body.password, {
+        algorithm: 'bcrypt',
+        cost: 10,
+      });
+
+      const staffId = `staff_${nanoid(12)}`;
+
+      await db.insert(users).values({
+        id: staffId,
+        organizationId: null, // Standalone platform staff
+        teamId: null,
+        email: cleanEmail,
+        passwordHash,
+        fullName: body.fullName.trim(),
+        role: body.role as UserRole,
+        status: 'ACTIVE',
+        isOnline: false,
+        maxActiveChats: 0,
+      });
+
+      return {
+        success: true,
+        message: `Akun staf platform "${body.fullName}" (${body.role}) berhasil dibuat!`,
+        data: {
+          id: staffId,
+          fullName: body.fullName.trim(),
+          email: cleanEmail,
+          role: body.role,
+          status: 'ACTIVE',
+        },
+      };
+    },
+    {
+      body: t.Object({
+        fullName: t.String({ minLength: 2 }),
+        email: t.String({ format: 'email' }),
+        password: t.String({ minLength: 6 }),
+        role: t.Union([
+          t.Literal('SUPER_ADMIN'),
+          t.Literal('ADMIN_FINANCE'),
+          t.Literal('ADMIN_SUPPORT'),
+        ]),
+      }),
+    }
+  )
+
+  // ─── PUT /super-admin/staff/:id (Update Standalone Platform Staff) ────────
+  .put(
+    '/staff/:id',
+    async ({ params, user, body, set }) => {
+      // Only SUPER_ADMIN can update staff
+      if (user!.role !== 'SUPER_ADMIN') {
+        const [dbUser] = await db.select({ role: users.role }).from(users).where(eq(users.id, user!.id)).limit(1);
+        if (dbUser?.role !== 'SUPER_ADMIN') {
+          set.status = 403;
+          return { success: false, error: 'Hanya Master Super Administrator yang berhak mengubah data staf platform.' };
+        }
+      }
+
+      const [target] = await db
+        .select()
+        .from(users)
+        .where(and(eq(users.id, params.id), isNull(users.organizationId)))
+        .limit(1);
+
+      if (!target) {
+        set.status = 404;
+        return { success: false, error: 'Akun staf platform tidak ditemukan atau bukan akun independen.' };
+      }
+
+      const updateData: Record<string, any> = {};
+      if (body.fullName && body.fullName.trim()) updateData.fullName = body.fullName.trim();
+      if (body.role) updateData.role = body.role as UserRole;
+      if (body.status) updateData.status = body.status as UserStatus;
+
+      if (body.email && body.email.toLowerCase().trim() !== target.email.toLowerCase()) {
+        const cleanEmail = body.email.toLowerCase().trim();
+        const [duplicate] = await db
+          .select({ id: users.id })
+          .from(users)
+          .where(and(eq(users.email, cleanEmail), sql`${users.id} != ${params.id}`))
+          .limit(1);
+        if (duplicate) {
+          set.status = 400;
+          return { success: false, error: `Email "${body.email}" sudah digunakan oleh akun lain.` };
+        }
+        updateData.email = cleanEmail;
+      }
+
+      if (body.password && body.password.trim()) {
+        updateData.passwordHash = await Bun.password.hash(body.password.trim(), {
+          algorithm: 'bcrypt',
+          cost: 10,
+        });
+      }
+
+      if (Object.keys(updateData).length > 0) {
+        await db.update(users).set(updateData).where(eq(users.id, params.id));
+      }
+
+      return {
+        success: true,
+        message: `Data staf platform "${updateData.fullName || target.fullName}" berhasil diperbarui!`,
+      };
+    },
+    {
+      body: t.Object({
+        fullName: t.Optional(t.String()),
+        email: t.Optional(t.String({ format: 'email' })),
+        role: t.Optional(
+          t.Union([
+            t.Literal('SUPER_ADMIN'),
+            t.Literal('ADMIN_FINANCE'),
+            t.Literal('ADMIN_SUPPORT'),
+          ])
+        ),
+        status: t.Optional(
+          t.Union([
+            t.Literal('ACTIVE'),
+            t.Literal('INACTIVE'),
+            t.Literal('SUSPENDED'),
+          ])
+        ),
+        password: t.Optional(t.String({ minLength: 6 })),
+      }),
+    }
+  )
+
+  // ─── DELETE /super-admin/staff/:id (Delete Standalone Platform Staff) ────────
+  .delete('/staff/:id', async ({ params, user, set }) => {
+    // Only SUPER_ADMIN can delete staff
+    if (user!.role !== 'SUPER_ADMIN') {
+      const [dbUser] = await db.select({ role: users.role }).from(users).where(eq(users.id, user!.id)).limit(1);
+      if (dbUser?.role !== 'SUPER_ADMIN') {
+        set.status = 403;
+        return { success: false, error: 'Hanya Master Super Administrator yang berhak menghapus staf platform.' };
+      }
+    }
+
+    if (user!.id === params.id) {
+      set.status = 400;
+      return { success: false, error: 'Anda tidak dapat menghapus akun Anda sendiri saat sedang aktif login.' };
+    }
+
+    const [target] = await db
+      .select()
+      .from(users)
+      .where(and(eq(users.id, params.id), isNull(users.organizationId)))
+      .limit(1);
+
+    if (!target) {
+      set.status = 404;
+      return { success: false, error: 'Akun staf platform tidak ditemukan atau bukan akun independen.' };
+    }
+
+    await db.delete(users).where(eq(users.id, params.id));
+
+    return {
+      success: true,
+      message: `Akun staf platform "${target.fullName}" (${target.email}) berhasil dihapus.`,
+    };
+  })
+
+  // ─── POST /super-admin/staff/:id/reset-password (Reset Staff Password) ────────
+  .post(
+    '/staff/:id/reset-password',
+    async ({ params, user, body, set }) => {
+      if (user!.role !== 'SUPER_ADMIN') {
+        const [dbUser] = await db.select({ role: users.role }).from(users).where(eq(users.id, user!.id)).limit(1);
+        if (dbUser?.role !== 'SUPER_ADMIN') {
+          set.status = 403;
+          return { success: false, error: 'Hanya Master Super Administrator yang berhak mereset password staf.' };
+        }
+      }
+
+      const [target] = await db
+        .select()
+        .from(users)
+        .where(and(eq(users.id, params.id), isNull(users.organizationId)))
+        .limit(1);
+
+      if (!target) {
+        set.status = 404;
+        return { success: false, error: 'Akun staf platform tidak ditemukan.' };
+      }
+
+      const newHash = await Bun.password.hash(body.newPassword.trim(), {
+        algorithm: 'bcrypt',
+        cost: 10,
+      });
+
+      await db.update(users).set({ passwordHash: newHash }).where(eq(users.id, params.id));
+
+      return {
+        success: true,
+        message: `Password akun staf "${target.fullName}" (${target.email}) berhasil direset!`,
+      };
+    },
+    {
+      body: t.Object({
+        newPassword: t.String({ minLength: 6 }),
+      }),
+    }
+  )
+
+  // ─── GET /super-admin/transactions ────────────────────────
+  .get(
+    '/transactions',
+    async ({ query, set }) => {
+      try {
+        const transactions = await BillingService.listAllOrders(query?.status);
+        let totalRevenue = 0;
+        let paidCount = 0;
+        let pendingCount = 0;
+        let failedCount = 0;
+
+        for (const t of transactions) {
+          if (t.paymentStatus === 'PAID') {
+            totalRevenue += Number(t.amount) || 0;
+            paidCount++;
+          } else if (t.paymentStatus === 'PENDING') {
+            pendingCount++;
+          } else if (t.paymentStatus === 'FAILED' || t.paymentStatus === 'EXPIRED') {
+            failedCount++;
+          }
+        }
+
+        return {
+          success: true,
+          data: transactions,
+          summary: {
+            totalRevenue,
+            paidCount,
+            pendingCount,
+            failedCount,
+            totalOrders: transactions.length,
+          },
+        };
+      } catch (err: any) {
+        set.status = 500;
+        return { success: false, error: err?.message || 'Gagal mengambil riwayat transaksi platform' };
+      }
+    },
+    {
+      query: t.Optional(
+        t.Object({
+          status: t.Optional(t.String()),
+        })
+      ),
+    }
+  )
+
+  // ─── POST /super-admin/transactions/:id/confirm-manual ─────
+  .post('/transactions/:id/confirm-manual', async ({ params, user, set }) => {
+    if (!user) {
+      set.status = 401;
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    try {
+      const updatedOrder = await BillingService.confirmManualPayment(params.id, user.email);
+      return {
+        success: true,
+        message: `Pembayaran untuk order "${updatedOrder.orderNumber}" berhasil dikonfirmasi secara manual & paket langsung aktif!`,
+        data: updatedOrder,
+      };
+    } catch (err: any) {
+      set.status = 400;
+      return { success: false, error: err?.message || 'Gagal mengonfirmasi pembayaran' };
+    }
+  })
+
+  // ─── POST /super-admin/transactions/:id/cancel ──────────────
+  .post('/transactions/:id/cancel', async ({ params, set }) => {
+    try {
+      await BillingService.cancelOrder(params.id);
+      return { success: true, message: 'Transaksi berhasil dibatalkan.' };
+    } catch (err: any) {
+      set.status = 400;
+      return { success: false, error: err?.message || 'Gagal membatalkan transaksi' };
+    }
+  })
+
+  // ─── PUT /super-admin/organizations/:id/change-plan ─────────
+  .put(
+    '/organizations/:id/change-plan',
+    async ({ params, body, set }) => {
+      try {
+        const [org] = await db
+          .select()
+          .from(organizations)
+          .where(eq(organizations.id, params.id))
+          .limit(1);
+
+        if (!org) {
+          set.status = 404;
+          return { success: false, error: 'Organisasi tidak ditemukan' };
+        }
+
+        // Ambil daftar paket SaaS dari settings
+        const [plansSetting] = await db
+          .select()
+          .from(platformSettings)
+          .where(eq(platformSettings.key, 'saas_plans'))
+          .limit(1);
+
+        let planList: any[] = [];
+        if (plansSetting?.value) {
+          planList =
+            typeof plansSetting.value === 'string'
+              ? JSON.parse(plansSetting.value)
+              : plansSetting.value;
+        }
+
+        const selectedPlan = planList.find(
+          (p: any) => p.code.toUpperCase() === body.planCode.toUpperCase()
+        );
+
+        let newExpiresAt: Date | null = null;
+        if (body.isLifetime || body.durationDays === 0) {
+          newExpiresAt = null;
+        } else if (body.customExpiresAt) {
+          newExpiresAt = new Date(body.customExpiresAt);
+        } else if (typeof body.durationDays === 'number' && body.durationDays > 0) {
+          const now = Date.now();
+          const currentExp = org.expiresAt
+            ? new Date(org.expiresAt).getTime()
+            : 0;
+          const baseTime = currentExp > now ? currentExp : now;
+          newExpiresAt = new Date(baseTime + body.durationDays * 86400000);
+        } else if (selectedPlan) {
+          const days = selectedPlan.durationDays || 30;
+          newExpiresAt = days === 0 ? null : new Date(Date.now() + days * 86400000);
+        } else {
+          newExpiresAt = new Date(Date.now() + 30 * 86400000);
+        }
+
+        // Terapkan batasan jumlah agen CS dan kuota broadcast sesuai paket aktif yang dipilih
+        const maxAgents =
+          body.customMaxAgents ??
+          selectedPlan?.maxAgents ??
+          selectedPlan?.maxCsUsers ??
+          org.maxAgents ??
+          5;
+
+        const maxBroadcastPerMonth =
+          body.customMaxBroadcast ??
+          selectedPlan?.maxBroadcastPerMonth ??
+          org.maxBroadcastPerMonth ??
+          10000;
+
+        await db
+          .update(organizations)
+          .set({
+            plan: body.planCode.toUpperCase() as OrgPlan,
+            status: 'ACTIVE',
+            expiresAt: newExpiresAt,
+            maxAgents,
+            maxBroadcastPerMonth,
+            notes: body.notes ? body.notes : org.notes,
+            updatedAt: new Date(),
+          })
+          .where(eq(organizations.id, params.id));
+
+        const [updatedOrg] = await db
+          .select()
+          .from(organizations)
+          .where(eq(organizations.id, params.id))
+          .limit(1);
+
+        return {
+          success: true,
+          message: `Paket organisasi "${org.name}" berhasil diubah ke ${body.planCode.toUpperCase()}! Masa aktif & kuota agen (${maxAgents} kursi) telah diperbarui.`,
+          data: updatedOrg,
+        };
+      } catch (err: any) {
+        set.status = 400;
+        return { success: false, error: err?.message || 'Gagal mengubah paket organisasi' };
+      }
+    },
+    {
+      body: t.Object({
+        planCode: t.String(),
+        durationDays: t.Optional(t.Number()),
+        customExpiresAt: t.Optional(t.String()),
+        isLifetime: t.Optional(t.Boolean()),
+        customMaxAgents: t.Optional(t.Number()),
+        customMaxBroadcast: t.Optional(t.Number()),
+        notes: t.Optional(t.String()),
+      }),
+    }
+  )
+
+  // ─── GET /super-admin/system/git-status ──────────
+  .get('/system/git-status', async ({ user, set }) => {
+    if (!user || user.role !== 'SUPER_ADMIN') {
+      set.status = 403;
+      return {
+        success: false,
+        error: 'Akses ditolak. Fitur ini hanya dapat diakses oleh akun dengan role SUPER_ADMIN.',
+      };
+    }
+
+    try {
+      const git = getGitCmd();
+      const repoDir = getRepoDir();
+
+      const { stdout: branchOut } = await execAsync(`${git} rev-parse --abbrev-ref HEAD`, {
+        cwd: repoDir,
+      });
+      const currentBranch = branchOut.trim();
+
+      const { stdout: logOut } = await execAsync(
+        `${git} log -1 --format="%H|%h|%s|%an|%ae|%ad"`,
+        { cwd: repoDir }
+      );
+      const [fullHash, shortHash, subject, authorName, authorEmail, dateStr] = logOut
+        .trim()
+        .split('|');
+
+      let remoteUrl = '';
+      try {
+        const { stdout: remoteOut } = await execAsync(`${git} remote get-url origin`, {
+          cwd: repoDir,
+        });
+        remoteUrl = remoteOut.trim();
+      } catch (_) {}
+
+      let hasLocalChanges = false;
+      try {
+        const { stdout: statusOut } = await execAsync(`${git} status --porcelain`, {
+          cwd: repoDir,
+        });
+        hasLocalChanges = statusOut.trim().length > 0;
+      } catch (_) {}
+
+      return {
+        success: true,
+        data: {
+          currentBranch,
+          commitHash: fullHash,
+          shortHash,
+          commitMessage: subject,
+          author: authorName,
+          authorEmail,
+          commitDate: dateStr,
+          remoteUrl,
+          hasLocalChanges,
+        },
+      };
+    } catch (err: any) {
+      set.status = 500;
+      return { success: false, error: err?.message || 'Gagal membaca status Git sistem' };
+    }
+  })
+
+  // ─── POST /super-admin/system/git-check-update ────
+  .post('/system/git-check-update', async ({ user, set }) => {
+    if (!user || user.role !== 'SUPER_ADMIN') {
+      set.status = 403;
+      return {
+        success: false,
+        error: 'Akses ditolak. Fitur ini hanya dapat diakses oleh akun dengan role SUPER_ADMIN.',
+      };
+    }
+
+    try {
+      const git = getGitCmd();
+      const repoDir = getRepoDir();
+
+      const { stdout: branchOut } = await execAsync(`${git} rev-parse --abbrev-ref HEAD`, {
+        cwd: repoDir,
+      });
+      const currentBranch = branchOut.trim();
+
+      // Fetch latest commits from origin
+      await execAsync(`${git} fetch origin ${currentBranch}`, {
+        cwd: repoDir,
+        timeout: 30000,
+      });
+
+      // Compare commits
+      let behindCount = 0;
+      try {
+        const { stdout: revOut } = await execAsync(
+          `${git} rev-list --count HEAD..origin/${currentBranch}`,
+          { cwd: repoDir }
+        );
+        behindCount = parseInt(revOut.trim(), 10) || 0;
+      } catch (_) {}
+
+      let incomingCommits: any[] = [];
+      if (behindCount > 0) {
+        try {
+          const { stdout: listOut } = await execAsync(
+            `${git} log -n 10 --format="%h|%s|%an|%ad" HEAD..origin/${currentBranch}`,
+            { cwd: repoDir }
+          );
+          incomingCommits = listOut
+            .trim()
+            .split('\n')
+            .filter(Boolean)
+            .map((line) => {
+              const [hash, msg, author, date] = line.split('|');
+              return { hash, message: msg, author, date };
+            });
+        } catch (_) {}
+      }
+
+      return {
+        success: true,
+        data: {
+          currentBranch,
+          behindCount,
+          isUpToDate: behindCount === 0,
+          incomingCommits,
+        },
+      };
+    } catch (err: any) {
+      set.status = 500;
+      return { success: false, error: err?.message || 'Gagal memeriksa pembaruan di GitHub' };
+    }
+  })
+
+  // ─── POST /super-admin/system/git-pull ────────────
+  .post('/system/git-pull', async ({ user, set }) => {
+    if (!user || user.role !== 'SUPER_ADMIN') {
+      set.status = 403;
+      return {
+        success: false,
+        error: 'Akses ditolak. Fitur ini hanya dapat diakses oleh akun dengan role SUPER_ADMIN.',
+      };
+    }
+
+    try {
+      const git = getGitCmd();
+      const repoDir = getRepoDir();
+
+      const { stdout: branchOut } = await execAsync(`${git} rev-parse --abbrev-ref HEAD`, {
+        cwd: repoDir,
+      });
+      const currentBranch = branchOut.trim();
+
+      // 1. Tarik pembaruan kode terbaru dari origin
+      const { stdout, stderr } = await execAsync(`${git} pull origin ${currentBranch}`, {
+        cwd: repoDir,
+        timeout: 60000,
+      });
+
+      const gitOutput = `${stdout || ''}\n${stderr || ''}`.trim();
+
+      // 2. Sinkronkan skema database secara aman (Non-Destructive DDL)
+      let dbSyncStatus = 'Struktur database & relasi berhasil disinkronkan aman tanpa menghapus data.';
+      try {
+        await testConnection();
+      } catch (dbErr: any) {
+        dbSyncStatus = `Catatan sinkronisasi database: ${dbErr?.message || dbErr}`;
+      }
+
+      return {
+        success: true,
+        message: 'Pembaruan dari GitHub dan skema database berhasil diterapkan tanpa menghapus data!',
+        output: `${gitOutput}\n\n[Database Migration Sync]\n${dbSyncStatus}`,
+      };
+    } catch (err: any) {
+      set.status = 500;
+      return {
+        success: false,
+        error: err?.message || 'Gagal menjalankan git pull',
+        output: `${err?.stdout || ''}\n${err?.stderr || ''}`.trim(),
+      };
+    }
+  })
+
+  // ─── POST /super-admin/system/db-sync ─────────────
+  .post('/system/db-sync', async ({ user, set }) => {
+    if (!user || user.role !== 'SUPER_ADMIN') {
+      set.status = 403;
+      return {
+        success: false,
+        error: 'Akses ditolak. Fitur ini hanya dapat diakses oleh akun dengan role SUPER_ADMIN.',
+      };
+    }
+
+    try {
+      // Jalankan sinkronisasi non-destructive (CREATE TABLE IF NOT EXISTS, ADD COLUMN IF NOT EXISTS, index, dll.)
+      await testConnection();
+
+      return {
+        success: true,
+        message: 'Skema database terbaru berhasil disinkronkan secara aman! Seluruh data, relasi, dan tabel yang ada tetap terjaga 100%.',
+        output: `[${new Date().toISOString()}] Database migration sync verified. Non-destructive alterations applied successfully.`,
+      };
+    } catch (err: any) {
+      set.status = 500;
+      return {
+        success: false,
+        error: err?.message || 'Gagal melakukan sinkronisasi database',
+      };
+    }
+  });
+

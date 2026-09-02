@@ -60,16 +60,28 @@ async function seed() {
   const passwordHash = await hash('admin12345');
 
   const defaultUsers = [
+    // Standalone Platform Administrator & Staff (organizationId = null)
     {
       id: 'usr-admin',
-      organizationId: orgId,
+      organizationId: null,
       teamId: null,
       email: 'admin@perusahaan.com',
       passwordHash,
-      fullName: 'Budi (Administrator)',
-      role: 'ADMINISTRATOR' as const,
+      fullName: 'Budi (Master Super Administrator)',
+      role: 'SUPER_ADMIN' as const,
       status: 'ACTIVE' as const,
     },
+    {
+      id: 'usr-staff-finance',
+      organizationId: null,
+      teamId: null,
+      email: 'finance@perusahaan.com',
+      passwordHash,
+      fullName: 'Dewi Sartika (Finance Staff)',
+      role: 'ADMIN_FINANCE' as const,
+      status: 'ACTIVE' as const,
+    },
+    // Tenant Demo Users (tied to orgId)
     {
       id: 'usr-spv',
       organizationId: orgId,

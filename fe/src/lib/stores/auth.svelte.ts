@@ -5,8 +5,8 @@ export interface User {
   id: string;
   email: string;
   fullName: string;
-  role: 'SUPER_ADMIN' | 'ADMINISTRATOR' | 'SUPERVISOR' | 'AGENT';
-  organizationId: string;
+  role: 'SUPER_ADMIN' | 'ADMIN_FINANCE' | 'ADMIN_SUPPORT' | 'ADMINISTRATOR' | 'SUPERVISOR' | 'AGENT';
+  organizationId: string | null;
   organizationName?: string;
   isOnline?: boolean;
 }
@@ -64,12 +64,20 @@ class AuthStore {
     return !!this.token && !!this.user;
   }
 
-  get role(): 'SUPER_ADMIN' | 'ADMINISTRATOR' | 'SUPERVISOR' | 'AGENT' | null {
+  get role(): 'SUPER_ADMIN' | 'ADMIN_FINANCE' | 'ADMIN_SUPPORT' | 'ADMINISTRATOR' | 'SUPERVISOR' | 'AGENT' | null {
     return this.user?.role || null;
   }
 
   get isSuperAdmin(): boolean {
-    return this.user?.role === 'SUPER_ADMIN' || this.user?.role === 'ADMINISTRATOR';
+    return this.user?.role === 'SUPER_ADMIN';
+  }
+
+  get isPlatformStaff(): boolean {
+    return (
+      this.user?.role === 'SUPER_ADMIN' ||
+      this.user?.role === 'ADMIN_FINANCE' ||
+      this.user?.role === 'ADMIN_SUPPORT'
+    );
   }
 
   get isImpersonating(): boolean {
