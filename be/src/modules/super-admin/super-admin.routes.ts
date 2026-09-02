@@ -1143,6 +1143,23 @@ export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
       return { success: false, error: 'Akun staf platform tidak ditemukan atau bukan akun independen.' };
     }
 
+    // Clean up dependent foreign keys safely before deleting staff
+    try {
+      await db.execute(sql`UPDATE conversations SET assigned_agent_id = NULL WHERE assigned_agent_id = ${params.id}`);
+    } catch (_) {}
+    try {
+      await db.execute(sql`DELETE FROM conversation_participants WHERE user_id = ${params.id}`);
+    } catch (_) {}
+    try {
+      await db.execute(sql`UPDATE broadcast_campaigns SET created_by_id = NULL WHERE created_by_id = ${params.id}`);
+    } catch (_) {}
+    try {
+      await db.execute(sql`UPDATE subscription_orders SET user_id = NULL WHERE user_id = ${params.id}`);
+    } catch (_) {}
+    try {
+      await db.execute(sql`UPDATE activity_logs SET user_id = NULL WHERE user_id = ${params.id}`);
+    } catch (_) {}
+
     await db.delete(users).where(eq(users.id, params.id));
 
     return {
