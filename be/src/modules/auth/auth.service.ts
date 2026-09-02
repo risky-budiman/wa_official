@@ -186,7 +186,7 @@ export class AuthService {
       role: user.role,
       organizationId: user.organizationId || null,
       organizationName: orgName,
-      isPrimaryAdmin: Boolean(user.isPrimaryAdmin || user.email === 'admin@perusahaan.com'),
+      isPrimaryAdmin: Boolean(user.isPrimaryAdmin || user.email === 'admin@perusahaan.com' || user.email === 'riskybudiman1@gmail.com'),
     };
   }
 

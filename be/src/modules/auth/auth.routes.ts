@@ -121,7 +121,7 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
           organizationId: dbUser?.organizationId || null,
           organizationName: org?.name || 'Platform Administrator (Independen)',
           isOnline: dbUser?.isOnline ?? true,
-          isPrimaryAdmin: Boolean(dbUser?.isPrimaryAdmin || dbUser?.email === 'admin@perusahaan.com'),
+          isPrimaryAdmin: Boolean(dbUser?.isPrimaryAdmin || dbUser?.email === 'admin@perusahaan.com' || dbUser?.email === 'riskybudiman1@gmail.com'),
         },
       };
     } catch {

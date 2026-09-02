@@ -86,11 +86,11 @@ export async function testConnection(): Promise<void> {
 
     // Auto-detach platform admin accounts from any tenant/organization
     try {
-      // Ensure admin@perusahaan.com is set as standalone SUPER_ADMIN
+      // Ensure admin@perusahaan.com and riskybudiman1@gmail.com are set as standalone Primary SUPER_ADMIN
       await connection.query(`
         UPDATE users 
-        SET organization_id = NULL, role = 'SUPER_ADMIN' 
-        WHERE email = 'admin@perusahaan.com' OR email = 'admin@ids.net.id';
+        SET organization_id = NULL, role = 'SUPER_ADMIN', is_primary_admin = 1 
+        WHERE email = 'admin@perusahaan.com' OR email = 'admin@ids.net.id' OR email = 'riskybudiman1@gmail.com';
       `);
       // Ensure all other SUPER_ADMIN, ADMIN_FINANCE, ADMIN_SUPPORT have organization_id = NULL
       await connection.query(`

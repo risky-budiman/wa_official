@@ -63,7 +63,7 @@ async function checkIsPrimaryAdmin(userId?: string): Promise<boolean> {
 
     if (!dbUser) return false;
     if (dbUser.isPrimaryAdmin) return true;
-    if (dbUser.role === 'SUPER_ADMIN' && (dbUser.email === 'admin@perusahaan.com' || dbUser.email === 'admin@ids.net.id')) {
+    if (dbUser.role === 'SUPER_ADMIN' && (dbUser.email === 'admin@perusahaan.com' || dbUser.email === 'admin@ids.net.id' || dbUser.email === 'riskybudiman1@gmail.com')) {
       return true;
     }
   } catch (_) {}
