@@ -146,13 +146,15 @@ export class AuthService {
       user.role === 'ADMIN_SUPPORT' ||
       user.organizationId === null;
 
-    if (body.portalType === 'TENANT' && isPlatformStaff) {
+    const portalType = body.portalType || 'TENANT';
+
+    if (portalType === 'TENANT' && isPlatformStaff) {
       throw new Error(
         'Akun Administrator Platform tidak dapat login melalui portal tenant. Silakan masuk melalui portal khusus Administrator di /administrator/login.'
       );
     }
 
-    if (body.portalType === 'PLATFORM' && !isPlatformStaff) {
+    if (portalType === 'PLATFORM' && !isPlatformStaff) {
       throw new Error(
         'Akses ditolak. Akun Anda adalah akun pengguna tenant klien. Silakan masuk melalui portal utama di /login.'
       );
