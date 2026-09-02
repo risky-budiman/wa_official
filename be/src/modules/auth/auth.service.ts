@@ -111,6 +111,7 @@ export class AuthService {
         passwordHash: users.passwordHash,
         organizationId: users.organizationId,
         status: users.status,
+        isPrimaryAdmin: users.isPrimaryAdmin,
       })
       .from(users)
       .where(and(...conditions))
@@ -142,6 +143,7 @@ export class AuthService {
     // Strictly isolate Platform Administrator vs Tenant Portal Logins
     const isPlatformStaff =
       user.role === 'SUPER_ADMIN' ||
+      user.role === 'CO_SUPER_ADMIN' ||
       user.role === 'ADMIN_FINANCE' ||
       user.role === 'ADMIN_SUPPORT' ||
       user.organizationId === null;
@@ -184,6 +186,7 @@ export class AuthService {
       role: user.role,
       organizationId: user.organizationId || null,
       organizationName: orgName,
+      isPrimaryAdmin: Boolean(user.isPrimaryAdmin || user.email === 'admin@perusahaan.com'),
     };
   }
 

@@ -1,14 +1,27 @@
 <script lang="ts">
   interface Props {
-    role?: 'SUPER_ADMIN' | 'ADMIN_FINANCE' | 'ADMIN_SUPPORT' | 'ADMINISTRATOR' | 'SUPERVISOR' | 'AGENT' | null;
+    role?: 'SUPER_ADMIN' | 'CO_SUPER_ADMIN' | 'ADMIN_FINANCE' | 'ADMIN_SUPPORT' | 'ADMINISTRATOR' | 'SUPERVISOR' | 'AGENT' | null;
+    isPrimaryAdmin?: boolean;
   }
-  let { role = 'AGENT' }: Props = $props();
+  let { role = 'AGENT', isPrimaryAdmin = false }: Props = $props();
 </script>
 
 {#if role === 'SUPER_ADMIN'}
+  {#if isPrimaryAdmin}
+    <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/40 shadow-xs">
+      <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+      Administrator Utama
+    </span>
+  {:else}
+    <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-500/20 text-indigo-500 dark:text-indigo-400 border border-indigo-500/30">
+      <span class="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
+      Co-Super Admin
+    </span>
+  {/if}
+{:else if role === 'CO_SUPER_ADMIN'}
   <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-500/20 text-indigo-500 dark:text-indigo-400 border border-indigo-500/30">
     <span class="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
-    Master Super Admin
+    Co-Super Admin
   </span>
 {:else if role === 'ADMIN_FINANCE'}
   <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">

@@ -9,6 +9,7 @@ import { teams } from './teams';
 
 export const userRoleEnum = [
   'SUPER_ADMIN',
+  'CO_SUPER_ADMIN',
   'ADMIN_FINANCE',
   'ADMIN_SUPPORT',
   'ADMINISTRATOR',
@@ -32,6 +33,7 @@ export const users = mysqlTable('users', {
   role: mysqlEnum('role', userRoleEnum).notNull().default('AGENT'),
   status: mysqlEnum('status', userStatusEnum).notNull().default('ACTIVE'),
   isOnline: boolean('is_online').default(false),
+  isPrimaryAdmin: boolean('is_primary_admin').default(false),
   maxActiveChats: int('max_active_chats').default(10),
   createdAt: datetime('created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: datetime('updated_at').default(sql`CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`).notNull(),

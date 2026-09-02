@@ -5,10 +5,11 @@ export interface User {
   id: string;
   email: string;
   fullName: string;
-  role: 'SUPER_ADMIN' | 'ADMIN_FINANCE' | 'ADMIN_SUPPORT' | 'ADMINISTRATOR' | 'SUPERVISOR' | 'AGENT';
+  role: 'SUPER_ADMIN' | 'CO_SUPER_ADMIN' | 'ADMIN_FINANCE' | 'ADMIN_SUPPORT' | 'ADMINISTRATOR' | 'SUPERVISOR' | 'AGENT';
   organizationId: string | null;
   organizationName?: string;
   isOnline?: boolean;
+  isPrimaryAdmin?: boolean;
 }
 
 class AuthStore {
@@ -64,17 +65,22 @@ class AuthStore {
     return !!this.token && !!this.user;
   }
 
-  get role(): 'SUPER_ADMIN' | 'ADMIN_FINANCE' | 'ADMIN_SUPPORT' | 'ADMINISTRATOR' | 'SUPERVISOR' | 'AGENT' | null {
+  get role(): 'SUPER_ADMIN' | 'CO_SUPER_ADMIN' | 'ADMIN_FINANCE' | 'ADMIN_SUPPORT' | 'ADMINISTRATOR' | 'SUPERVISOR' | 'AGENT' | null {
     return this.user?.role || null;
   }
 
   get isSuperAdmin(): boolean {
-    return this.user?.role === 'SUPER_ADMIN';
+    return this.user?.role === 'SUPER_ADMIN' || this.user?.role === 'CO_SUPER_ADMIN';
+  }
+
+  get isPrimaryAdmin(): boolean {
+    return Boolean(this.user?.isPrimaryAdmin || (this.user?.role === 'SUPER_ADMIN' && !this.user?.organizationId));
   }
 
   get isPlatformStaff(): boolean {
     return (
       this.user?.role === 'SUPER_ADMIN' ||
+      this.user?.role === 'CO_SUPER_ADMIN' ||
       this.user?.role === 'ADMIN_FINANCE' ||
       this.user?.role === 'ADMIN_SUPPORT'
     );

@@ -52,6 +52,24 @@ function getRepoDir(): string {
   return cwd;
 }
 
+async function checkIsPrimaryAdmin(userId?: string): Promise<boolean> {
+  if (!userId) return false;
+  try {
+    const [dbUser] = await db
+      .select({ isPrimaryAdmin: users.isPrimaryAdmin, role: users.role, email: users.email })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    if (!dbUser) return false;
+    if (dbUser.isPrimaryAdmin) return true;
+    if (dbUser.role === 'SUPER_ADMIN' && (dbUser.email === 'admin@perusahaan.com' || dbUser.email === 'admin@ids.net.id')) {
+      return true;
+    }
+  } catch (_) {}
+  return false;
+}
+
 export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
   .use(authPlugin)
   .use(
@@ -955,6 +973,7 @@ export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
         role: users.role,
         status: users.status,
         isOnline: users.isOnline,
+        isPrimaryAdmin: users.isPrimaryAdmin,
         createdAt: users.createdAt,
         updatedAt: users.updatedAt,
       })
@@ -1027,6 +1046,7 @@ export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
         password: t.String({ minLength: 6 }),
         role: t.Union([
           t.Literal('SUPER_ADMIN'),
+          t.Literal('CO_SUPER_ADMIN'),
           t.Literal('ADMIN_FINANCE'),
           t.Literal('ADMIN_SUPPORT'),
         ]),
@@ -1100,6 +1120,7 @@ export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
         role: t.Optional(
           t.Union([
             t.Literal('SUPER_ADMIN'),
+            t.Literal('CO_SUPER_ADMIN'),
             t.Literal('ADMIN_FINANCE'),
             t.Literal('ADMIN_SUPPORT'),
           ])
@@ -1393,18 +1414,18 @@ export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
         isLifetime: t.Optional(t.Boolean()),
         customMaxAgents: t.Optional(t.Number()),
         customMaxBroadcast: t.Optional(t.Number()),
-        notes: t.Optional(t.String()),
       }),
     }
   )
 
   // ─── GET /super-admin/system/git-status ──────────
   .get('/system/git-status', async ({ user, set }) => {
-    if (!user || user.role !== 'SUPER_ADMIN') {
+    const isPrimary = await checkIsPrimaryAdmin(user?.id);
+    if (!isPrimary) {
       set.status = 403;
       return {
         success: false,
-        error: 'Akses ditolak. Fitur ini hanya dapat diakses oleh akun dengan role SUPER_ADMIN.',
+        error: 'Akses ditolak. Fitur Update Sistem hanya dapat diakses oleh Administrator Utama.',
       };
     }
 
@@ -1463,11 +1484,12 @@ export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
 
   // ─── POST /super-admin/system/git-check-update ────
   .post('/system/git-check-update', async ({ user, set }) => {
-    if (!user || user.role !== 'SUPER_ADMIN') {
+    const isPrimary = await checkIsPrimaryAdmin(user?.id);
+    if (!isPrimary) {
       set.status = 403;
       return {
         success: false,
-        error: 'Akses ditolak. Fitur ini hanya dapat diakses oleh akun dengan role SUPER_ADMIN.',
+        error: 'Akses ditolak. Fitur Update Sistem hanya dapat diakses oleh Administrator Utama.',
       };
     }
 
@@ -1531,11 +1553,12 @@ export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
 
   // ─── POST /super-admin/system/git-pull ────────────
   .post('/system/git-pull', async ({ user, set }) => {
-    if (!user || user.role !== 'SUPER_ADMIN') {
+    const isPrimary = await checkIsPrimaryAdmin(user?.id);
+    if (!isPrimary) {
       set.status = 403;
       return {
         success: false,
-        error: 'Akses ditolak. Fitur ini hanya dapat diakses oleh akun dengan role SUPER_ADMIN.',
+        error: 'Akses ditolak. Fitur Update Sistem hanya dapat dieksekusi oleh Administrator Utama.',
       };
     }
 
@@ -1581,11 +1604,12 @@ export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
 
   // ─── POST /super-admin/system/db-sync ─────────────
   .post('/system/db-sync', async ({ user, set }) => {
-    if (!user || user.role !== 'SUPER_ADMIN') {
+    const isPrimary = await checkIsPrimaryAdmin(user?.id);
+    if (!isPrimary) {
       set.status = 403;
       return {
         success: false,
-        error: 'Akses ditolak. Fitur ini hanya dapat diakses oleh akun dengan role SUPER_ADMIN.',
+        error: 'Akses ditolak. Fitur Sinkronisasi Database hanya dapat dieksekusi oleh Administrator Utama.',
       };
     }
 

@@ -123,9 +123,10 @@
     id: string;
     fullName: string;
     email: string;
-    role: "SUPER_ADMIN" | "ADMIN_FINANCE" | "ADMIN_SUPPORT";
+    role: "SUPER_ADMIN" | "CO_SUPER_ADMIN" | "ADMIN_FINANCE" | "ADMIN_SUPPORT";
     status: "ACTIVE" | "INACTIVE" | "SUSPENDED";
     isOnline?: boolean;
+    isPrimaryAdmin?: boolean;
     createdAt: string;
     updatedAt?: string;
   }
@@ -330,14 +331,14 @@
   let newStaffName = $state("");
   let newStaffEmail = $state("");
   let newStaffPassword = $state("");
-  let newStaffRole = $state<"SUPER_ADMIN" | "ADMIN_FINANCE" | "ADMIN_SUPPORT">(
-    "ADMIN_FINANCE",
+  let newStaffRole = $state<"SUPER_ADMIN" | "CO_SUPER_ADMIN" | "ADMIN_FINANCE" | "ADMIN_SUPPORT">(
+    "CO_SUPER_ADMIN",
   );
 
   let editStaffName = $state("");
   let editStaffEmail = $state("");
-  let editStaffRole = $state<"SUPER_ADMIN" | "ADMIN_FINANCE" | "ADMIN_SUPPORT">(
-    "ADMIN_FINANCE",
+  let editStaffRole = $state<"SUPER_ADMIN" | "CO_SUPER_ADMIN" | "ADMIN_FINANCE" | "ADMIN_SUPPORT">(
+    "CO_SUPER_ADMIN",
   );
   let editStaffStatus = $state<"ACTIVE" | "INACTIVE" | "SUSPENDED">("ACTIVE");
   let editStaffPassword = $state("");
@@ -2356,7 +2357,8 @@
               </span>
             </button>
 
-            <!-- Menu Update Sistem (GitHub) -->
+            <!-- Menu Update Sistem (GitHub) — HANYA Administrator Utama -->
+            {#if authStore.isPrimaryAdmin}
             <button
               onclick={() => {
                 activeTab = "system_update";
@@ -2380,11 +2382,12 @@
                 class="text-[9px] px-1.5 py-0.5 rounded font-extrabold uppercase tracking-wider {activeTab ===
                 'system_update'
                   ? 'bg-white/20 text-white'
-                  : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'}"
+                  : 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/20'}"
               >
-                Super Admin
+                Root Only
               </span>
             </button>
+            {/if}
           </div>
         </div>
 
@@ -4163,7 +4166,7 @@
                       </td>
 
                       <td class="px-4 py-3.5">
-                        <RoleBadge role={staff.role} />
+                        <RoleBadge role={staff.role} isPrimaryAdmin={Boolean(staff.isPrimaryAdmin || (staff.role === 'SUPER_ADMIN' && staff.email === 'admin@perusahaan.com'))} />
                       </td>
 
                       <td class="px-4 py-3.5">
@@ -4256,8 +4259,8 @@
       <!-- ========================================================= -->
       {#if activeTab === "system_update"}
         <div class="space-y-6 max-w-5xl">
-          <!-- Role Guard Check: Role must be SUPER_ADMIN -->
-          {#if !authStore.isSuperAdmin}
+          <!-- Role Guard Check: Role must be Administrator Utama (Primary Super Admin) -->
+          {#if !authStore.isPrimaryAdmin}
             <div
               class="bg-white dark:bg-slate-900 p-8 rounded-2xl border border-slate-200 dark:border-slate-800 text-center space-y-4 shadow-sm"
             >
@@ -4268,15 +4271,14 @@
               </div>
               <div class="space-y-1.5 max-w-md mx-auto">
                 <h3 class="text-base font-bold text-slate-900 dark:text-white">
-                  Akses Terbatas: Khusus Role SUPER_ADMIN
+                  Akses Terbatas: Khusus Administrator Utama
                 </h3>
                 <p
                   class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed"
                 >
                   Fitur penarikan kode dan pembaruan sistem langsung dari GitHub
-                  hanya dapat dieksekusi oleh akun dengan kewenangan role
-                  <strong>SUPER_ADMIN</strong> demi menjaga stabilitas dan
-                  keamanan server.
+                  hanya dapat diakses dan dieksekusi oleh <strong>Administrator Utama</strong> demi menjaga stabilitas dan
+                  keamanan server. Co-Super Administrator dan staf lainnya tidak memiliki hak akses ini.
                 </p>
               </div>
               <div class="pt-2">
@@ -6599,25 +6601,25 @@
 
               <label
                 class="p-3 rounded-xl border flex items-start gap-3 cursor-pointer transition {newStaffRole ===
-                'SUPER_ADMIN'
+                'CO_SUPER_ADMIN'
                   ? 'bg-indigo-500/10 border-indigo-500/40 text-indigo-950 dark:text-indigo-200'
                   : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300'}"
               >
                 <input
                   type="radio"
                   name="new_role"
-                  value="SUPER_ADMIN"
+                  value="CO_SUPER_ADMIN"
                   bind:group={newStaffRole}
                   class="mt-1 text-indigo-600"
                 />
                 <div>
                   <div class="text-xs font-bold flex items-center gap-1.5">
                     <Shield class="w-3.5 h-3.5 text-indigo-500" />
-                    <span>Co-Super Administrator (Akses Penuh)</span>
+                    <span>Co-Super Administrator</span>
                   </div>
                   <div class="text-[11px] opacity-75 mt-0.5">
-                    Memiliki hak akses penuh untuk mengelola seluruh organisasi,
-                    paket SaaS, keuangan, serta mengelola staf lain.
+                    Memiliki hak akses untuk mengelola seluruh organisasi,
+                    paket SaaS, keuangan, serta staf (tanpa akses Update Sistem Server).
                   </div>
                 </div>
               </label>
@@ -6742,7 +6744,8 @@
                 bind:value={editStaffRole}
                 class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 font-semibold"
               >
-                <option value="SUPER_ADMIN">Master Super Admin</option>
+                <option value="SUPER_ADMIN">Master Super Admin (Utama)</option>
+                <option value="CO_SUPER_ADMIN">Co-Super Administrator</option>
                 <option value="ADMIN_FINANCE">Finance Staff</option>
                 <option value="ADMIN_SUPPORT">Support Staff</option>
               </select>

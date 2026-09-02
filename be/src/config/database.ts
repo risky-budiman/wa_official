@@ -80,6 +80,10 @@ export async function testConnection(): Promise<void> {
       await connection.query(`ALTER TABLE broadcast_campaigns MODIFY COLUMN created_by_id VARCHAR(36) NULL;`);
     } catch (_) {}
 
+    try {
+      await connection.query(`ALTER TABLE users ADD COLUMN is_primary_admin TINYINT(1) DEFAULT 0;`);
+    } catch (_) {}
+
     // Auto-detach platform admin accounts from any tenant/organization
     try {
       // Ensure admin@perusahaan.com is set as standalone SUPER_ADMIN

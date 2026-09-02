@@ -33,5 +33,6 @@ export interface AuthResponse {
     role: UserRole;
     organizationId: string | null;
     organizationName: string;
+    isPrimaryAdmin?: boolean;
   };
 }
