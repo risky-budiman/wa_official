@@ -116,7 +116,7 @@ export class UserService {
   static async delete(orgId: string, userId: string) {
     // 1. Clean up dependent foreign keys safely before deleting user
     try {
-      await db.execute(sql`UPDATE conversations SET assigned_agent_id = NULL WHERE assigned_agent_id = ${userId}`);
+      await db.execute(sql`UPDATE conversations SET assigned_user_id = NULL WHERE assigned_user_id = ${userId}`);
     } catch (_) {}
     try {
       await db.execute(sql`DELETE FROM conversation_participants WHERE user_id = ${userId}`);
