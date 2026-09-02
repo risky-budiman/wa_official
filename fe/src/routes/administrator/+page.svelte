@@ -2450,19 +2450,8 @@
             </div>
           </div>
 
-          <!-- Right: Live CRM, Theme Switcher, Account Profile Pill, Logout -->
+          <!-- Right: Theme Switcher, Account Profile Pill, Logout -->
           <div class="flex items-center gap-2 sm:gap-3">
-            <!-- Button: Buka Live CRM -->
-            <a
-              href="/inbox"
-              class="flex items-center gap-2 py-2 px-3 sm:px-3.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold border border-slate-200/80 dark:border-slate-700/80 shadow-xs transition"
-              title="Buka Live Inbox Chat WhatsApp"
-            >
-              <LayoutDashboard class="w-4 h-4 text-emerald-500" />
-              <span class="hidden sm:inline">Buka Live CRM</span>
-              <ExternalLink class="w-3 h-3 text-slate-400 hidden sm:inline" />
-            </a>
-
             <!-- Theme Switcher -->
             <button
               onclick={() => themeStore.toggle()}

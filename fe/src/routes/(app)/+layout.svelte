@@ -10,16 +10,23 @@
   }
   let { children }: Props = $props();
 
-  onMount(() => {
-    if (!authStore.isLoading && !authStore.isAuthenticated) {
-      goto('/login');
+  function checkRouteAccess() {
+    if (!authStore.isLoading) {
+      if (!authStore.isAuthenticated) {
+        goto('/login');
+      } else if (authStore.isPlatformStaff && !authStore.isImpersonating) {
+        // Akun Administrator Platform murni berdiri sendiri dan tidak boleh masuk ke portal tenant
+        goto('/administrator');
+      }
     }
+  }
+
+  onMount(() => {
+    checkRouteAccess();
   });
 
   $effect(() => {
-    if (!authStore.isLoading && !authStore.isAuthenticated) {
-      goto('/login');
-    }
+    checkRouteAccess();
   });
 </script>
 
