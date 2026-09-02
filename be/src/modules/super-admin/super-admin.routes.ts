@@ -62,8 +62,10 @@ async function checkIsPrimaryAdmin(userId?: string): Promise<boolean> {
       .limit(1);
 
     if (!dbUser) return false;
+    // MUST be SUPER_ADMIN role to qualify as primary admin
+    if (dbUser.role !== 'SUPER_ADMIN') return false;
     if (dbUser.isPrimaryAdmin) return true;
-    if (dbUser.role === 'SUPER_ADMIN' && (dbUser.email === 'admin@perusahaan.com' || dbUser.email === 'admin@ids.net.id' || dbUser.email === 'riskybudiman1@gmail.com')) {
+    if (dbUser.email === 'admin@perusahaan.com' || dbUser.email === 'admin@ids.net.id' || dbUser.email === 'riskybudiman1@gmail.com') {
       return true;
     }
   } catch (_) {}
@@ -93,9 +95,10 @@ export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
       .limit(1);
     if (dbUser?.role) currentRole = dbUser.role;
 
-    // Platform roles: SUPER_ADMIN, ADMIN_FINANCE, ADMIN_SUPPORT
+    // Platform roles: SUPER_ADMIN, CO_SUPER_ADMIN, ADMIN_FINANCE, ADMIN_SUPPORT
     const isPlatformStaff =
       currentRole === 'SUPER_ADMIN' ||
+      currentRole === 'CO_SUPER_ADMIN' ||
       currentRole === 'ADMIN_FINANCE' ||
       currentRole === 'ADMIN_SUPPORT';
 
