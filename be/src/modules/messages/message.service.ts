@@ -129,9 +129,9 @@ export class MessageService {
 
     // Save message to MySQL
     const messageId = nanoid();
-    const senderType = (user.role === 'SUPER_ADMIN' || user.role === 'ADMIN_FINANCE' || user.role === 'ADMIN_SUPPORT')
+    const senderType = (user.role === 'SUPER_ADMIN' || user.role === 'CO_SUPER_ADMIN' || user.role === 'ADMIN_FINANCE' || user.role === 'ADMIN_SUPPORT')
       ? 'ADMINISTRATOR'
-      : user.role;
+      : (user.role as 'ADMINISTRATOR' | 'SUPERVISOR' | 'AGENT');
 
     await db.insert(messages).values({
       id: messageId,
@@ -189,9 +189,9 @@ export class MessageService {
     }
 
     const messageId = nanoid();
-    const senderType = (user.role === 'SUPER_ADMIN' || user.role === 'ADMIN_FINANCE' || user.role === 'ADMIN_SUPPORT')
+    const senderType = (user.role === 'SUPER_ADMIN' || user.role === 'CO_SUPER_ADMIN' || user.role === 'ADMIN_FINANCE' || user.role === 'ADMIN_SUPPORT')
       ? 'ADMINISTRATOR'
-      : user.role;
+      : (user.role as 'ADMINISTRATOR' | 'SUPERVISOR' | 'AGENT');
 
     await db.insert(messages).values({
       id: messageId,

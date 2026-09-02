@@ -1414,6 +1414,7 @@ export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
         isLifetime: t.Optional(t.Boolean()),
         customMaxAgents: t.Optional(t.Number()),
         customMaxBroadcast: t.Optional(t.Number()),
+        notes: t.Optional(t.String()),
       }),
     }
   )
