@@ -860,7 +860,7 @@ export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
         if (targetWabaId) {
           try {
             const wabaRes = await fetch(
-              `https://graph.facebook.com/v21.0/${targetWabaId}?fields=id,name,currency,timezone_id,message_template_namespace`,
+              `https://graph.facebook.com/v21.0/${targetWabaId}?fields=id,name,currency,timezone_id,message_template_namespace,account_review_status,business_verification_status`,
               {
                 headers: {
                   Authorization: `Bearer ${targetToken}`,

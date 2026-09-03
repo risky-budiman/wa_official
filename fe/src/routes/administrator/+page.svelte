@@ -4834,21 +4834,35 @@
                     class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2.5 border-t border-emerald-200 dark:border-emerald-900 text-[11px] font-mono"
                   >
                     <div>
-                      Nomor: <strong>{metaTestResult.data.phoneNumber.display_phone_number || '-'}</strong>
+                      Nomor Tampilan: <strong>{metaTestResult.data.phoneNumber.display_phone_number || '-'}</strong>
                     </div>
                     <div>
-                      Nama Bisnis: <strong>{metaTestResult.data.phoneNumber.verified_name || metaOrg?.name}</strong>
+                      Nama Bisnis Terverifikasi: <strong>{metaTestResult.data.phoneNumber.verified_name || metaTestResult.data.waba?.name || metaOrg?.name}</strong>
                     </div>
                     <div>
-                      Kualitas: <strong class="uppercase text-emerald-600 dark:text-emerald-400">{metaTestResult.data.phoneNumber.quality_rating || 'GREEN'}</strong>
+                      Kualitas Nomor: <strong class="uppercase text-emerald-600 dark:text-emerald-400">{metaTestResult.data.phoneNumber.quality_rating || 'GREEN (Sangat Baik)'}</strong>
                     </div>
                     <div>
-                      Status Verif: <strong>{metaTestResult.data.phoneNumber.code_verification_status || 'VERIFIED'}</strong>
+                      Status Verifikasi Nomor: <strong>{metaTestResult.data.phoneNumber.code_verification_status || 'VERIFIED'}</strong>
                     </div>
-                    <div class="sm:col-span-2 p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-900 dark:text-emerald-200 flex items-center justify-between font-sans">
-                      <span class="font-bold flex items-center gap-1.5">
-                        <Gauge class="w-3.5 h-3.5 text-emerald-500" />
-                        Batas Quota Meta (Messaging Limit):
+                    {#if metaTestResult.data.waba}
+                      <div>
+                        Mata Uang & Waktu: <strong>{metaTestResult.data.waba.currency || 'IDR'} ({metaTestResult.data.waba.timezone_id || 'Asia/Jakarta'})</strong>
+                      </div>
+                      <div>
+                        Status Bisnis Meta: <strong class="uppercase text-emerald-600 dark:text-emerald-400">{metaTestResult.data.waba.business_verification_status || 'VERIFIED'}</strong>
+                      </div>
+                    {/if}
+                    {#if metaTestResult.data.phoneNumber?.throughput?.level}
+                      <div>
+                        Kecepatan Kirim: <strong>{metaTestResult.data.phoneNumber.throughput.level} ({metaTestResult.data.phoneNumber.throughput.messages_per_second || 80} MPS)</strong>
+                      </div>
+                    {/if}
+
+                    <div class="sm:col-span-2 p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-900 dark:text-emerald-200 flex items-center justify-between font-sans shadow-xs mt-1">
+                      <span class="font-bold flex items-center gap-1.5 text-xs">
+                        <Gauge class="w-4 h-4 text-emerald-500 shrink-0" />
+                        Batas Quota Meta (Messaging Limit Tier):
                       </span>
                       <strong class="font-mono text-xs font-black text-emerald-700 dark:text-emerald-300">
                         {formatMessagingTier(metaTestResult.data.phoneNumber.messaging_limit_tier)}
