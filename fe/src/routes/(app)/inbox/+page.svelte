@@ -35,7 +35,8 @@
     MessageSquare,
     AlertTriangle,
     Zap,
-    CornerDownLeft
+    CornerDownLeft,
+    Pencil
   } from 'lucide-svelte';
   import { formatWhatsAppMarkdown } from '$lib/utils/whatsapp-formatter';
 
@@ -55,7 +56,7 @@
   let showReassignModal = $state(false);
   let showAddCollaboratorModal = $state(false);
   let showTagModal = $state(false);
-  let showTemplatePicker = $state(false);
+  let showQuickReplyManager = $state(false);
   let showEmojiPicker = $state(false);
   let messagesContainer = $state<HTMLDivElement | null>(null);
   let messageInputRef = $state<HTMLTextAreaElement | null>(null);
@@ -65,43 +66,126 @@
   let slashQuery = $state('');
   let selectedSlashIndex = $state(0);
 
-  const defaultQuickReplies = [
-    {
-      id: 'qr-salam',
-      shortcut: '/salam',
-      title: 'Salam & Sapaan Pelanggan',
-      body: 'Halo, terima kasih telah menghubungi kami. Ada yang bisa kami bantu hari ini? 😊',
-      type: 'quick_reply',
-    },
-    {
-      id: 'qr-terimakasih',
-      shortcut: '/terimakasih',
-      title: 'Ucapan Terima Kasih',
-      body: 'Terima kasih banyak atas kepercayaan Anda. Jika ada pertanyaan lain, jangan ragu untuk menghubungi kami kembali! 🙏',
-      type: 'quick_reply',
-    },
-    {
-      id: 'qr-jamkerja',
-      shortcut: '/jam_kerja',
-      title: 'Jam Operasional Layanan',
-      body: 'Jam operasional layanan kami adalah Senin - Jumat (08.00 - 17.00 WIB) dan Sabtu (08.00 - 12.00 WIB).',
-      type: 'quick_reply',
-    },
-    {
-      id: 'qr-rekening',
-      shortcut: '/rekening',
-      title: 'Nomor Rekening Pembayaran',
-      body: 'Berikut nomor rekening resmi pembayaran kami:\nBCA: 1234567890 a.n. PT Official WA CRM\nMandiri: 0987654321 a.n. PT Official WA CRM',
-      type: 'quick_reply',
-    },
-    {
-      id: 'qr-tunggu',
-      shortcut: '/tunggu',
-      title: 'Konfirmasi Mohon Tunggu',
-      body: 'Mohon tunggu sebentar ya kak, tim kami sedang mengecek data Anda.',
-      type: 'quick_reply',
-    },
-  ];
+  interface QuickReplyItem {
+    id: string;
+    shortcut: string;
+    title: string;
+    body: string;
+  }
+
+  let customQuickReplies = $state<QuickReplyItem[]>([]);
+  let newQrShortcut = $state('');
+  let newQrTitle = $state('');
+  let newQrBody = $state('');
+  let editingQrId = $state<string | null>(null);
+
+  function loadQuickReplies() {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('wa_crm_quick_replies');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            customQuickReplies = parsed;
+            return;
+          }
+        } catch (e) {}
+      }
+    }
+    // Default fallback
+    customQuickReplies = [
+      {
+        id: 'qr-salam',
+        shortcut: '/salam',
+        title: 'Salam & Sapaan Pelanggan',
+        body: 'Halo, terima kasih telah menghubungi kami. Ada yang bisa kami bantu hari ini? 😊',
+      },
+      {
+        id: 'qr-terimakasih',
+        shortcut: '/terimakasih',
+        title: 'Ucapan Terima Kasih',
+        body: 'Terima kasih banyak atas kepercayaan Anda. Jika ada pertanyaan lain, jangan ragu untuk menghubungi kami kembali! 🙏',
+      },
+      {
+        id: 'qr-jamkerja',
+        shortcut: '/jam_kerja',
+        title: 'Jam Operasional Layanan',
+        body: 'Jam operasional layanan kami adalah Senin - Jumat (08.00 - 17.00 WIB) dan Sabtu (08.00 - 12.00 WIB).',
+      },
+      {
+        id: 'qr-rekening',
+        shortcut: '/rekening',
+        title: 'Nomor Rekening Pembayaran',
+        body: 'Berikut nomor rekening resmi pembayaran kami:\nBCA: 1234567890 a.n. PT Official WA CRM\nMandiri: 0987654321 a.n. PT Official WA CRM',
+      },
+      {
+        id: 'qr-tunggu',
+        shortcut: '/tunggu',
+        title: 'Konfirmasi Mohon Tunggu',
+        body: 'Mohon tunggu sebentar ya kak, tim kami sedang mengecek data Anda.',
+      },
+    ];
+  }
+
+  function saveQuickReplies() {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('wa_crm_quick_replies', JSON.stringify(customQuickReplies));
+    }
+  }
+
+  function handleSaveQr() {
+    if (!newQrShortcut.trim() || !newQrTitle.trim() || !newQrBody.trim()) {
+      alert('Harap isi shortcut, judul, dan isi balasan cepat.');
+      return;
+    }
+
+    let shortcutClean = newQrShortcut.trim();
+    if (!shortcutClean.startsWith('/')) {
+      shortcutClean = '/' + shortcutClean;
+    }
+
+    if (editingQrId) {
+      customQuickReplies = customQuickReplies.map((q) =>
+        q.id === editingQrId
+          ? { ...q, shortcut: shortcutClean, title: newQrTitle.trim(), body: newQrBody.trim() }
+          : q
+      );
+      editingQrId = null;
+    } else {
+      customQuickReplies.push({
+        id: 'qr-' + Date.now(),
+        shortcut: shortcutClean,
+        title: newQrTitle.trim(),
+        body: newQrBody.trim(),
+      });
+    }
+
+    saveQuickReplies();
+    newQrShortcut = '';
+    newQrTitle = '';
+    newQrBody = '';
+  }
+
+  function editQr(qr: QuickReplyItem) {
+    editingQrId = qr.id;
+    newQrShortcut = qr.shortcut;
+    newQrTitle = qr.title;
+    newQrBody = qr.body;
+  }
+
+  function deleteQr(id: string) {
+    if (!confirm('Hapus balasan cepat ini?')) return;
+    customQuickReplies = customQuickReplies.filter((q) => q.id !== id);
+    saveQuickReplies();
+  }
+
+  function resetDefaultQr() {
+    if (!confirm('Kembalikan ke daftar balasan cepat bawaan awal?')) return;
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('wa_crm_quick_replies');
+    }
+    loadQuickReplies();
+  }
 
   function isUserNearBottom(): boolean {
     if (!messagesContainer) return true;
@@ -717,6 +801,7 @@
   onMount(() => {
     selectedConvId = null;
     messageList = [];
+    loadQuickReplies();
 
     // Parallel initial load for fastest render
     Promise.all([
@@ -1344,6 +1429,14 @@
                   <Eye class="w-3.5 h-3.5" />
                   {isInternalNote ? 'Catatan Internal (Aktif)' : 'Beri Catatan Tim'}
                 </button>
+
+                <button
+                  onclick={() => (showQuickReplyManager = true)}
+                  class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white flex items-center gap-1.5 transition cursor-pointer"
+                >
+                  <Zap class="w-3.5 h-3.5 text-amber-500" />
+                  Kelola Balas Cepat (/)
+                </button>
               </div>
 
               <span class="text-[10px] text-slate-400 hidden sm:inline">Ketik / untuk balas cepat • Shift+Enter baris baru • Enter kirim</span>
@@ -1724,7 +1817,140 @@
   </div>
 {/if}
 
+<!-- ─── 4. MODAL KELOLA BALAS CEPAT (QUICK REPLIES) ─── -->
+{#if showQuickReplyManager}
+  <div class="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="glass-panel w-full max-w-xl rounded-2xl p-6 border border-slate-200 dark:border-slate-700 shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800 shrink-0">
+        <h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+          <Zap class="w-5 h-5 text-amber-500" />
+          Kelola Balas Cepat Internal (Shortcut /)
+        </h3>
+        <button
+          onclick={() => { showQuickReplyManager = false; editingQrId = null; }}
+          class="text-slate-400 hover:text-slate-600 dark:hover:text-white cursor-pointer"
+        >
+          <X class="w-5 h-5" />
+        </button>
+      </div>
 
+      <!-- Add / Edit Form -->
+      <div class="p-4 bg-slate-50 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-xl space-y-3 shrink-0">
+        <p class="text-xs font-bold text-slate-800 dark:text-slate-200">
+          {editingQrId ? '✏️ Edit Balas Cepat' : '➕ Tambah Balas Cepat Baru'}
+        </p>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div>
+            <label for="qr_shortcut" class="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Shortcut (diawali /)</label>
+            <input
+              id="qr_shortcut"
+              type="text"
+              bind:value={newQrShortcut}
+              placeholder="/promo /alamat"
+              class="w-full px-3 py-1.5 rounded-lg text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-emerald-500 text-slate-900 dark:text-white font-mono"
+            />
+          </div>
+
+          <div>
+            <label for="qr_title" class="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Judul Balas Cepat</label>
+            <input
+              id="qr_title"
+              type="text"
+              bind:value={newQrTitle}
+              placeholder="Contoh: Info Alamat Toko"
+              class="w-full px-3 py-1.5 rounded-lg text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-emerald-500 text-slate-900 dark:text-white"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label for="qr_body" class="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">Isi Pesan Balas Cepat</label>
+          <textarea
+            id="qr_body"
+            bind:value={newQrBody}
+            rows="2"
+            placeholder="Tuliskan isi balasan lengkap yang akan otomatis tertempel..."
+            class="w-full px-3 py-2 rounded-lg text-xs bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-emerald-500 text-slate-900 dark:text-white resize-none"
+          ></textarea>
+        </div>
+
+        <div class="flex items-center justify-end gap-2 pt-1">
+          {#if editingQrId}
+            <button
+              type="button"
+              onclick={() => { editingQrId = null; newQrShortcut = ''; newQrTitle = ''; newQrBody = ''; }}
+              class="px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold hover:bg-slate-300 dark:hover:bg-slate-700 cursor-pointer"
+            >
+              Batal Edit
+            </button>
+          {/if}
+
+          <button
+            type="button"
+            onclick={handleSaveQr}
+            class="px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm cursor-pointer"
+          >
+            <Plus class="w-3.5 h-3.5" />
+            <span>{editingQrId ? 'Simpan Perubahan' : 'Tambah Balas Cepat'}</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Existing List -->
+      <div class="flex-1 overflow-y-auto space-y-2 pr-1 min-h-[160px]">
+        <div class="flex items-center justify-between px-1">
+          <span class="text-xs font-bold text-slate-700 dark:text-slate-300">
+            Daftar Shortcut Aktif ({customQuickReplies.length})
+          </span>
+          <button
+            type="button"
+            onclick={resetDefaultQr}
+            class="text-[11px] font-semibold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 flex items-center gap-1 cursor-pointer"
+          >
+            <RotateCcw class="w-3 h-3" />
+            Reset ke Bawaan
+          </button>
+        </div>
+
+        {#each customQuickReplies as qr}
+          <div class="p-3 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-start justify-between gap-3 hover:border-slate-300 dark:hover:border-slate-700 transition">
+            <div class="min-w-0 flex-1 space-y-1">
+              <div class="flex items-center gap-2">
+                <span class="font-mono font-bold text-xs text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                  {qr.shortcut}
+                </span>
+                <span class="font-semibold text-xs text-slate-900 dark:text-white truncate">{qr.title}</span>
+              </div>
+              <p class="text-xs text-slate-600 dark:text-slate-400 line-clamp-2 leading-relaxed whitespace-pre-wrap">
+                {qr.body}
+              </p>
+            </div>
+
+            <div class="flex items-center gap-1 shrink-0">
+              <button
+                type="button"
+                onclick={() => editQr(qr)}
+                class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                title="Edit"
+              >
+                <Pencil class="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onclick={() => deleteQr(qr.id)}
+                class="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition cursor-pointer"
+                title="Hapus"
+              >
+                <Trash2 class="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        {/each}
+      </div>
+    </div>
+  </div>
+{/if}
 
 <!-- ─── 5. INLINE MEDIA LIGHTBOX MODAL ─── -->
 {#if activeLightboxUrl}
