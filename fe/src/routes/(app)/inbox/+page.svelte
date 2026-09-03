@@ -846,21 +846,23 @@
               <span class="font-mono">+{selectedConv.contact.waId}</span>
               <span>•</span>
               <span class="text-slate-700 dark:text-slate-300 font-medium">{selectedConv.assignedUser?.fullName || 'Belum di-assign'}</span>
-              {@const effectiveExpiresAt = selectedConv.windowExpiresAt 
-                ? new Date(selectedConv.windowExpiresAt).getTime() 
-                : (selectedConv.lastMessageAt ? new Date(selectedConv.lastMessageAt).getTime() + 24 * 60 * 60 * 1000 : 0)}
-              {@const timeLeftMs = effectiveExpiresAt ? effectiveExpiresAt - Date.now() : 0}
-              {@const hoursLeft = Math.floor(Math.max(0, timeLeftMs) / (1000 * 60 * 60))}
-              {@const minutesLeft = Math.floor((Math.max(0, timeLeftMs) % (1000 * 60 * 60)) / (1000 * 60))}
-              <span>•</span>
-              {#if timeLeftMs > 0}
-                <span class="text-emerald-600 dark:text-emerald-400 font-bold font-mono" title="Jendela Sesi 24 Jam Meta Aktif">
-                  Sesi Meta: {String(hoursLeft).padStart(2, '0')} jam {String(minutesLeft).padStart(2, '0')} menit
-                </span>
-              {:else}
-                <span class="text-rose-600 dark:text-rose-400 font-bold font-mono bg-rose-500/10 px-2 py-0.5 rounded-md border border-rose-500/20" title="Jendela Sesi 24 Jam Meta Kadaluarsa">
-                  ⚠️ Sesi Meta Kadaluarsa (>24 Jam)
-                </span>
+              {#if selectedConv}
+                {@const effectiveExpiresAt = selectedConv.windowExpiresAt 
+                  ? new Date(selectedConv.windowExpiresAt).getTime() 
+                  : (selectedConv.lastMessageAt ? new Date(selectedConv.lastMessageAt).getTime() + 24 * 60 * 60 * 1000 : 0)}
+                {@const timeLeftMs = effectiveExpiresAt ? effectiveExpiresAt - Date.now() : 0}
+                {@const hoursLeft = Math.floor(Math.max(0, timeLeftMs) / (1000 * 60 * 60))}
+                {@const minutesLeft = Math.floor((Math.max(0, timeLeftMs) % (1000 * 60 * 60)) / (1000 * 60))}
+                <span>•</span>
+                {#if timeLeftMs > 0}
+                  <span class="text-emerald-600 dark:text-emerald-400 font-bold font-mono" title="Jendela Sesi 24 Jam Meta Aktif">
+                    Sesi Meta: {String(hoursLeft).padStart(2, '0')} jam {String(minutesLeft).padStart(2, '0')} menit
+                  </span>
+                {:else}
+                  <span class="text-rose-600 dark:text-rose-400 font-bold font-mono bg-rose-500/10 px-2 py-0.5 rounded-md border border-rose-500/20" title="Jendela Sesi 24 Jam Meta Kadaluarsa">
+                    ⚠️ Sesi Meta Kadaluarsa (>24 Jam)
+                  </span>
+                {/if}
               {/if}
             </p>
           </div>
