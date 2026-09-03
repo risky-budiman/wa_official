@@ -338,6 +338,9 @@
     const targetId = convIdToClaim || selectedConvId;
     if (!targetId || isActionLoading || !authStore.user) return;
 
+    const targetConv = conversationList.find((c) => c.id === targetId);
+    if (targetConv?.status === 'RESOLVED') return;
+
     isActionLoading = true;
     const res = await apiRequest(`/conversations/${targetId}/assign`, {
       method: 'PATCH',
@@ -864,7 +867,7 @@
         <!-- Right: Action Buttons -->
         <div class="flex items-center gap-2 shrink-0">
           <!-- Ambil Obrolan / Claim Button if unassigned -->
-          {#if !selectedConv.assignedUser || selectedConv.status === 'UNASSIGNED'}
+          {#if selectedConv.status !== 'RESOLVED' && (!selectedConv.assignedUser || selectedConv.status === 'UNASSIGNED')}
             <button
               onclick={() => claimConversation()}
               disabled={isActionLoading}
