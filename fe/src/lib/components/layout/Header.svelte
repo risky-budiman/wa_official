@@ -34,12 +34,28 @@
   let showNotifications = $state(false);
   let showSecurityModal = $state(false);
   let showWabaModal = $state(false);
+  let showLoginStatusPrompt = $state(false);
 
   onMount(() => {
     channelStore.checkStatus();
     notificationStore.startPolling();
     notificationStore.requestBrowserPermission();
+
+    if (typeof window !== 'undefined' && authStore.isAuthenticated) {
+      const prompted = sessionStorage.getItem('wa_crm_status_prompted');
+      if (!prompted) {
+        showLoginStatusPrompt = true;
+      }
+    }
   });
+
+  function setLoginStatus(online: boolean) {
+    authStore.setOnlineStatus(online);
+    showLoginStatusPrompt = false;
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('wa_crm_status_prompted', 'true');
+    }
+  }
 </script>
 
 <header class="h-16 bg-white dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800 px-6 flex items-center justify-between shrink-0 relative z-30 transition-colors duration-200">
@@ -322,6 +338,44 @@
           class="py-2 px-4 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs cursor-pointer"
         >
           Tutup
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- 🟢/⚪ LOGIN STATUS PROMPT MODAL -->
+{#if showLoginStatusPrompt}
+  <div class="fixed inset-0 bg-slate-950/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="glass-panel w-full max-w-md rounded-3xl p-6 border border-slate-200 dark:border-slate-700 shadow-2xl space-y-4 text-center">
+      <div class="w-14 h-14 rounded-2xl bg-amber-500/10 text-amber-500 flex items-center justify-center mx-auto border border-amber-500/20 shadow-sm">
+        <UserCheck class="w-7 h-7" />
+      </div>
+
+      <div class="space-y-1">
+        <h3 class="text-base font-bold text-slate-900 dark:text-white">
+          Halo, {authStore.user?.fullName || 'Agen'}! 👋
+        </h3>
+        <p class="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+          Status ketersediaan Anda saat ini adalah <strong class="text-slate-700 dark:text-slate-300">⚪ Offline</strong>. Apakah Anda ingin mengaktifkan status menjadi <strong class="text-emerald-600 dark:text-emerald-400">🟢 Online</strong> untuk mulai menangani pesan pelanggan?
+        </p>
+      </div>
+
+      <div class="flex flex-col sm:flex-row items-center justify-center gap-2 pt-2">
+        <button
+          type="button"
+          onclick={() => setLoginStatus(false)}
+          class="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold transition cursor-pointer"
+        >
+          ⚪ Tetap Offline
+        </button>
+
+        <button
+          type="button"
+          onclick={() => setLoginStatus(true)}
+          class="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-500/20 transition cursor-pointer"
+        >
+          <span>🟢 Ya, Ubah Ke Online</span>
         </button>
       </div>
     </div>

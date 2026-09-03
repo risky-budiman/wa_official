@@ -91,11 +91,11 @@ class AuthStore {
   }
 
   get isOnline(): boolean {
-    return this.user?.isOnline ?? true;
+    return this.user?.isOnline ?? false;
   }
 
   setAuth(token: string, user: User) {
-    if (user.isOnline === undefined) user.isOnline = true;
+    if (user.isOnline === undefined) user.isOnline = false;
     this.token = token;
     this.user = user;
     if (typeof window !== 'undefined') {
@@ -132,17 +132,25 @@ class AuthStore {
     }
   }
 
-  async toggleOnline() {
-    if (!this.user?.id) return;
-    const targetStatus = !this.isOnline;
-    this.user.isOnline = targetStatus;
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('wa_crm_user', JSON.stringify(this.user));
+  async setOnlineStatus(targetStatus: boolean) {
+    if (this.user) {
+      this.user.isOnline = targetStatus;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('wa_crm_user', JSON.stringify(this.user));
+      }
+      if (this.user.id) {
+        try {
+          await apiRequest(`/users/${this.user.id}`, {
+            method: 'PATCH',
+            body: JSON.stringify({ isOnline: targetStatus }),
+          });
+        } catch (_) {}
+      }
     }
-    await apiRequest(`/users/${this.user.id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ isOnline: targetStatus }),
-    });
+  }
+
+  async toggleOnline() {
+    await this.setOnlineStatus(!this.isOnline);
   }
 
   async login(body: {
@@ -182,12 +190,26 @@ class AuthStore {
     return { success: false, error: res.error || 'Registrasi gagal' };
   }
 
-  logout() {
+  async logout(confirmLogout = true) {
+    if (confirmLogout && typeof window !== 'undefined') {
+      if (!confirm('Apakah Anda yakin ingin Logout? Status ketersediaan Anda akan otomatis diubah menjadi Offline.')) {
+        return;
+      }
+    }
+    if (this.user?.id) {
+      try {
+        await apiRequest(`/users/${this.user.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ isOnline: false }),
+        });
+      } catch (_) {}
+    }
     this.token = null;
     this.user = null;
     this.impersonatorToken = null;
     this.impersonatorUser = null;
     if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('wa_crm_status_prompted');
       localStorage.removeItem('wa_crm_token');
       localStorage.removeItem('wa_crm_user');
       localStorage.removeItem('wa_crm_imp_token');

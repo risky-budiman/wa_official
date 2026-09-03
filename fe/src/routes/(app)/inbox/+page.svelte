@@ -583,6 +583,11 @@
   async function resolveConversation() {
     if (!selectedConvId || isActionLoading) return;
 
+    const contactName = selectedConv?.contact.name || 'pelanggan ini';
+    if (!confirm(`Apakah Anda yakin ingin menyelesaikan (Resolve) tiket percakapan dengan ${contactName}? Tiket ini akan diselesaikan dan dikunci.`)) {
+      return;
+    }
+
     isActionLoading = true;
     const res = await apiRequest(`/conversations/${selectedConvId}/status`, {
       method: 'PATCH',
