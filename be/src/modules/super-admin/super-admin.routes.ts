@@ -1594,15 +1594,26 @@ export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
         dbSyncStatus = `Catatan sinkronisasi database: ${dbErr?.message || dbErr}`;
       }
 
-      // 3. Trigger systemctl restart otomatis di background (jika server berjalan via systemctl service)
+      // 3. Build frontend bundle jika menggunakan adapter-node / produksi
+      let buildStatus = 'Proses build frontend dilewati atau menggunakan Vite dev.';
+      try {
+        const path = await import('path');
+        const feDir = path.join(repoDir, 'fe');
+        const { stdout: buildOut } = await execAsync('bun run build || npm run build', { cwd: feDir, timeout: 120000 });
+        buildStatus = `Build frontend SvelteKit berhasil! ${buildOut || ''}`.trim();
+      } catch (buildErr: any) {
+        buildStatus = `Catatan build frontend: ${buildErr?.message || buildErr}`;
+      }
+
+      // 4. Trigger systemctl restart otomatis di background (wa-crm-backend & wa-crm-frontend)
       setTimeout(() => {
-        execAsync('sudo systemctl restart wa-backend wa-frontend || systemctl restart wa-backend || true').catch(() => {});
+        execAsync('sudo systemctl restart wa-crm-backend wa-crm-frontend || sudo systemctl restart wa-backend wa-frontend || true').catch(() => {});
       }, 1000);
 
       return {
         success: true,
-        message: 'Pembaruan dari GitHub, skema database, dan restart layanan server berhasil diterapkan!',
-        output: `${gitOutput}\n\n[Database Migration Sync]\n${dbSyncStatus}\n\n[Service Status]\nPerintah restart systemctl telah dikirimkan ke server VPS.`,
+        message: 'Pembaruan dari GitHub, skema database, build frontend, dan restart layanan systemctl berhasil diterapkan!',
+        output: `${gitOutput}\n\n[Database Migration Sync]\n${dbSyncStatus}\n\n[Frontend Build]\n${buildStatus}\n\n[Service Restart]\nPerintah "sudo systemctl restart wa-crm-backend wa-crm-frontend" telah dikirimkan ke server VPS.`,
       };
     } catch (err: any) {
       set.status = 500;
