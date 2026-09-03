@@ -1171,6 +1171,24 @@
   // ==========================================
   // META CLOUD API INTEGRATION WIZARD HANDLERS
   // ==========================================
+  function formatMessagingTier(tierRaw?: string): string {
+    if (!tierRaw) return "2,000 Percakapan / 24 Jam";
+    const t = String(tierRaw).toUpperCase().trim();
+    if (t === "TIER_250" || t === "250") return "250 Percakapan / 24 Jam (Akun Baru)";
+    if (t === "TIER_1K" || t === "TIER_1000" || t === "1000" || t === "1K") return "1,000 Percakapan / 24 Jam (Tier 1K)";
+    if (t === "TIER_2K" || t === "TIER_2000" || t === "2000" || t === "2K") return "2,000 Percakapan / 24 Jam (Tier 2K)";
+    if (t === "TIER_10K" || t === "TIER_10000" || t === "10000" || t === "10K") return "10,000 Percakapan / 24 Jam (Tier 10K)";
+    if (t === "TIER_100K" || t === "TIER_100000" || t === "100000" || t === "100K") return "100,000 Percakapan / 24 Jam (Tier 100K)";
+    if (t === "TIER_UNLIMITED" || t === "UNLIMITED") return "♾️ Tanpa Batas / Unlimited (Tier Unlimited)";
+    
+    const digits = t.replace(/[^0-9]/g, "");
+    if (digits) {
+      const num = parseInt(digits, 10);
+      return `${num.toLocaleString("id-ID")} Percakapan / 24 Jam`;
+    }
+    return `${tierRaw} Percakapan / 24 Jam`;
+  }
+
   function openMetaWizard(tenant: TenantItem) {
     metaOrg = tenant;
     metaWabaId = tenant.wabaId || "";
@@ -4833,7 +4851,7 @@
                         Batas Quota Meta (Messaging Limit):
                       </span>
                       <strong class="font-mono text-xs font-black text-emerald-700 dark:text-emerald-300">
-                        {metaTestResult.data.phoneNumber.messaging_limit_tier === 'TIER_1K' ? '1,000 Pesan / 24 Jam' : metaTestResult.data.phoneNumber.messaging_limit_tier === 'TIER_10K' ? '10,000 Pesan / 24 Jam' : metaTestResult.data.phoneNumber.messaging_limit_tier === 'TIER_100K' ? '100,000 Pesan / 24 Jam' : metaTestResult.data.phoneNumber.messaging_limit_tier === 'TIER_UNLIMITED' ? '♾️ Unlimited / 24 Jam' : '250 Pesan / 24 Jam (Tier 250)'}
+                        {formatMessagingTier(metaTestResult.data.phoneNumber.messaging_limit_tier)}
                       </strong>
                     </div>
                   </div>
