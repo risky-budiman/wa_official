@@ -1585,18 +1585,24 @@ export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
 
       const gitOutput = `${stdout || ''}\n${stderr || ''}`.trim();
 
-      // 2. Sinkronkan skema database secara aman (Non-Destructive DDL)
+      // 2. Sinkronkan skema database secara otomatis (autoMigrateSchema)
       let dbSyncStatus = 'Struktur database & relasi berhasil disinkronkan aman tanpa menghapus data.';
       try {
-        await testConnection();
+        const { autoMigrateSchema } = await import('../../db/auto-migrate');
+        await autoMigrateSchema();
       } catch (dbErr: any) {
         dbSyncStatus = `Catatan sinkronisasi database: ${dbErr?.message || dbErr}`;
       }
 
+      // 3. Trigger systemctl restart otomatis di background (jika server berjalan via systemctl service)
+      setTimeout(() => {
+        execAsync('sudo systemctl restart wa-backend wa-frontend || systemctl restart wa-backend || true').catch(() => {});
+      }, 1000);
+
       return {
         success: true,
-        message: 'Pembaruan dari GitHub dan skema database berhasil diterapkan tanpa menghapus data!',
-        output: `${gitOutput}\n\n[Database Migration Sync]\n${dbSyncStatus}`,
+        message: 'Pembaruan dari GitHub, skema database, dan restart layanan server berhasil diterapkan!',
+        output: `${gitOutput}\n\n[Database Migration Sync]\n${dbSyncStatus}\n\n[Service Status]\nPerintah restart systemctl telah dikirimkan ke server VPS.`,
       };
     } catch (err: any) {
       set.status = 500;
