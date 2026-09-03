@@ -558,7 +558,7 @@
         ? new Date(selectedConv.windowExpiresAt).getTime() 
         : (selectedConv.lastMessageAt ? new Date(selectedConv.lastMessageAt).getTime() + 24 * 60 * 60 * 1000 : 0);
       if (effExpires && effExpires - Date.now() <= 0) {
-        notificationStore.error('Sesi 24 Jam Meta telah kadaluarsa. Silakan gunakan Template WhatsApp Resmi.');
+        alert('Sesi 24 Jam Meta telah kadaluarsa. Silakan gunakan Template WhatsApp Resmi.');
         showTemplatePicker = true;
         return;
       }
