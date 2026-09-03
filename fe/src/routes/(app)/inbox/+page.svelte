@@ -152,6 +152,7 @@
   let messageList = $state<MessageItem[]>([]);
   let availableAgents = $state<UserOption[]>([]);
   let availableTemplates = $state<TemplateItem[]>([]);
+  let activeLightboxUrl = $state<string | null>(null);
 
   let selectedAgentId = $state('');
   let selectedCollaboratorId = $state('');
@@ -844,8 +845,17 @@
               {#if selectedConv.windowExpiresAt}
                 {@const timeLeftMs = new Date(selectedConv.windowExpiresAt).getTime() - Date.now()}
                 {@const hoursLeft = Math.floor(timeLeftMs / (1000 * 60 * 60))}
+                {@const minutesLeft = Math.floor((timeLeftMs % (1000 * 60 * 60)) / (1000 * 60))}
                 <span>•</span>
-                <span class="text-emerald-600 dark:text-emerald-400 font-medium">Sesi: {hoursLeft > 0 ? hoursLeft + 'j' : '< 1j'}</span>
+                {#if timeLeftMs > 0}
+                  <span class="text-emerald-600 dark:text-emerald-400 font-bold font-mono">
+                    Sesi Meta: {hoursLeft > 0 ? String(hoursLeft).padStart(2, '0') : '00'} jam {minutesLeft > 0 ? String(minutesLeft).padStart(2, '0') : '00'} menit
+                  </span>
+                {:else}
+                  <span class="text-rose-600 dark:text-rose-400 font-bold font-mono bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/20">
+                    Sesi Meta Kadaluarsa
+                  </span>
+                {/if}
               {/if}
             </p>
           </div>
@@ -1005,9 +1015,28 @@
                 </div>
 
                 {#if msg.mediaUrl}
-                  <a href={msg.mediaUrl} target="_blank" rel="noopener noreferrer" class="block rounded-xl overflow-hidden my-1 max-w-xs border border-white/20 hover:opacity-90 transition">
-                    <img src={msg.mediaUrl} alt="Foto AI" class="w-full max-h-72 object-cover rounded-xl" loading="lazy" />
-                  </a>
+                  {#if msg.mediaMimeType?.startsWith('image/') || msg.messageType === 'image' || (msg.mediaUrl.match(/\.(jpg|jpeg|png|webp|gif)/i))}
+                    <button type="button" onclick={() => (activeLightboxUrl = msg.mediaUrl)} class="block rounded-xl overflow-hidden my-1 max-w-xs border border-white/20 hover:opacity-90 transition text-left cursor-zoom-in">
+                      <img src={msg.mediaUrl} alt="Foto AI" class="w-full max-h-72 object-cover rounded-xl" loading="lazy" />
+                    </button>
+                  {:else if msg.mediaMimeType?.startsWith('audio/') || msg.messageType === 'audio' || msg.messageType === 'voice' || (msg.mediaUrl.match(/\.(mp3|ogg|wav|m4a|aac)/i))}
+                    <!-- svelte-ignore a11y_media_has_caption -->
+                    <div class="my-1.5 p-1 rounded-xl bg-indigo-700/60 border border-indigo-400/40 max-w-xs">
+                      <audio controls src={msg.mediaUrl} class="w-full h-8"></audio>
+                    </div>
+                  {:else if msg.mediaMimeType?.startsWith('video/') || msg.messageType === 'video' || (msg.mediaUrl.match(/\.(mp4|webm|mov|avi)/i))}
+                    <!-- svelte-ignore a11y_media_has_caption -->
+                    <div class="my-1.5 rounded-xl overflow-hidden max-w-xs border border-indigo-400/40 shadow-sm">
+                      <video controls src={msg.mediaUrl} class="w-full max-h-72 object-cover rounded-xl">
+                        <track kind="captions" />
+                      </video>
+                    </div>
+                  {:else}
+                    <a href={msg.mediaUrl} target="_blank" download class="flex items-center gap-2 p-2 my-1 rounded-xl bg-indigo-700/50 text-white border border-white/20">
+                      <FileText class="w-4 h-4 shrink-0" />
+                      <span class="truncate font-semibold text-xs">{msg.body || 'Dokumen'}</span>
+                    </a>
+                  {/if}
                 {/if}
 
                 <div class="text-white/95 leading-relaxed font-sans">
@@ -1033,10 +1062,22 @@
                 </div>
 
                 {#if msg.mediaUrl}
-                  {#if msg.mediaMimeType?.startsWith('image/') || msg.messageType === 'image'}
-                    <a href={msg.mediaUrl} target="_blank" rel="noopener noreferrer" class="block rounded-xl overflow-hidden my-1 max-w-xs border border-white/20 hover:opacity-90 transition">
+                  {#if msg.mediaMimeType?.startsWith('image/') || msg.messageType === 'image' || (msg.mediaUrl.match(/\.(jpg|jpeg|png|webp|gif)/i))}
+                    <button type="button" onclick={() => (activeLightboxUrl = msg.mediaUrl)} class="block rounded-xl overflow-hidden my-1 max-w-xs border border-white/20 hover:opacity-90 transition text-left cursor-zoom-in">
                       <img src={msg.mediaUrl} alt="Foto Agen" class="w-full max-h-72 object-cover rounded-xl" loading="lazy" />
-                    </a>
+                    </button>
+                  {:else if msg.mediaMimeType?.startsWith('audio/') || msg.messageType === 'audio' || msg.messageType === 'voice' || (msg.mediaUrl.match(/\.(mp3|ogg|wav|m4a|aac)/i))}
+                    <!-- svelte-ignore a11y_media_has_caption -->
+                    <div class="my-1.5 p-1 rounded-xl bg-emerald-700/60 border border-emerald-400/40 max-w-xs">
+                      <audio controls src={msg.mediaUrl} class="w-full h-8"></audio>
+                    </div>
+                  {:else if msg.mediaMimeType?.startsWith('video/') || msg.messageType === 'video' || (msg.mediaUrl.match(/\.(mp4|webm|mov|avi)/i))}
+                    <!-- svelte-ignore a11y_media_has_caption -->
+                    <div class="my-1.5 rounded-xl overflow-hidden max-w-xs border border-emerald-400/40 shadow-sm">
+                      <video controls src={msg.mediaUrl} class="w-full max-h-72 object-cover rounded-xl">
+                        <track kind="captions" />
+                      </video>
+                    </div>
                   {:else}
                     <a href={msg.mediaUrl} target="_blank" download class="flex items-center gap-2 p-2 my-1 rounded-xl bg-emerald-700/50 text-white border border-white/20">
                       <FileText class="w-4 h-4 shrink-0" />
@@ -1521,5 +1562,28 @@
         {/if}
       </div>
     </div>
+  </div>
+{/if}
+
+<!-- ─── 5. INLINE MEDIA LIGHTBOX MODAL ─── -->
+{#if activeLightboxUrl}
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    class="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in"
+    onclick={() => (activeLightboxUrl = null)}
+  >
+    <button
+      type="button"
+      class="absolute top-4 right-4 text-white hover:text-slate-300 p-2 cursor-pointer transition"
+      onclick={() => (activeLightboxUrl = null)}
+    >
+      <X class="w-7 h-7" />
+    </button>
+    <img
+      src={activeLightboxUrl}
+      alt="Preview Media WhatsApp"
+      class="max-w-full max-h-[90vh] object-contain rounded-2xl shadow-2xl"
+    />
   </div>
 {/if}
