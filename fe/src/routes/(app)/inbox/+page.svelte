@@ -982,17 +982,31 @@
         const formData = new FormData();
         formData.append("file", currentAttachment.file);
 
+        const token =
+          authStore.token ||
+          (typeof window !== "undefined" ? localStorage.getItem("wa_crm_token") : "");
+
         const uploadRes = await fetch(`${getApiBaseUrl()}/media/upload`, {
           method: "POST",
-          headers: {
-            Authorization: `Bearer ${authStore.token}`,
-          },
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
           body: formData,
         });
 
-        const uploadData = await uploadRes.json();
+        const rawText = await uploadRes.text();
+        let uploadData: any = {};
+
+        try {
+          uploadData = JSON.parse(rawText);
+        } catch (_) {
+          if (uploadRes.status === 413) {
+            uploadData = { error: "Ukuran file melebihi batas upload Nginx (413 Payload Too Large)." };
+          } else {
+            uploadData = { error: `Server error (HTTP ${uploadRes.status}): ${rawText.slice(0, 150)}` };
+          }
+        }
+
         if (!uploadRes.ok || !uploadData.success) {
-          alert(`Gagal mengunggah file: ${uploadData.error || "Terjadi kesalahan"}`);
+          alert(`Gagal mengunggah file: ${uploadData.error || "Terjadi kesalahan pada server"}`);
           isUploadingMedia = false;
           return;
         }
