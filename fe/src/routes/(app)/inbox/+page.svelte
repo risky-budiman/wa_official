@@ -1145,18 +1145,6 @@
             </button>
           {/if}
 
-          <!-- Button Tugaskan Agen (Khusus SPV/Admin) -->
-          {#if authStore.role !== 'AGENT' && selectedConv.status !== 'RESOLVED'}
-            <button
-              onclick={() => (showReassignModal = true)}
-              class="py-1.5 px-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs flex items-center gap-1.5 transition cursor-pointer"
-              title="Alokasikan / Pindahkan Agen Penanggung Jawab"
-            >
-              <UserPlus class="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-              <span class="hidden sm:inline">Tugaskan Agen</span>
-            </button>
-          {/if}
-
           <!-- Resolve Status Badge / Button -->
           {#if selectedConv.status === 'RESOLVED'}
             <div class="py-1.5 px-3 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-700 dark:text-purple-400 font-bold text-xs flex items-center gap-1.5 shadow-sm">
@@ -1474,59 +1462,64 @@
               </div>
             {/if}
 
-            <!-- Action Row -->
-            <div class="flex items-center justify-between gap-2">
-              <div class="flex items-center gap-1.5">
-                <!-- 📝 Icon Catatan Tim Internal (Document / Whisper Note) -->
+            <!-- Top Helper Line -->
+            <div class="flex items-center justify-between gap-2 px-1 mb-1">
+              {#if isInternalNote}
+                <div class="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-bold text-[11px] animate-pulse">
+                  <FileText class="w-3.5 h-3.5" />
+                  <span>Mode Catatan Internal Tim (Whisper Note)</span>
+                </div>
+              {:else}
+                <span></span>
+              {/if}
+              <span class="text-[10px] text-slate-400 hidden sm:inline">Ketik / untuk balas cepat • Shift+Enter baris baru • Enter kirim</span>
+            </div>
+
+            <!-- Input Box with Vertical Icon Toolbar -->
+            <div class="flex items-end gap-2">
+              <!-- VERTICAL TOOLBAR ICONS (1 Column Stack) -->
+              <div class="flex flex-col gap-1 text-slate-500 dark:text-slate-400 shrink-0 pb-1">
+                <!-- 1. Media Upload Icon -->
+                <button
+                  onclick={() => alert('Fitur upload lampiran terhubung ke media storage.')}
+                  class="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer text-slate-500 hover:text-slate-700 dark:hover:text-slate-200"
+                  title="Kirim Media (Foto / Dokumen)"
+                >
+                  <Paperclip class="w-4 h-4" />
+                </button>
+
+                <!-- 2. Emoji Icon -->
+                <button
+                  onclick={() => (showEmojiPicker = !showEmojiPicker)}
+                  class="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer text-slate-500 hover:text-slate-700 dark:hover:text-slate-200"
+                  title="Pilih Emoji"
+                >
+                  <Smile class="w-4 h-4" />
+                </button>
+
+                <!-- 3. Catatan Tim (Document / Whisper Note) -->
                 <button
                   onclick={() => (isInternalNote = !isInternalNote)}
-                  class="p-2 rounded-xl text-xs font-semibold flex items-center justify-center transition cursor-pointer {isInternalNote 
+                  class="p-1.5 rounded-lg transition cursor-pointer {isInternalNote 
                     ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20' 
-                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-slate-200 dark:hover:bg-slate-700'}"
+                    : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-amber-600 dark:hover:text-amber-400'}"
                   title="{isInternalNote ? 'Catatan Internal Tim (Aktif)' : 'Beri Catatan Tim (Dokumen Internal)'}"
                 >
                   <FileText class="w-4 h-4" />
                 </button>
 
-                <!-- ✨ Icon Saran Balasan AI (AI Emoticon / Sparkles) -->
+                <!-- 4. Saran Balasan AI (AI Emoticon / Sparkles) -->
                 <button
                   onclick={fetchAiSuggestions}
                   disabled={isAiGenerating}
-                  class="p-2 rounded-xl text-xs font-bold bg-gradient-to-r from-purple-500/10 via-indigo-500/10 to-emerald-500/10 hover:from-purple-500/20 hover:to-emerald-500/20 text-purple-600 dark:text-purple-300 border border-purple-500/30 flex items-center justify-center transition cursor-pointer disabled:opacity-60 shadow-sm"
+                  class="p-1.5 rounded-lg transition cursor-pointer text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/40 disabled:opacity-60"
                   title="✨ Saran Balasan Pintar AI"
                 >
                   <Sparkles class="w-4 h-4 text-purple-500 {isAiGenerating ? 'animate-spin' : ''}" />
                 </button>
-
-                {#if isInternalNote}
-                  <span class="text-[11px] font-bold text-amber-600 dark:text-amber-400 animate-pulse ml-1">
-                    Catatan Tim Aktif
-                  </span>
-                {/if}
               </div>
 
-              <span class="text-[10px] text-slate-400 hidden sm:inline">Ketik / untuk balas cepat • Shift+Enter baris baru • Enter kirim</span>
-            </div>
-
-            <!-- Input Box -->
-            <div class="flex items-end gap-2">
-              <div class="flex items-center gap-1 text-slate-500 dark:text-slate-400 shrink-0 pb-1">
-                <button
-                  onclick={() => alert('Fitur upload lampiran terhubung ke media storage.')}
-                  class="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
-                  title="Kirim Media"
-                >
-                  <Paperclip class="w-4 h-4" />
-                </button>
-                <button
-                  onclick={() => (showEmojiPicker = !showEmojiPicker)}
-                  class="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
-                  title="Emoji"
-                >
-                  <Smile class="w-4 h-4" />
-                </button>
-              </div>
-
+              <!-- Textarea Input -->
               <textarea
                 bind:this={messageInputRef}
                 rows="1"
@@ -1541,6 +1534,7 @@
                   : 'bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:border-emerald-500'}"
               ></textarea>
 
+              <!-- Send Button -->
               <button
                 onclick={sendMessage}
                 class="p-2.5 rounded-xl text-white font-bold transition shadow-sm shrink-0 mb-0.5 {isInternalNote 
