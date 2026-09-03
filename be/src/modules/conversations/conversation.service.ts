@@ -241,11 +241,12 @@ export class ConversationService {
       .innerJoin(users, eq(conversationParticipants.userId, users.id))
       .where(eq(conversationParticipants.conversationId, conversationId));
 
-    // 🔒 RBAC Guard: If AGENT, ensure conversation is assigned to this agent OR agent is in participants
+    // 🔒 RBAC Guard: If AGENT, ensure conversation is assigned to this agent, agent is participant, OR ticket is UNASSIGNED (for claiming)
     if (user.role === 'AGENT') {
       const isAssigned = conv.assignedUserId === user.id;
       const isParticipant = participants.some((p) => p.id === user.id);
-      if (!isAssigned && !isParticipant) {
+      const isUnassigned = conv.status === 'UNASSIGNED' || !conv.assignedUserId;
+      if (!isAssigned && !isParticipant && !isUnassigned) {
         throw new Error('Akses ditolak: Anda tidak memiliki akses ke percakapan ini.');
       }
     }

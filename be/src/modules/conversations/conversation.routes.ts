@@ -171,8 +171,35 @@ export const conversationRoutes = new Elysia({ prefix: '/conversations' })
     }
   )
 
-  // ─── POST /conversations/:id/assign — Re-assign Conversation ──
+  // ─── POST & PATCH /conversations/:id/assign — Re-assign Conversation ──
   .post(
+    '/:id/assign',
+    async ({ user, params, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { success: false, error: 'Unauthorized' };
+      }
+
+      try {
+        const res = await ConversationService.assign(
+          user,
+          params.id,
+          body
+        );
+        return res;
+      } catch (err: any) {
+        set.status = 400;
+        return { success: false, error: err.message };
+      }
+    },
+    {
+      body: t.Object({
+        assignedUserId: t.String(),
+        teamId: t.Optional(t.String()),
+      }),
+    }
+  )
+  .patch(
     '/:id/assign',
     async ({ user, params, body, set }) => {
       if (!user) {

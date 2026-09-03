@@ -102,7 +102,10 @@ const app = new Elysia()
   })
 
   // ─── Start Server ──────────────────────────
-  .listen(env.PORT);
+  .listen({
+    port: env.PORT,
+    hostname: '0.0.0.0',
+  });
 
 // Test DB connection after server starts
 testConnection();
