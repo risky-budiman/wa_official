@@ -73,6 +73,7 @@
     FolderGit2,
     AlertCircle,
     Database,
+    Gauge,
   } from "lucide-svelte";
 
   interface TenantItem {

@@ -99,13 +99,13 @@ export class NotificationStore {
     }
   }
 
-  addNotification(item: Omit<NotificationItem, 'id' | 'createdAt' | 'unread' | 'time'>) {
+  addNotification(item: Omit<NotificationItem, 'id' | 'createdAt' | 'unread'> & { time?: string }) {
     const newItem: NotificationItem = {
+      time: 'Baru saja',
       ...item,
       id: 'notif-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
       unread: true,
       createdAt: new Date().toISOString(),
-      time: 'Baru saja',
     };
 
     this.items = [newItem, ...this.items.slice(0, 49)];
