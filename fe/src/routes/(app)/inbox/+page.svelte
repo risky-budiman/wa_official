@@ -1475,14 +1475,14 @@
               <span class="text-[10px] text-slate-400 hidden sm:inline">Ketik / untuk balas cepat • Shift+Enter baris baru • Enter kirim</span>
             </div>
 
-            <!-- Input Box with Vertical Icon Toolbar -->
+            <!-- Input Box with Single Horizontal Icon Row -->
             <div class="flex items-end gap-2">
-              <!-- VERTICAL TOOLBAR ICONS (1 Column Stack) -->
-              <div class="flex flex-col gap-1 text-slate-500 dark:text-slate-400 shrink-0 pb-1">
+              <!-- HORIZONTAL TOOLBAR ICONS (1 Straight Line) -->
+              <div class="flex items-center gap-1 text-slate-500 dark:text-slate-400 shrink-0 pb-1">
                 <!-- 1. Media Upload Icon -->
                 <button
                   onclick={() => alert('Fitur upload lampiran terhubung ke media storage.')}
-                  class="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer text-slate-500 hover:text-slate-700 dark:hover:text-slate-200"
+                  class="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer text-slate-500 hover:text-slate-700 dark:hover:text-slate-200"
                   title="Kirim Media (Foto / Dokumen)"
                 >
                   <Paperclip class="w-4 h-4" />
@@ -1491,7 +1491,7 @@
                 <!-- 2. Emoji Icon -->
                 <button
                   onclick={() => (showEmojiPicker = !showEmojiPicker)}
-                  class="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer text-slate-500 hover:text-slate-700 dark:hover:text-slate-200"
+                  class="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer text-slate-500 hover:text-slate-700 dark:hover:text-slate-200"
                   title="Pilih Emoji"
                 >
                   <Smile class="w-4 h-4" />
@@ -1500,7 +1500,7 @@
                 <!-- 3. Catatan Tim (Document / Whisper Note) -->
                 <button
                   onclick={() => (isInternalNote = !isInternalNote)}
-                  class="p-1.5 rounded-lg transition cursor-pointer {isInternalNote 
+                  class="p-2 rounded-xl transition cursor-pointer {isInternalNote 
                     ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20' 
                     : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-amber-600 dark:hover:text-amber-400'}"
                   title="{isInternalNote ? 'Catatan Internal Tim (Aktif)' : 'Beri Catatan Tim (Dokumen Internal)'}"
@@ -1512,7 +1512,7 @@
                 <button
                   onclick={fetchAiSuggestions}
                   disabled={isAiGenerating}
-                  class="p-1.5 rounded-lg transition cursor-pointer text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/40 disabled:opacity-60"
+                  class="p-2 rounded-xl transition cursor-pointer text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/40 disabled:opacity-60"
                   title="✨ Saran Balasan Pintar AI"
                 >
                   <Sparkles class="w-4 h-4 text-purple-500 {isAiGenerating ? 'animate-spin' : ''}" />
