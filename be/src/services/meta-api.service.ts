@@ -90,8 +90,20 @@ export class MetaApiService {
 
     const url = `${this.baseUrl}/${params.phoneNumberId}/messages`;
 
+    let fullMediaUrl = params.mediaUrl;
+    if (fullMediaUrl && fullMediaUrl.startsWith('/')) {
+      let baseUrl = env.PUBLIC_APP_URL || '';
+      if (!baseUrl && env.CORS_ORIGIN && env.CORS_ORIGIN !== '*') {
+        baseUrl = env.CORS_ORIGIN.split(',')[0].trim();
+      }
+      if (!baseUrl) {
+        baseUrl = 'https://crm.sahabatit.my.id';
+      }
+      fullMediaUrl = `${baseUrl.replace(/\/$/, '')}${fullMediaUrl}`;
+    }
+
     const mediaPayload: any = {
-      link: params.mediaUrl,
+      link: fullMediaUrl,
     };
     if (params.caption && (params.type === 'image' || params.type === 'video' || params.type === 'document')) {
       mediaPayload.caption = params.caption;
