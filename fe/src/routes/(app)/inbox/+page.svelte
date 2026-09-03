@@ -940,13 +940,11 @@
 
                 <!-- Media Display (Image / Audio / Video / Document) -->
                 {#if msg.mediaUrl}
-                  {#if msg.mediaMimeType?.startsWith('image/') || msg.messageType === 'image' || msg.messageType === 'sticker'}
-                    <a
-                      href={msg.mediaUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      class="block rounded-xl overflow-hidden my-1 max-w-xs border border-slate-200 dark:border-slate-700 hover:opacity-90 transition shadow-sm group"
-                      title="Klik untuk melihat foto ukuran penuh"
+                  {#if msg.mediaMimeType?.startsWith('image/') || msg.messageType === 'image' || msg.messageType === 'sticker' || (msg.mediaUrl.match(/\.(jpg|jpeg|png|webp|gif)/i))}
+                    <button
+                      type="button"
+                      onclick={() => (activeLightboxUrl = msg.mediaUrl || null)}
+                      class="block rounded-xl overflow-hidden my-1 max-w-xs border border-slate-200 dark:border-slate-700 hover:opacity-90 transition shadow-sm group text-left cursor-zoom-in"
                     >
                       <img
                         src={msg.mediaUrl}
@@ -954,13 +952,13 @@
                         class="w-full max-h-72 object-cover rounded-xl transition duration-200 group-hover:scale-[1.02]"
                         loading="lazy"
                       />
-                    </a>
-                  {:else if msg.mediaMimeType?.startsWith('audio/') || msg.messageType === 'audio' || msg.messageType === 'voice'}
+                    </button>
+                  {:else if msg.mediaMimeType?.startsWith('audio/') || msg.messageType === 'audio' || msg.messageType === 'voice' || (msg.mediaUrl.match(/\.(mp3|ogg|wav|m4a|aac)/i))}
                     <!-- svelte-ignore a11y_media_has_caption -->
                     <div class="my-1.5 p-1 rounded-xl bg-slate-100 dark:bg-slate-700/50 max-w-xs">
                       <audio controls src={msg.mediaUrl} class="w-full h-8"></audio>
                     </div>
-                  {:else if msg.mediaMimeType?.startsWith('video/') || msg.messageType === 'video'}
+                  {:else if msg.mediaMimeType?.startsWith('video/') || msg.messageType === 'video' || (msg.mediaUrl.match(/\.(mp4|webm|mov|avi)/i))}
                     <!-- svelte-ignore a11y_media_has_caption -->
                     <div class="my-1.5 rounded-xl overflow-hidden max-w-xs border border-slate-200 dark:border-slate-700 shadow-sm">
                       <video controls src={msg.mediaUrl} class="w-full max-h-72 object-cover rounded-xl">
@@ -1016,7 +1014,7 @@
 
                 {#if msg.mediaUrl}
                   {#if msg.mediaMimeType?.startsWith('image/') || msg.messageType === 'image' || (msg.mediaUrl.match(/\.(jpg|jpeg|png|webp|gif)/i))}
-                    <button type="button" onclick={() => (activeLightboxUrl = msg.mediaUrl)} class="block rounded-xl overflow-hidden my-1 max-w-xs border border-white/20 hover:opacity-90 transition text-left cursor-zoom-in">
+                    <button type="button" onclick={() => (activeLightboxUrl = msg.mediaUrl || null)} class="block rounded-xl overflow-hidden my-1 max-w-xs border border-white/20 hover:opacity-90 transition text-left cursor-zoom-in">
                       <img src={msg.mediaUrl} alt="Foto AI" class="w-full max-h-72 object-cover rounded-xl" loading="lazy" />
                     </button>
                   {:else if msg.mediaMimeType?.startsWith('audio/') || msg.messageType === 'audio' || msg.messageType === 'voice' || (msg.mediaUrl.match(/\.(mp3|ogg|wav|m4a|aac)/i))}
@@ -1063,7 +1061,7 @@
 
                 {#if msg.mediaUrl}
                   {#if msg.mediaMimeType?.startsWith('image/') || msg.messageType === 'image' || (msg.mediaUrl.match(/\.(jpg|jpeg|png|webp|gif)/i))}
-                    <button type="button" onclick={() => (activeLightboxUrl = msg.mediaUrl)} class="block rounded-xl overflow-hidden my-1 max-w-xs border border-white/20 hover:opacity-90 transition text-left cursor-zoom-in">
+                    <button type="button" onclick={() => (activeLightboxUrl = msg.mediaUrl || null)} class="block rounded-xl overflow-hidden my-1 max-w-xs border border-white/20 hover:opacity-90 transition text-left cursor-zoom-in">
                       <img src={msg.mediaUrl} alt="Foto Agen" class="w-full max-h-72 object-cover rounded-xl" loading="lazy" />
                     </button>
                   {:else if msg.mediaMimeType?.startsWith('audio/') || msg.messageType === 'audio' || msg.messageType === 'voice' || (msg.mediaUrl.match(/\.(mp3|ogg|wav|m4a|aac)/i))}
