@@ -385,6 +385,24 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
     }
   }
 
+  function formatMessagingTier(tierRaw?: string): string {
+    if (!tierRaw) return '2.000 Chat / 24 Jam';
+    const t = String(tierRaw).toUpperCase().trim();
+    if (t === 'TIER_250' || t === '250') return '250 Chat / 24 Jam';
+    if (t === 'TIER_1K' || t === 'TIER_1000' || t === '1000' || t === '1K') return '1.000 Chat / 24 Jam';
+    if (t === 'TIER_2K' || t === 'TIER_2000' || t === '2000' || t === '2K') return '2.000 Chat / 24 Jam';
+    if (t === 'TIER_10K' || t === 'TIER_10000' || t === '10000' || t === '10K') return '10.000 Chat / 24 Jam';
+    if (t === 'TIER_100K' || t === 'TIER_100000' || t === '100000' || t === '100K') return '100.000 Chat / 24 Jam';
+    if (t === 'TIER_UNLIMITED' || t === 'UNLIMITED') return '♾️ Unlimited / 24 Jam';
+    
+    const digits = t.replace(/[^0-9]/g, '');
+    if (digits) {
+      const num = parseInt(digits, 10);
+      return `${num.toLocaleString('id-ID')} Chat / 24 Jam`;
+    }
+    return `${tierRaw} Chat / 24 Jam`;
+  }
+
   // Dynamic Webhook URL based on user's current environment/host
   let webhookCallbackUrl = $derived.by(() => {
     if (customTunnelUrl.trim()) {
@@ -796,7 +814,7 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
 
               <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 flex flex-col justify-between space-y-1.5">
                 <span class="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Limit Pesan Meta</span>
-                <span class="text-xs font-bold text-indigo-700 dark:text-indigo-400 font-mono">1.000 Chat / 24 Jam</span>
+                <span class="text-xs font-bold text-indigo-700 dark:text-indigo-400 font-mono">{formatMessagingTier(metaLive?.messagingLimitTier)}</span>
               </div>
             </div>
           </div>

@@ -324,7 +324,7 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
         codeVerificationStatus: metaLivePhone?.code_verification_status || 'VERIFIED',
         nameStatus: metaLivePhone?.name_status || 'APPROVED',
         qualityRating: metaLivePhone?.quality_rating || phones[0]?.qualityRating || 'GREEN',
-        messagingLimitTier: metaLivePhone?.messaging_limit_tier || 'TIER_1K',
+        messagingLimitTier: metaLivePhone?.messaging_limit_tier || 'TIER_2K',
         verifiedName: metaLivePhone?.verified_name || phones[0]?.verifiedName || 'Official WhatsApp Account',
         displayPhoneNumber: metaLivePhone?.display_phone_number || phones[0]?.displayPhoneNumber || '+62 812-3456-7890',
         accountReviewStatus: metaLiveWaba?.account_review_status || 'APPROVED',
