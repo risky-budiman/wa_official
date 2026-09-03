@@ -36,7 +36,10 @@
     AlertTriangle,
     Zap,
     CornerDownLeft,
-    Pencil
+    Pencil,
+    Film,
+    Music,
+    Loader2
   } from 'lucide-svelte';
   import { formatWhatsAppMarkdown } from '$lib/utils/whatsapp-formatter';
 
@@ -61,9 +64,66 @@
   let isAiGenerating = $state(false);
   let aiSuggestions = $state<{ title: string; text: string }[]>([]);
   let aiMode = $state<'SMART_REPLY' | 'POLISH_DRAFT'>('SMART_REPLY');
+  import { getApiBaseUrl } from '$lib/api/client';
+
   let showEmojiPicker = $state(false);
   let messagesContainer = $state<HTMLDivElement | null>(null);
   let messageInputRef = $state<HTMLTextAreaElement | null>(null);
+
+  // Attachment State
+  let fileInputRef = $state<HTMLInputElement | null>(null);
+  let pendingAttachment = $state<{
+    file: File;
+    filename: string;
+    size: number;
+    mimeType: string;
+    category: 'IMAGE' | 'DOCUMENT' | 'VIDEO' | 'AUDIO';
+    previewUrl?: string;
+  } | null>(null);
+  let isUploadingMedia = $state(false);
+
+  function handleFileSelect(e: Event) {
+    const input = e.target as HTMLInputElement;
+    if (!input.files || input.files.length === 0) return;
+
+    const file = input.files[0];
+    const mimeType = file.type || 'application/octet-stream';
+    let category: 'IMAGE' | 'DOCUMENT' | 'VIDEO' | 'AUDIO' = 'DOCUMENT';
+
+    if (mimeType.startsWith('image/')) category = 'IMAGE';
+    else if (mimeType.startsWith('video/')) category = 'VIDEO';
+    else if (mimeType.startsWith('audio/')) category = 'AUDIO';
+
+    let previewUrl: string | undefined;
+    if (category === 'IMAGE') {
+      previewUrl = URL.createObjectURL(file);
+    }
+
+    pendingAttachment = {
+      file,
+      filename: file.name,
+      size: file.size,
+      mimeType,
+      category,
+      previewUrl,
+    };
+  }
+
+  function removePendingAttachment() {
+    if (pendingAttachment?.previewUrl) {
+      URL.revokeObjectURL(pendingAttachment.previewUrl);
+    }
+    pendingAttachment = null;
+    if (fileInputRef) {
+      fileInputRef.value = '';
+    }
+  }
+
+  function formatFileSize(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
 
   async function fetchAiSuggestions() {
     if (!selectedConvId || isAiGenerating) return;
@@ -818,7 +878,7 @@
   }
 
   async function sendMessage() {
-    if (!messageText.trim() || !selectedConvId) return;
+    if ((!messageText.trim() && !pendingAttachment) || !selectedConvId || isUploadingMedia) return;
     showSlashMenu = false;
 
     if (!isInternalNote && selectedConv) {
@@ -831,18 +891,62 @@
       }
     }
 
+    let mediaUrlToSend: string | undefined;
+    let mediaMimeTypeToSend: string | undefined;
+    let messageTypeToSend = 'text';
+    let filenameToSend: string | undefined;
+
+    const currentAttachment = pendingAttachment;
+
+    if (currentAttachment) {
+      isUploadingMedia = true;
+      try {
+        const formData = new FormData();
+        formData.append('file', currentAttachment.file);
+
+        const uploadRes = await fetch(`${getApiBaseUrl()}/media/upload`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${authStore.token}`,
+          },
+          body: formData,
+        });
+
+        const uploadData = await uploadRes.json();
+        if (!uploadRes.ok || !uploadData.success) {
+          alert(`Gagal mengunggah file: ${uploadData.error || 'Terjadi kesalahan'}`);
+          isUploadingMedia = false;
+          return;
+        }
+
+        mediaUrlToSend = uploadData.mediaUrl;
+        mediaMimeTypeToSend = uploadData.mimeType;
+        messageTypeToSend = uploadData.category;
+        filenameToSend = currentAttachment.filename;
+      } catch (err: any) {
+        alert(`Gagal mengunggah file: ${err.message || 'Koneksi terputus'}`);
+        isUploadingMedia = false;
+        return;
+      } finally {
+        isUploadingMedia = false;
+      }
+    }
+
     const textToSend = messageText.trim();
     messageText = '';
     resetTextareaHeight();
     showEmojiPicker = false;
+    pendingAttachment = null;
+    if (fileInputRef) fileInputRef.value = '';
     focusMessageInput();
 
     if (isInternalNote) {
+      const noteBody = textToSend || (currentAttachment ? `[File] ${currentAttachment.filename}` : 'Catatan');
       const res = await apiRequest('/messages/internal-note', {
         method: 'POST',
         body: JSON.stringify({
           conversationId: selectedConvId,
-          body: textToSend,
+          body: noteBody,
         }),
       });
       if (res.success && res.note) {
@@ -855,18 +959,25 @@
         method: 'POST',
         body: JSON.stringify({
           conversationId: selectedConvId,
-          body: textToSend,
+          messageType: messageTypeToSend,
+          body: textToSend || (currentAttachment ? `[${currentAttachment.category}] ${currentAttachment.filename}` : ''),
+          mediaUrl: mediaUrlToSend,
+          mediaMimeType: mediaMimeTypeToSend,
+          filename: filenameToSend,
         }),
       });
+
       if (res.success && res.message) {
         messageList.push(res.message);
         scrollToBottom(true);
         focusMessageInput();
         const conv = conversationList.find((c) => c.id === selectedConvId);
         if (conv) {
-          conv.lastMessagePreview = textToSend;
+          conv.lastMessagePreview = textToSend || (currentAttachment ? `[${currentAttachment.category}]` : '');
           conv.status = 'OPEN';
         }
+      } else if (res.error) {
+        alert(`Gagal mengirim pesan: ${res.error}`);
       }
     }
   }
@@ -1513,21 +1624,71 @@
               </div>
             {/if}
 
+            <!-- WhatsApp Attachment Preview Bar -->
+            {#if pendingAttachment}
+              <div class="flex items-center justify-between gap-3 p-2.5 mb-2 bg-slate-100 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700/80 rounded-2xl shadow-sm animate-in fade-in slide-in-from-bottom-2">
+                <div class="flex items-center gap-3 min-w-0">
+                  {#if pendingAttachment.category === 'IMAGE' && pendingAttachment.previewUrl}
+                    <img src={pendingAttachment.previewUrl} alt="Preview" class="w-12 h-12 object-cover rounded-xl border border-slate-200 dark:border-slate-700 shrink-0" />
+                  {:else if pendingAttachment.category === 'VIDEO'}
+                    <div class="w-12 h-12 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center border border-purple-500/20 shrink-0">
+                      <Film class="w-6 h-6" />
+                    </div>
+                  {:else if pendingAttachment.category === 'AUDIO'}
+                    <div class="w-12 h-12 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center border border-amber-500/20 shrink-0">
+                      <Music class="w-6 h-6" />
+                    </div>
+                  {:else}
+                    <div class="w-12 h-12 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center border border-blue-500/20 shrink-0">
+                      <FileText class="w-6 h-6" />
+                    </div>
+                  {/if}
+
+                  <div class="min-w-0 flex-1">
+                    <p class="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">{pendingAttachment.filename}</p>
+                    <p class="text-[10px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">
+                      {formatFileSize(pendingAttachment.size)} • {pendingAttachment.category}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onclick={removePendingAttachment}
+                  class="p-1.5 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-rose-500 transition cursor-pointer shrink-0"
+                  title="Hapus Lampiran"
+                >
+                  <X class="w-4 h-4" />
+                </button>
+              </div>
+            {/if}
+
+            <!-- Hidden Input File Picker -->
+            <input
+              type="file"
+              bind:this={fileInputRef}
+              onchange={handleFileSelect}
+              accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.csv"
+              class="hidden"
+            />
+
             <!-- Input Box with Single Tight Horizontal Icon Row -->
             <div class="flex items-end gap-1.5">
               <!-- TIGHT HORIZONTAL TOOLBAR ICONS -->
               <div class="flex items-center gap-0.5 text-slate-500 dark:text-slate-400 shrink-0 pb-1">
                 <!-- 1. Media Upload Icon -->
                 <button
-                  onclick={() => alert('Fitur upload lampiran terhubung ke media storage.')}
+                  type="button"
+                  onclick={() => fileInputRef?.click()}
                   class="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer text-slate-500 hover:text-slate-700 dark:hover:text-slate-200"
-                  title="Kirim Media (Foto / Dokumen)"
+                  title="Kirim Media (Foto / Dokumen / Video)"
                 >
                   <Paperclip class="w-4 h-4" />
                 </button>
 
                 <!-- 2. Emoji Icon -->
                 <button
+                  type="button"
                   onclick={() => (showEmojiPicker = !showEmojiPicker)}
                   class="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer text-slate-500 hover:text-slate-700 dark:hover:text-slate-200"
                   title="Pilih Emoji"
@@ -1537,6 +1698,7 @@
 
                 <!-- 3. Catatan Tim (Document / Whisper Note) -->
                 <button
+                  type="button"
                   onclick={() => (isInternalNote = !isInternalNote)}
                   class="p-1 rounded-lg transition cursor-pointer {isInternalNote 
                     ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20' 
@@ -1548,6 +1710,7 @@
 
                 <!-- 4. Saran Balasan AI (AI Emoticon / Sparkles) -->
                 <button
+                  type="button"
                   onclick={fetchAiSuggestions}
                   disabled={isAiGenerating}
                   class="p-1 rounded-lg transition cursor-pointer text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/40 disabled:opacity-60"
@@ -1574,12 +1737,18 @@
 
               <!-- Send Button -->
               <button
+                type="button"
                 onclick={sendMessage}
-                class="p-2.5 rounded-xl text-white font-bold transition shadow-sm shrink-0 mb-0.5 {isInternalNote 
+                disabled={isUploadingMedia}
+                class="p-2.5 rounded-xl text-white font-bold transition shadow-sm shrink-0 mb-0.5 disabled:opacity-60 {isInternalNote 
                   ? 'bg-amber-500 hover:bg-amber-400 text-slate-950' 
                   : 'bg-emerald-600 hover:bg-emerald-500'} cursor-pointer"
               >
-                <Send class="w-4 h-4" />
+                {#if isUploadingMedia}
+                  <Loader2 class="w-4 h-4 animate-spin" />
+                {:else}
+                  <Send class="w-4 h-4" />
+                {/if}
               </button>
             </div>
           {/if}

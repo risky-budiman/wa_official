@@ -61,6 +61,72 @@ export class MetaApiService {
   }
 
   /**
+   * Send Media message (image, document, video, audio) to Meta WhatsApp Cloud API
+   */
+  static async sendMediaMessage(
+    params: {
+      phoneNumberId: string;
+      recipientWaId: string;
+      type: 'image' | 'document' | 'video' | 'audio';
+      mediaUrl: string;
+      caption?: string;
+      filename?: string;
+    },
+    accessToken = env.META_ACCESS_TOKEN
+  ) {
+    if (!accessToken || !params.phoneNumberId) {
+      console.warn('⚠️ Meta access token or phone number ID missing. Media message simulated.');
+      return {
+        messages: [{ id: `wamid.SIMULATED_MEDIA_${Date.now()}` }]
+      };
+    }
+
+    let targetNumber = (params.recipientWaId || '').replace(/[^0-9]/g, '');
+    if (targetNumber.startsWith('08')) {
+      targetNumber = '62' + targetNumber.slice(1);
+    } else if (targetNumber.startsWith('8')) {
+      targetNumber = '62' + targetNumber;
+    }
+
+    const url = `${this.baseUrl}/${params.phoneNumberId}/messages`;
+
+    const mediaPayload: any = {
+      link: params.mediaUrl,
+    };
+    if (params.caption && (params.type === 'image' || params.type === 'video' || params.type === 'document')) {
+      mediaPayload.caption = params.caption;
+    }
+    if (params.filename && params.type === 'document') {
+      mediaPayload.filename = params.filename;
+    }
+
+    const bodyObj: any = {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: targetNumber,
+      type: params.type,
+      [params.type]: mediaPayload,
+    };
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(bodyObj),
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      console.error('❌ Meta sendMediaMessage error:', JSON.stringify(data));
+      throw new Error(data.error?.message || 'Gagal mengirim file media ke Meta WhatsApp API');
+    }
+
+    return data;
+  }
+
+  /**
    * Send approved template message (e.g. when 24-hr window expired)
    */
   static async sendTemplateMessage(params: MetaSendTemplateParams, accessToken = env.META_ACCESS_TOKEN) {

@@ -118,11 +118,21 @@ export class MessageService {
         components: body.templateComponents,
       }, activeToken);
       wamId = metaRes.messages?.[0]?.id || null;
+    } else if (body.mediaUrl && ['image', 'document', 'video', 'audio'].includes((messageType || '').toLowerCase())) {
+      const metaRes = await MetaApiService.sendMediaMessage({
+        phoneNumberId: phone.phoneNumberId,
+        recipientWaId: conv.contact.waId,
+        type: (messageType || 'document').toLowerCase() as 'image' | 'document' | 'video' | 'audio',
+        mediaUrl: body.mediaUrl,
+        caption: body.body || undefined,
+        filename: body.filename || undefined,
+      }, activeToken);
+      wamId = metaRes.messages?.[0]?.id || null;
     } else {
       const metaRes = await MetaApiService.sendTextMessage({
         phoneNumberId: phone.phoneNumberId,
         recipientWaId: conv.contact.waId,
-        text: body.body,
+        text: body.body || '',
       }, activeToken);
       wamId = metaRes.messages?.[0]?.id || null;
     }

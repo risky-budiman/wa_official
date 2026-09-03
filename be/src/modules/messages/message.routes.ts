@@ -65,9 +65,10 @@ export const messageRoutes = new Elysia({ prefix: '/messages' })
       body: t.Object({
         conversationId: t.String(),
         messageType: t.Optional(t.String()),
-        body: t.String({ minLength: 1 }),
+        body: t.Optional(t.String()),
         mediaUrl: t.Optional(t.String()),
         mediaMimeType: t.Optional(t.String()),
+        filename: t.Optional(t.String()),
         templateName: t.Optional(t.String()),
         templateComponents: t.Optional(t.Array(t.Any())),
       }),

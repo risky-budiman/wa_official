@@ -23,6 +23,7 @@ const getApiBase = (): string => {
 };
 
 const API_BASE = getApiBase();
+export const getApiBaseUrl = (): string => API_BASE;
 
 export async function apiRequest<T = any>(
   endpoint: string,
