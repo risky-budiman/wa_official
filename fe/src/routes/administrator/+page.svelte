@@ -104,6 +104,7 @@
     }>;
     phoneNumbers?: Array<{
       id: string;
+      phoneNumberId?: string;
       phoneNumber?: string;
       displayPhoneNumber?: string;
       displayName?: string;
@@ -1171,7 +1172,7 @@
   function openMetaWizard(tenant: TenantItem) {
     metaOrg = tenant;
     metaWabaId = tenant.wabaId || "";
-    metaPhoneId = tenant.phoneNumbers?.[0]?.id || "";
+    metaPhoneId = tenant.phoneNumbers?.[0]?.phoneNumberId || "";
     metaDisplayPhone = tenant.phoneNumbers?.[0]?.displayPhoneNumber || "";
     metaVerifiedName = tenant.phoneNumbers?.[0]?.verifiedName || tenant.name;
     metaAccessToken = "";

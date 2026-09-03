@@ -206,6 +206,7 @@ export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
         const phones = await db
           .select({
             id: phoneNumbers.id,
+            phoneNumberId: phoneNumbers.phoneNumberId,
             displayPhoneNumber: phoneNumbers.displayPhoneNumber,
             verifiedName: phoneNumbers.verifiedName,
             qualityRating: phoneNumbers.qualityRating,
