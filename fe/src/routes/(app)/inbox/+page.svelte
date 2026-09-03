@@ -1052,7 +1052,7 @@
         body: JSON.stringify({
           conversationId: selectedConvId,
           messageType: messageTypeToSend,
-          body: textToSend || (currentAttachment ? `[${currentAttachment.category}] ${currentAttachment.filename}` : ""),
+          body: textToSend || (currentAttachment && currentAttachment.category !== "IMAGE" ? `[${currentAttachment.category}] ${currentAttachment.filename}` : ""),
           mediaUrl: mediaUrlToSend,
           mediaMimeType: mediaMimeTypeToSend,
           filename: filenameToSend,
@@ -1643,7 +1643,7 @@
                   </div>
                 {/if}
 
-                {#if msg.body && (!msg.mediaUrl || !["[Foto/Gambar]", "[Gambar]", "[Foto]", "[Stiker]", "[Pesan Suara / Audio]", "[Video]", "[DOCUMENT]"].includes(msg.body)) && msg.body !== "[Gambar]" && msg.body !== "[Foto/Gambar]"}
+                {#if msg.body && (!msg.mediaUrl || !["[Foto/Gambar]", "[Gambar]", "[Foto]", "[Stiker]", "[Pesan Suara / Audio]", "[Video]", "[DOCUMENT]", "[IMAGE]"].includes(msg.body)) && !msg.body.startsWith("[IMAGE]") && !msg.body.startsWith("[Foto]") && !msg.body.startsWith("[Gambar]")}
                   <div
                     class="text-slate-800 dark:text-slate-100 leading-relaxed font-sans mt-1"
                   >
@@ -1815,7 +1815,7 @@
                   {/if}
                 {/if}
 
-                {#if msg.body && (!msg.mediaUrl || !["[Foto/Gambar]", "[Gambar]", "[Foto]", "[Stiker]", "[Pesan Suara / Audio]", "[Video]", "[DOCUMENT]"].includes(msg.body))}
+                {#if msg.body && (!msg.mediaUrl || !["[Foto/Gambar]", "[Gambar]", "[Foto]", "[Stiker]", "[Pesan Suara / Audio]", "[Video]", "[DOCUMENT]", "[IMAGE]"].includes(msg.body)) && !msg.body.startsWith("[IMAGE]") && !msg.body.startsWith("[Foto]") && !msg.body.startsWith("[Gambar]")}
                   <div class="text-white/95 leading-relaxed font-sans">
                     {@html formatWhatsAppMarkdown(msg.body)}
                   </div>
@@ -2082,18 +2082,20 @@
                     </div>
                   {/if}
 
-                  <div class="min-w-0 flex-1">
-                    <p
-                      class="text-xs font-bold text-slate-800 dark:text-slate-200 truncate"
-                    >
-                      {pendingAttachment.filename}
-                    </p>
-                    <p
-                      class="text-[10px] text-slate-500 dark:text-slate-400 font-mono mt-0.5"
-                    >
-                      {formatFileSize(pendingAttachment.size)} • {pendingAttachment.category}
-                    </p>
-                  </div>
+                  {#if pendingAttachment.category !== "IMAGE"}
+                    <div class="min-w-0 flex-1">
+                      <p
+                        class="text-xs font-bold text-slate-800 dark:text-slate-200 truncate"
+                      >
+                        {pendingAttachment.filename}
+                      </p>
+                      <p
+                        class="text-[10px] text-slate-500 dark:text-slate-400 font-mono mt-0.5"
+                      >
+                        {formatFileSize(pendingAttachment.size)} • {pendingAttachment.category}
+                      </p>
+                    </div>
+                  {/if}
                 </div>
 
                 <button
