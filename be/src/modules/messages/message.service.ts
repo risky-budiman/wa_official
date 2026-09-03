@@ -217,125 +217,158 @@ export class MessageService {
   }
 
   /**
-   * Generate Smart AI Reply Suggestions for CS Agent
+   * Generate Smart AI Reply Suggestions for CS Agent based on real ongoing conversation
    */
   static async generateAiSuggestions(user: JwtPayload, conversationId: string, currentDraft?: string) {
     const conv = await ConversationService.getById(user, conversationId);
 
-    // Fetch latest 5 messages for context
+    // Fetch latest 10 messages for context, ordered chronologically
     const recentMessages = await db
       .select({
         direction: messages.direction,
         body: messages.body,
         isInternalNote: messages.isInternalNote,
+        createdAt: messages.createdAt,
       })
       .from(messages)
       .where(and(eq(messages.conversationId, conversationId), eq(messages.isInternalNote, false)))
       .orderBy(desc(messages.createdAt))
-      .limit(5);
+      .limit(10);
+
+    // Sort chronologically (oldest to newest)
+    recentMessages.reverse();
 
     const contactName = conv.contact.name || 'Kak';
-    const lastCustomerMsg = recentMessages.find((m) => m.direction === 'INBOUND')?.body || '';
+    const inboundMessages = recentMessages.filter((m) => m.direction === 'INBOUND');
+    const lastCustomerMsgObj = inboundMessages[inboundMessages.length - 1];
+    const lastCustomerMsg = lastCustomerMsgObj?.body?.trim() || '';
     const lastMsgLower = lastCustomerMsg.toLowerCase();
 
-    // If agent has typed a draft, polish variations of draft
-    if (currentDraft && currentDraft.trim().length > 3) {
-      const draft = currentDraft.trim();
-      return {
-        mode: 'POLISH_DRAFT',
-        suggestions: [
-          {
-            title: '🌟 Versi Ramah & Empatis',
-            text: `Halo Kak ${contactName}, ${draft.charAt(0).toLowerCase() + draft.slice(1)} Semoga membantu ya kak! 😊`,
-          },
-          {
-            title: '⚡ Versi Ringkas & Solutif',
-            text: `Baik Kak ${contactName}. ${draft}`,
-          },
-          {
-            title: '💼 Versi Formal & Resmi',
-            text: `Selamat hari ini, Kak ${contactName}. Mengenai perihal tersebut, ${draft.charAt(0).toLowerCase() + draft.slice(1)} Terima kasih telah menghubungi layanan kami.`,
-          },
-        ],
-      };
-    }
+    // Build context snippet from customer's latest message
+    const msgSnippet = lastCustomerMsg.length > 50 ? `"${lastCustomerMsg.slice(0, 50)}..."` : `"${lastCustomerMsg}"`;
 
-    // Contextual intelligent suggestions based on customer query
     let options = [];
 
-    if (lastMsgLower.includes('harga') || lastMsgLower.includes('berapa') || lastMsgLower.includes('biaya') || lastMsgLower.includes('katalog') || lastMsgLower.includes('pricelist')) {
+    // Contextual Category Detection
+    if (lastMsgLower.includes('alamat') || lastMsgLower.includes('lokasi') || lastMsgLower.includes('toko') || lastMsgLower.includes('cabang') || lastMsgLower.includes('dimana')) {
       options = [
         {
-          title: '🏷️ Info Harga & Brosur',
-          text: `Halo Kak ${contactName}! 😊 Terima kasih sudah tertarik. Untuk rincian paket dan daftar harga terbaru dapat kami infokan langsung. Boleh tau layanan/produk mana yang paling sesuai kebutuhan Kakak?`,
+          title: '📍 Info Alamat & Lokasi Toko',
+          text: `Halo Kak ${contactName}! 😊 Terkait lokasi toko/cabang kami, alamat resmi kami berlokasi di: Jakarta Pusat (Jl. Sudirman No. 123). Silakan berkunjung ya kak!`,
         },
         {
-          title: '📦 Solusi Produk & Katalog',
-          text: `Siap Kak ${contactName}, kami memiliki beberapa pilihan paket unggulan. Boleh kami bantu rekomenkan paket terbaik sesuai budget & kebutuhan Kakak?`,
+          title: '🗺️ Panduan Rute & Titik Maps',
+          text: `Siap Kak ${contactName}, lokasi toko kami sangat strategis dan mudah dijangkau. Boleh kami kirimkan titik lokasi Google Maps untuk panduan rute Kakak?`,
         },
         {
-          title: '💬 Tanya Kebutuhan Detail',
-          text: `Halo Kak ${contactName}, untuk penawaran harga terbaik & potongan diskon spesial, boleh diinfokan estimasi jumlah/spesifikasi yang Kakak butuhkan?`,
+          title: '🏢 Jam Operasional Toko',
+          text: `Halo Kak ${contactName}, toko fisik kami buka setiap hari Senin - Sabtu pukul 09.00 - 20.00 WIB. Ditunggu kedatangannya ya Kak!`,
         },
       ];
-    } else if (lastMsgLower.includes('resi') || lastMsgLower.includes('kirim') || lastMsgLower.includes('sampai') || lastMsgLower.includes('lacak') || lastMsgLower.includes('pos')) {
+    } else if (lastMsgLower.includes('stok') || lastMsgLower.includes('ready') || lastMsgLower.includes('ada') || lastMsgLower.includes('tersedia')) {
       options = [
         {
-          title: '🚚 Cek Status Pengiriman',
-          text: `Halo Kak ${contactName}, baik mohon dibantu kirimkan Nomor Resi atau Nomor Pesanannya ya kak. Tim kami akan bantu melacak posisi pesanan Kakak sekarang juga! 📦`,
+          title: '📦 Konfirmasi Stok Ready',
+          text: `Halo Kak ${contactName}! 😊 Produk tersebut saat ini *READY STOK* dan siap kami kemas hari ini. Boleh diinfokan varian/warna yang Kakak inginkan?`,
         },
         {
-          title: '⏳ Estimasi Pengiriman',
-          text: `Siap Kak ${contactName}, tim ekspedisi kami sedang memproses pengiriman. Boleh infokan nomor invoice agar dapat kami pastikan koordinat terbarunya.`,
+          title: '⚡ Pengecekan Gudang Fast-Track',
+          text: `Siap Kak ${contactName}, tim gudang kami sedang memverifikasi sisa stok fisiknya. Mohon tunggu sebentar ya Kak!`,
+        },
+        {
+          title: '🛒 Booking & Pemesanan Instan',
+          text: `Halo Kak ${contactName}, produk tersebut tergolong cepat habis (*fast-moving*). Sebaiknya kami amankan stoknya untuk Kakak sekarang?`,
+        },
+      ];
+    } else if (lastMsgLower.includes('harga') || lastMsgLower.includes('berapa') || lastMsgLower.includes('biaya') || lastMsgLower.includes('katalog') || lastMsgLower.includes('pricelist') || lastMsgLower.includes('paket')) {
+      options = [
+        {
+          title: '🏷️ Info Harga & Brosur Produk',
+          text: `Halo Kak ${contactName}! 😊 Terima kasih sudah berminat. Mengenai daftar harga dan rincian paket unggulan kami, boleh infokan kebutuhan mana yang Kakak cari agar kami rekomendasikan yang terbaik?`,
+        },
+        {
+          title: '📦 Solusi Paket & Pricelist',
+          text: `Siap Kak ${contactName}, kami memiliki pilihan paket paling hemat dan terjangkau. Boleh kami bantu hitungkan estimasi total biayanya?`,
+        },
+        {
+          title: '💬 Diskon & Penawaran Spesial',
+          text: `Halo Kak ${contactName}, untuk pembelian hari ini kami sedang ada penawaran potongan khusus. Boleh diinfokan kuantitas atau tipe yang dibutuhkan Kakak?`,
+        },
+      ];
+    } else if (lastMsgLower.includes('resi') || lastMsgLower.includes('kirim') || lastMsgLower.includes('sampai') || lastMsgLower.includes('lacak') || lastMsgLower.includes('pos') || lastMsgLower.includes('paket')) {
+      options = [
+        {
+          title: '🚚 Cek Status Resi Pengiriman',
+          text: `Halo Kak ${contactName}, terkait pengiriman pesanan Kakak, mohon bantu infokan Nomor Pesanan/Invoice ya Kak. Tim kami siap bantu cek lacak lokasinya sekarang! 📦`,
+        },
+        {
+          title: '⏳ Estimasi Pengiriman Kurir',
+          text: `Siap Kak ${contactName}, pesanan Kakak sudah masuk tahap ekspedisi. Boleh infokan nomor resinya agar kami pastikan posisi terbarunya.`,
         },
         {
           title: '📞 Layanan Bantuan Logistik',
-          text: `Baik Kak ${contactName}, pesanan Kakak dalam perjalanan. Jika ada keterlambatan dari kurir, kami akan langsung bantu eskalasi ke pihak ekspedisi terkait.`,
+          text: `Baik Kak ${contactName}, tim kami terus memantau pengiriman produk Anda. Jika ada keterlambatan dari pihak ekspedisi, kami akan bantu koordinasikan langsung.`,
         },
       ];
-    } else if (lastMsgLower.includes('rekening') || lastMsgLower.includes('bayar') || lastMsgLower.includes('tf') || lastMsgLower.includes('transfer') || lastMsgLower.includes('pembayaran')) {
+    } else if (lastMsgLower.includes('rekening') || lastMsgLower.includes('bayar') || lastMsgLower.includes('tf') || lastMsgLower.includes('transfer') || lastMsgLower.includes('pembayaran') || lastMsgLower.includes('bca') || lastMsgLower.includes('mandiri')) {
       options = [
         {
-          title: '💳 Info Rekening Pembayaran',
-          text: `Halo Kak ${contactName}, pembayaran dapat ditransfer melalui rekening resmi kami:\n• BCA: 1234567890 a.n. PT Official WA CRM\n• Mandiri: 0987654321 a.n. PT Official WA CRM\n\nJika sudah transfer, mohon lampirkan bukti struk/screenshot ya Kak! 🙏`,
+          title: '💳 Rincian Rekening Pembayaran Resmi',
+          text: `Halo Kak ${contactName}, pembayaran dapat ditransfer melalui rekening resmi kami:\n• BCA: 1234567890 a.n. PT Official WA CRM\n• Mandiri: 0987654321 a.n. PT Official WA CRM\n\nJika sudah transfer, mohon sertakan foto bukti struknya ya Kak! 🙏`,
         },
         {
-          title: '✅ Konfirmasi Pembayaran Selesai',
-          text: `Terima kasih Kak ${contactName}! Bukti pembayaran Kakak sudah kami terima dan sedang diverifikasi oleh tim finance kami.`,
+          title: '✅ Konfirmasi Penerimaan Pembayaran',
+          text: `Terima kasih Kak ${contactName}! Bukti pembayaran Kakak sudah kami terima dan saat ini sedang dalam proses verifikasi oleh tim keuangan kami.`,
         },
         {
-          title: '⚡ Instruksi Pembayaran',
-          text: `Baik Kak ${contactName}, mohon selesaikan pembayaran sebelum batas waktu berakhir agar pesanan Kakak dapat segera kami kemas dan kirimkan.`,
+          title: '⚡ Batas Waktu Pembayaran',
+          text: `Baik Kak ${contactName}, mohon selesaikan pembayaran sebelum batas waktu berakhir agar pesanan Kakak dapat segera diproses pengirimannya.`,
         },
       ];
-    } else if (lastMsgLower.includes('komplain') || lastMsgLower.includes('rusak') || lastMsgLower.includes('salah') || lastMsgLower.includes('kecewa') || lastMsgLower.includes('batal')) {
+    } else if (lastMsgLower.includes('komplain') || lastMsgLower.includes('rusak') || lastMsgLower.includes('salah') || lastMsgLower.includes('kecewa') || lastMsgLower.includes('batal') || lastMsgLower.includes('retur') || lastMsgLower.includes('garansi')) {
       options = [
         {
           title: '🙏 Permohonan Maaf & Penanganan Fast-Track',
-          text: `Mohon maaf yang sebesar-besarnya atas ketidaknyamanan ini ya Kak ${contactName}. 🙏 Boleh bantu kirimkan foto/video kendalanya? Tim kami siap membantu mencarikan solusi penggantian secepatnya!`,
+          text: `Mohon maaf yang sebesar-besarnya atas ketidaknyamanan ini ya Kak ${contactName}. 🙏 Boleh bantu kirimkan foto/video kendalanya? Tim kami siap membantu memberikan penanganan penggantian secepatnya!`,
         },
         {
-          title: '🛠️ Garansi & Penggantian Produk',
-          text: `Halo Kak ${contactName}, kenyamanan Kakak adalah prioritas kami. Semua transaksi dilindungi garansi resmi. Kami bantu proses klaim atau penukaran unit baru ya Kak.`,
+          title: '🛠️ Layanan Klaim Garansi & Retur',
+          text: `Halo Kak ${contactName}, kepuasan Anda adalah prioritas kami. Semua transaksi dijamin garansi resmi. Kami bantu proses klaim atau penukaran barang baru ya Kak.`,
         },
         {
-          title: '📞 Investigasi Tim Teknis',
-          text: `Baik Kak ${contactName}, laporan kendala ini sudah kami teruskan ke tim penanggung jawab. Kami akan update perkembangannya dalam waktu singkat.`,
+          title: '📞 Penanganan Khusus Tim Supervisor',
+          text: `Baik Kak ${contactName}, laporan kendala ini telah kami eskalasi ke tim penanggung jawab. Kami akan mengabarkan perkembangannya secara berkala.`,
+        },
+      ];
+    } else if (lastCustomerMsg.length > 0) {
+      // Dynamic Contextual Responses referencing actual customer's message!
+      options = [
+        {
+          title: '🌟 Balasan Ramah & Kontekstual',
+          text: `Halo Kak ${contactName}! 😊 Terkait pesan Kakak mengenai ${msgSnippet}, baik kak, tim kami dengan senang hati siap memberikan penjelasan lengkapnya. Ada yang perlu kami bantu secara khusus?`,
+        },
+        {
+          title: '⚡ Balasan Langsung & Solutif',
+          text: `Baik Kak ${contactName}, mengenai ${msgSnippet}, pesan Kakak sudah kami catat dan tim kami siap memberikan solusi terbaik. Boleh bantu berikan detail tambahan?`,
+        },
+        {
+          title: '💼 Balasan Formal & Profesional',
+          text: `Selamat hari ini, Kak ${contactName}. Terima kasih telah menghubungi layanan resmi kami terkait ${msgSnippet}. Mohon tunggu sebentar, tim kami sedang menyiapkan informasi yang Kakak butuhkan.`,
         },
       ];
     } else {
       options = [
         {
           title: '👋 Salam Ramah & Bantuan CS',
-          text: `Halo Kak ${contactName}! 😊 Ada yang bisa tim Customer Service kami bantu hari ini? Bicarakan saja kendala atau pertanyaan Kakak ya!`,
+          text: `Halo Kak ${contactName}! 😊 Ada yang bisa tim Customer Service kami bantu hari ini? Silakan infokan pertanyaan atau kendala Kakak ya!`,
         },
         {
-          title: '⚡ Tanggapan Cepat & Solutif',
-          text: `Baik Kak ${contactName}, pesan Kakak sudah kami terima. Boleh infokan lebih detail agar kami berikan informasi yang akurat?`,
+          title: '⚡ Tanggapan Cepat CS',
+          text: `Baik Kak ${contactName}, tim CS kami siap melayani. Boleh infokan pesan atau kebutuhan Kakak?`,
         },
         {
-          title: '💼 Format Konfirmasi Tim CS',
-          text: `Selamat hari ini Kak ${contactName}. Terima kasih telah menghubungi layanan resmi kami. Mohon tunggu sebentar, tim kami sedang memeriksa data Anda.`,
+          title: '💼 Konfirmasi Layanan Resmi',
+          text: `Selamat hari ini Kak ${contactName}. Terima kasih telah menghubungi layanan resmi kami. Mohon sampaikan perihal yang ingin ditanyakan.`,
         },
       ];
     }
