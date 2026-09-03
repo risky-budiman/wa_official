@@ -32,7 +32,8 @@
     Inbox,
     Bell,
     Bot,
-    MessageSquare
+    MessageSquare,
+    AlertTriangle
   } from 'lucide-svelte';
   import { formatWhatsAppMarkdown } from '$lib/utils/whatsapp-formatter';
 
@@ -845,20 +846,21 @@
               <span class="font-mono">+{selectedConv.contact.waId}</span>
               <span>•</span>
               <span class="text-slate-700 dark:text-slate-300 font-medium">{selectedConv.assignedUser?.fullName || 'Belum di-assign'}</span>
-              {#if selectedConv.windowExpiresAt}
-                {@const timeLeftMs = new Date(selectedConv.windowExpiresAt).getTime() - Date.now()}
-                {@const hoursLeft = Math.floor(timeLeftMs / (1000 * 60 * 60))}
-                {@const minutesLeft = Math.floor((timeLeftMs % (1000 * 60 * 60)) / (1000 * 60))}
-                <span>•</span>
-                {#if timeLeftMs > 0}
-                  <span class="text-emerald-600 dark:text-emerald-400 font-bold font-mono">
-                    Sesi Meta: {hoursLeft > 0 ? String(hoursLeft).padStart(2, '0') : '00'} jam {minutesLeft > 0 ? String(minutesLeft).padStart(2, '0') : '00'} menit
-                  </span>
-                {:else}
-                  <span class="text-rose-600 dark:text-rose-400 font-bold font-mono bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/20">
-                    Sesi Meta Kadaluarsa
-                  </span>
-                {/if}
+              {@const effectiveExpiresAt = selectedConv.windowExpiresAt 
+                ? new Date(selectedConv.windowExpiresAt).getTime() 
+                : (selectedConv.lastMessageAt ? new Date(selectedConv.lastMessageAt).getTime() + 24 * 60 * 60 * 1000 : 0)}
+              {@const timeLeftMs = effectiveExpiresAt ? effectiveExpiresAt - Date.now() : 0}
+              {@const hoursLeft = Math.floor(Math.max(0, timeLeftMs) / (1000 * 60 * 60))}
+              {@const minutesLeft = Math.floor((Math.max(0, timeLeftMs) % (1000 * 60 * 60)) / (1000 * 60))}
+              <span>•</span>
+              {#if timeLeftMs > 0}
+                <span class="text-emerald-600 dark:text-emerald-400 font-bold font-mono" title="Jendela Sesi 24 Jam Meta Aktif">
+                  Sesi Meta: {String(hoursLeft).padStart(2, '0')} jam {String(minutesLeft).padStart(2, '0')} menit
+                </span>
+              {:else}
+                <span class="text-rose-600 dark:text-rose-400 font-bold font-mono bg-rose-500/10 px-2 py-0.5 rounded-md border border-rose-500/20" title="Jendela Sesi 24 Jam Meta Kadaluarsa">
+                  ⚠️ Sesi Meta Kadaluarsa (>24 Jam)
+                </span>
               {/if}
             </p>
           </div>
@@ -1130,6 +1132,26 @@
             </div>
           </div>
         {:else}
+          {@const effectiveExpiresAtInput = selectedConv.windowExpiresAt 
+            ? new Date(selectedConv.windowExpiresAt).getTime() 
+            : (selectedConv.lastMessageAt ? new Date(selectedConv.lastMessageAt).getTime() + 24 * 60 * 60 * 1000 : 0)}
+          {@const isExpiredInput = effectiveExpiresAtInput ? (effectiveExpiresAtInput - Date.now() <= 0) : false}
+
+          {#if isExpiredInput && !isInternalNote}
+            <div class="p-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center justify-between gap-2 text-xs text-amber-800 dark:text-amber-300">
+              <div class="flex items-center gap-2 min-w-0">
+                <AlertTriangle class="w-4 h-4 text-amber-500 shrink-0" />
+                <span class="truncate">⚠️ <strong>Sesi 24 Jam Meta Kadaluarsa</strong>. Balasan biasa mungkin gagal. Disarankan pakai <strong>Template</strong>.</span>
+              </div>
+              <button
+                onclick={() => (showTemplatePicker = true)}
+                class="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-[11px] shrink-0 transition cursor-pointer"
+              >
+                Pilih Template
+              </button>
+            </div>
+          {/if}
+
           <!-- Action Row -->
           <div class="flex items-center justify-between gap-2">
             <div class="flex items-center gap-2 flex-wrap">
