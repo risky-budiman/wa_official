@@ -200,17 +200,8 @@
   let availableTemplates = $state<TemplateItem[]>([]);
   let activeLightboxUrl = $state<string | null>(null);
 
-  // Derived list combining custom quick replies & WABA Meta templates
-  let allQuickReplies = $derived([
-    ...defaultQuickReplies,
-    ...availableTemplates.map((t) => ({
-      id: t.id,
-      shortcut: `/${t.name.toLowerCase()}`,
-      title: `Template Meta: ${t.name}`,
-      body: t.components?.[0]?.text || t.name,
-      type: 'template',
-    })),
-  ]);
+  // Derived list of internal quick replies (/salam, /terimakasih, /rekening, etc.)
+  let allQuickReplies = $derived(defaultQuickReplies);
 
   let filteredQuickReplies = $derived(
     allQuickReplies.filter(
@@ -677,8 +668,7 @@
         ? new Date(selectedConv.windowExpiresAt).getTime() 
         : (selectedConv.lastMessageAt ? new Date(selectedConv.lastMessageAt).getTime() + 24 * 60 * 60 * 1000 : 0);
       if (effExpires && effExpires - Date.now() <= 0) {
-        alert('Sesi 24 Jam Meta telah kadaluarsa. Silakan gunakan Template WhatsApp Resmi.');
-        showTemplatePicker = true;
+        alert('Sesi 24 Jam Meta telah kadaluarsa (>24 Jam). Pesan balasan biasa tidak dapat dikirim.');
         return;
       }
     }
@@ -1279,7 +1269,7 @@
                 <div class="flex-1 min-w-0">
                   <p class="font-bold text-xs text-amber-900 dark:text-amber-200">Sesi 24 Jam Meta Telah Kadaluarsa (&gt;24 Jam)</p>
                   <p class="text-[11px] text-amber-700/90 dark:text-amber-300/90 leading-relaxed mt-0.5">
-                    Pesan balasan biasa dikunci oleh Meta karena sudah lebih dari 24 jam sejak pesan terakhir pelanggan. Gunakan <strong>Template Resmi</strong> untuk menyapa kembali pelanggan.
+                    Pesan balasan biasa dikunci oleh Meta karena sudah lebih dari 24 jam sejak pesan terakhir pelanggan. Template Resmi Meta khusus digunakan untuk <strong>Broadcast Massal</strong>.
                   </p>
                 </div>
               </div>
@@ -1294,14 +1284,13 @@
                   <span>Beri Catatan Tim Internal</span>
                 </button>
 
-                <button
-                  type="button"
-                  onclick={() => (showTemplatePicker = true)}
+                <a
+                  href="/broadcast"
                   class="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-md shadow-amber-500/20 transition cursor-pointer"
                 >
-                  <FileText class="w-4 h-4" />
-                  <span>Pilih Template WhatsApp</span>
-                </button>
+                  <Send class="w-4 h-4" />
+                  <span>Ke Halaman Broadcast</span>
+                </a>
               </div>
             </div>
           {:else}
@@ -1311,7 +1300,7 @@
                 <div class="px-3.5 py-2 bg-slate-50 dark:bg-slate-800/80 flex items-center justify-between text-[11px] font-bold text-slate-500 dark:text-slate-400">
                   <span class="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
                     <Zap class="w-3.5 h-3.5" />
-                    Template & Balas Cepat ({filteredQuickReplies.length})
+                    Balas Cepat Internal ({filteredQuickReplies.length})
                   </span>
                   <span class="text-[10px] text-slate-400">Gunakan ↑ ↓ lalu Enter / Tab</span>
                 </div>
@@ -1331,9 +1320,6 @@
                             {qr.shortcut}
                           </span>
                           <span class="font-semibold text-xs truncate">{qr.title}</span>
-                          {#if qr.type === 'template'}
-                            <span class="text-[9px] uppercase px-1.5 py-0.2 rounded font-bold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">Meta</span>
-                          {/if}
                         </div>
                         <p class="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1 mt-0.5 leading-relaxed">
                           {qr.body}
@@ -1357,14 +1343,6 @@
                 >
                   <Eye class="w-3.5 h-3.5" />
                   {isInternalNote ? 'Catatan Internal (Aktif)' : 'Beri Catatan Tim'}
-                </button>
-
-                <button
-                  onclick={() => (showTemplatePicker = true)}
-                  class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white flex items-center gap-1.5 transition cursor-pointer"
-                >
-                  <FileText class="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                  Template Picker
                 </button>
               </div>
 
@@ -1746,45 +1724,7 @@
   </div>
 {/if}
 
-<!-- ─── 4. DRAWER / MODAL TEMPLATE PICKER ─── -->
-{#if showTemplatePicker}
-  <div class="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-    <div class="glass-panel w-full max-w-lg rounded-2xl p-6 border border-slate-200 dark:border-slate-700 shadow-2xl space-y-4">
-      <div class="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
-        <h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-          <FileText class="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-          Pilih Template WhatsApp Resmi
-        </h3>
-        <button onclick={() => (showTemplatePicker = false)} class="text-slate-400 hover:text-slate-600 dark:hover:text-white cursor-pointer">
-          <X class="w-5 h-5" />
-        </button>
-      </div>
 
-      <div class="space-y-3 max-h-96 overflow-y-auto pr-1">
-        {#if availableTemplates.length === 0}
-          <div class="p-6 text-center text-xs text-slate-400">Tidak ada template tersedia.</div>
-        {:else}
-          {#each availableTemplates as tpl}
-            <button
-              onclick={() => pickTemplate(tpl)}
-              class="w-full text-left p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-emerald-500 transition cursor-pointer space-y-1.5"
-            >
-              <div class="flex items-center justify-between">
-                <span class="text-xs font-bold text-slate-900 dark:text-white font-mono">{tpl.name}</span>
-                <span class="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400">
-                  {tpl.category}
-                </span>
-              </div>
-              <p class="text-xs text-slate-600 dark:text-slate-300 line-clamp-2">
-                {tpl.components?.[0]?.text || 'Body template'}
-              </p>
-            </button>
-          {/each}
-        {/if}
-      </div>
-    </div>
-  </div>
-{/if}
 
 <!-- ─── 5. INLINE MEDIA LIGHTBOX MODAL ─── -->
 {#if activeLightboxUrl}
