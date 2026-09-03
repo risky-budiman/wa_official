@@ -39,6 +39,7 @@
     Pencil,
     Film,
     Music,
+    Video,
     Loader2,
   } from "lucide-svelte";
   import { formatWhatsAppMarkdown } from "$lib/utils/whatsapp-formatter";
@@ -71,6 +72,8 @@
   let messageInputRef = $state<HTMLTextAreaElement | null>(null);
 
   // Attachment State
+  let showAttachmentMenu = $state(false);
+  let attachmentAccept = $state("image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.csv");
   let fileInputRef = $state<HTMLInputElement | null>(null);
   let pendingAttachment = $state<{
     file: File;
@@ -81,6 +84,14 @@
     previewUrl?: string;
   } | null>(null);
   let isUploadingMedia = $state(false);
+
+  function openFilePicker(acceptType: string) {
+    attachmentAccept = acceptType;
+    showAttachmentMenu = false;
+    setTimeout(() => {
+      fileInputRef?.click();
+    }, 50);
+  }
 
   function handleFileSelect(e: Event) {
     const input = e.target as HTMLInputElement;
@@ -2087,7 +2098,7 @@
               type="file"
               bind:this={fileInputRef}
               onchange={handleFileSelect}
-              accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.csv"
+              accept={attachmentAccept}
               class="hidden"
             />
 
@@ -2097,15 +2108,60 @@
               <div
                 class="flex items-center gap-0.5 text-slate-500 dark:text-slate-400 shrink-0 pb-1"
               >
-                <!-- 1. Media Upload Icon -->
-                <button
-                  type="button"
-                  onclick={() => fileInputRef?.click()}
-                  class="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer text-slate-500 hover:text-slate-700 dark:hover:text-slate-200"
-                  title="Kirim Media (Foto / Dokumen / Video)"
-                >
-                  <Paperclip class="w-4 h-4" />
-                </button>
+                <!-- 1. Media Upload Icon with Popup Menu -->
+                <div class="relative">
+                  <button
+                    type="button"
+                    onclick={() => (showAttachmentMenu = !showAttachmentMenu)}
+                    class="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 {showAttachmentMenu ? 'bg-slate-100 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400' : ''}"
+                    title="Kirim Media (Foto, Video, Dokumen, Audio)"
+                  >
+                    <Paperclip class="w-4 h-4" />
+                  </button>
+
+                  <!-- Popup Menu Media Attachment (WhatsApp Style) -->
+                  {#if showAttachmentMenu}
+                    <div
+                      class="absolute bottom-full mb-2.5 left-0 w-40 bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl shadow-xl p-1.5 z-50 flex flex-col gap-0.5 animate-in fade-in slide-in-from-bottom-2 duration-150"
+                    >
+                      <button
+                        type="button"
+                        onclick={() => openFilePicker('image/*')}
+                        class="w-full px-3 py-2 flex items-center gap-3 rounded-xl hover:bg-purple-50 dark:hover:bg-purple-950/40 text-slate-700 dark:text-slate-200 font-semibold text-xs transition cursor-pointer"
+                      >
+                        <Image class="w-4.5 h-4.5 text-purple-600 dark:text-purple-400" />
+                        <span>Foto</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onclick={() => openFilePicker('video/*')}
+                        class="w-full px-3 py-2 flex items-center gap-3 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950/40 text-slate-700 dark:text-slate-200 font-semibold text-xs transition cursor-pointer"
+                      >
+                        <Video class="w-4.5 h-4.5 text-rose-500 dark:text-rose-400" />
+                        <span>Video</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onclick={() => openFilePicker('.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.csv')}
+                        class="w-full px-3 py-2 flex items-center gap-3 rounded-xl hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-slate-700 dark:text-slate-200 font-semibold text-xs transition cursor-pointer"
+                      >
+                        <FileText class="w-4.5 h-4.5 text-indigo-600 dark:text-indigo-400" />
+                        <span>Dokumen</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onclick={() => openFilePicker('audio/*')}
+                        class="w-full px-3 py-2 flex items-center gap-3 rounded-xl hover:bg-amber-50 dark:hover:bg-amber-950/40 text-slate-700 dark:text-slate-200 font-semibold text-xs transition cursor-pointer"
+                      >
+                        <Music class="w-4.5 h-4.5 text-amber-500 dark:text-amber-400" />
+                        <span>Audio</span>
+                      </button>
+                    </div>
+                  {/if}
+                </div>
 
                 <!-- 2. Emoji Icon -->
                 <button
