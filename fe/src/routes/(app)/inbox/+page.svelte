@@ -98,6 +98,7 @@
     showAiModal = false;
     if (messageInputRef) {
       messageInputRef.focus();
+      setTimeout(() => autoResizeTextarea(messageInputRef!), 50);
     }
   }
 
@@ -348,9 +349,22 @@
     )
   );
 
+  function autoResizeTextarea(target: HTMLTextAreaElement) {
+    target.style.height = 'auto';
+    const newHeight = Math.min(Math.max(target.scrollHeight, 40), 180);
+    target.style.height = `${newHeight}px`;
+  }
+
+  function resetTextareaHeight() {
+    if (messageInputRef) {
+      messageInputRef.style.height = '40px';
+    }
+  }
+
   function handleInput(e: Event) {
     const target = e.target as HTMLTextAreaElement;
     messageText = target.value;
+    autoResizeTextarea(target);
 
     const lastWordMatch = messageText.match(/\/([a-zA-Z0-9_-]*)$/);
     if (lastWordMatch) {
@@ -368,6 +382,9 @@
     showSlashMenu = false;
     slashQuery = '';
     focusMessageInput();
+    if (messageInputRef) {
+      setTimeout(() => autoResizeTextarea(messageInputRef!), 50);
+    }
   }
 
   function handleKeydown(e: KeyboardEvent) {
@@ -816,6 +833,7 @@
 
     const textToSend = messageText.trim();
     messageText = '';
+    resetTextareaHeight();
     showEmojiPicker = false;
     focusMessageInput();
 
@@ -1462,27 +1480,22 @@
               </div>
             {/if}
 
-            <!-- Top Helper Line -->
-            <div class="flex items-center justify-between gap-2 px-1 mb-1">
-              {#if isInternalNote}
-                <div class="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-bold text-[11px] animate-pulse">
-                  <FileText class="w-3.5 h-3.5" />
-                  <span>Mode Catatan Internal Tim (Whisper Note)</span>
-                </div>
-              {:else}
-                <span></span>
-              {/if}
-              <span class="text-[10px] text-slate-400 hidden sm:inline">Ketik / untuk balas cepat • Shift+Enter baris baru • Enter kirim</span>
-            </div>
+            {#if isInternalNote}
+              <!-- Top Helper Line for Internal Note -->
+              <div class="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-bold text-[11px] animate-pulse px-1 mb-1">
+                <FileText class="w-3.5 h-3.5" />
+                <span>Mode Catatan Internal Tim (Whisper Note)</span>
+              </div>
+            {/if}
 
-            <!-- Input Box with Single Horizontal Icon Row -->
-            <div class="flex items-end gap-2">
-              <!-- HORIZONTAL TOOLBAR ICONS (1 Straight Line) -->
-              <div class="flex items-center gap-1 text-slate-500 dark:text-slate-400 shrink-0 pb-1">
+            <!-- Input Box with Single Tight Horizontal Icon Row -->
+            <div class="flex items-end gap-1.5">
+              <!-- TIGHT HORIZONTAL TOOLBAR ICONS -->
+              <div class="flex items-center gap-0.5 text-slate-500 dark:text-slate-400 shrink-0 pb-1">
                 <!-- 1. Media Upload Icon -->
                 <button
                   onclick={() => alert('Fitur upload lampiran terhubung ke media storage.')}
-                  class="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer text-slate-500 hover:text-slate-700 dark:hover:text-slate-200"
+                  class="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer text-slate-500 hover:text-slate-700 dark:hover:text-slate-200"
                   title="Kirim Media (Foto / Dokumen)"
                 >
                   <Paperclip class="w-4 h-4" />
@@ -1491,7 +1504,7 @@
                 <!-- 2. Emoji Icon -->
                 <button
                   onclick={() => (showEmojiPicker = !showEmojiPicker)}
-                  class="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer text-slate-500 hover:text-slate-700 dark:hover:text-slate-200"
+                  class="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer text-slate-500 hover:text-slate-700 dark:hover:text-slate-200"
                   title="Pilih Emoji"
                 >
                   <Smile class="w-4 h-4" />
@@ -1500,7 +1513,7 @@
                 <!-- 3. Catatan Tim (Document / Whisper Note) -->
                 <button
                   onclick={() => (isInternalNote = !isInternalNote)}
-                  class="p-2 rounded-xl transition cursor-pointer {isInternalNote 
+                  class="p-1 rounded-lg transition cursor-pointer {isInternalNote 
                     ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20' 
                     : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-amber-600 dark:hover:text-amber-400'}"
                   title="{isInternalNote ? 'Catatan Internal Tim (Aktif)' : 'Beri Catatan Tim (Dokumen Internal)'}"
@@ -1512,14 +1525,14 @@
                 <button
                   onclick={fetchAiSuggestions}
                   disabled={isAiGenerating}
-                  class="p-2 rounded-xl transition cursor-pointer text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/40 disabled:opacity-60"
+                  class="p-1 rounded-lg transition cursor-pointer text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/40 disabled:opacity-60"
                   title="✨ Saran Balasan Pintar AI"
                 >
                   <Sparkles class="w-4 h-4 text-purple-500 {isAiGenerating ? 'animate-spin' : ''}" />
                 </button>
               </div>
 
-              <!-- Textarea Input -->
+              <!-- Textarea Input (Auto-expands on typing) -->
               <textarea
                 bind:this={messageInputRef}
                 rows="1"
@@ -1527,9 +1540,9 @@
                 oninput={handleInput}
                 onkeydown={handleKeydown}
                 placeholder={isInternalNote 
-                  ? 'Ketik catatan internal untuk seluruh tim (Shift+Enter baris baru)...' 
-                  : 'Ketik balasan (ketik / untuk balasan cepat, Shift+Enter baris baru)...'}
-                class="flex-1 px-4 py-2.5 rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none transition resize-none max-h-32 min-h-[40px] leading-relaxed {isInternalNote 
+                  ? 'Ketik catatan internal tim (Ketik / untuk balasan cepat • Shift+Enter baris baru • Enter kirim)...' 
+                  : 'Ketik balasan (Ketik / untuk balasan cepat • Shift+Enter baris baru • Enter kirim)...'}
+                class="flex-1 px-3.5 py-2.5 rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none transition resize-none max-h-44 min-h-[40px] leading-relaxed overflow-y-auto {isInternalNote 
                   ? 'bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700 focus:border-amber-500' 
                   : 'bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:border-emerald-500'}"
               ></textarea>
