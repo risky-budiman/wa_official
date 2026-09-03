@@ -63,6 +63,7 @@
   let showAiModal = $state(false);
   let isAiGenerating = $state(false);
   let aiSuggestions = $state<{ title: string; text: string }[]>([]);
+  let aiMode = $state<"SMART_REPLY" | "POLISH_DRAFT">("SMART_REPLY");
   import { getApiBaseUrl } from "$lib/api/client";
 
   let showEmojiPicker = $state(false);
