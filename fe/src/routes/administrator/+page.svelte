@@ -1173,7 +1173,11 @@
   function openMetaWizard(tenant: TenantItem) {
     metaOrg = tenant;
     metaWabaId = tenant.wabaId || "";
-    metaPhoneId = tenant.phoneNumbers?.[0]?.phoneNumberId || "";
+    
+    // Only use numeric Phone Number IDs (Meta Phone IDs are numeric digits, dummy IDs are alphanumeric nanoids)
+    const rawPhoneId = tenant.phoneNumbers?.[0]?.phoneNumberId || "";
+    metaPhoneId = /^\d+$/.test(rawPhoneId) ? rawPhoneId : "";
+
     metaDisplayPhone = tenant.phoneNumbers?.[0]?.displayPhoneNumber || "";
     metaVerifiedName = tenant.phoneNumbers?.[0]?.verifiedName || tenant.name;
     metaAccessToken = "";
