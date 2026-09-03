@@ -1480,11 +1480,36 @@
               </div>
             {/if}
 
-            {#if isInternalNote}
-              <!-- Top Helper Line for Internal Note -->
-              <div class="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-bold text-[11px] animate-pulse px-1 mb-1">
-                <FileText class="w-3.5 h-3.5" />
-                <span>Mode Catatan Internal Tim (Whisper Note)</span>
+            <!-- Meta 24-Hour Session Status Bar (Above Input Form) -->
+            {#if selectedConv}
+              {@const effectiveExpiresAt = selectedConv.windowExpiresAt 
+                ? new Date(selectedConv.windowExpiresAt).getTime() 
+                : (selectedConv.lastMessageAt ? new Date(selectedConv.lastMessageAt).getTime() + 24 * 60 * 60 * 1000 : 0)}
+              {@const timeLeftMs = effectiveExpiresAt ? effectiveExpiresAt - Date.now() : 0}
+              {@const hoursLeft = Math.floor(Math.max(0, timeLeftMs) / (1000 * 60 * 60))}
+              {@const minutesLeft = Math.floor((Math.max(0, timeLeftMs) % (1000 * 60 * 60)) / (1000 * 60))}
+
+              <div class="flex items-center justify-between gap-2 px-1 mb-1.5 text-[11px]">
+                {#if isInternalNote}
+                  <div class="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-bold animate-pulse">
+                    <FileText class="w-3.5 h-3.5" />
+                    <span>Mode Catatan Internal Tim (Whisper Note)</span>
+                  </div>
+                {:else if timeLeftMs > 0}
+                  <div class="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400 font-semibold bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-lg border border-emerald-200 dark:border-emerald-800/60">
+                    <Clock class="w-3.5 h-3.5 text-emerald-500 animate-pulse" />
+                    <span>Sesi 24 Jam Meta Aktif: <strong>{hoursLeft} jam {minutesLeft} menit</strong> tersisa</span>
+                  </div>
+                {:else}
+                  <div class="flex items-center gap-1.5 text-rose-700 dark:text-rose-400 font-bold bg-rose-50 dark:bg-rose-950/50 px-2 py-0.5 rounded-lg border border-rose-200 dark:border-rose-800/60">
+                    <Clock class="w-3.5 h-3.5 text-rose-500" />
+                    <span>⚠️ Sesi 24 Jam Meta Kadaluarsa (&gt;24 Jam)</span>
+                  </div>
+                {/if}
+
+                {#if timeLeftMs > 0 && !isInternalNote}
+                  <span class="text-[10px] text-slate-400 font-mono hidden sm:inline">Meta Open Session (24h)</span>
+                {/if}
               </div>
             {/if}
 
