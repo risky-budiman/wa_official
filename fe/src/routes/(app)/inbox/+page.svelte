@@ -285,11 +285,11 @@
   let activeLightboxUrl = $state<string | null>(null);
 
   // Derived list of internal quick replies (/salam, /terimakasih, /rekening, etc.)
-  let allQuickReplies = $derived(defaultQuickReplies);
+  let allQuickReplies = $derived(customQuickReplies);
 
   let filteredQuickReplies = $derived(
     allQuickReplies.filter(
-      (qr) =>
+      (qr: QuickReplyItem) =>
         qr.shortcut.toLowerCase().includes(slashQuery.toLowerCase()) ||
         qr.title.toLowerCase().includes(slashQuery.toLowerCase()) ||
         qr.body.toLowerCase().includes(slashQuery.toLowerCase())
@@ -733,7 +733,6 @@
   function pickTemplate(tpl: TemplateItem) {
     const text = tpl.components?.[0]?.text || tpl.name;
     messageText = text;
-    showTemplatePicker = false;
     showSlashMenu = false;
     focusMessageInput();
   }
