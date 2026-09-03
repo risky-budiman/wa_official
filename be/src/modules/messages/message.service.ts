@@ -249,8 +249,16 @@ export class MessageService {
 
     let options = [];
 
-    // Contextual Category Detection
-    if (lastMsgLower.includes('alamat') || lastMsgLower.includes('lokasi') || lastMsgLower.includes('toko') || lastMsgLower.includes('cabang') || lastMsgLower.includes('dimana')) {
+    // Contextual Category Detection (Strict Multi-Word Matching)
+    if (
+      lastMsgLower.includes('alamat toko') ||
+      lastMsgLower.includes('lokasi toko') ||
+      lastMsgLower.includes('lokasi kantor') ||
+      lastMsgLower.includes('cabang mana') ||
+      lastMsgLower.includes('dimana alamat') ||
+      lastMsgLower.includes('dimana lokasi') ||
+      (lastMsgLower.includes('alamat') && lastMsgLower.includes('mana'))
+    ) {
       options = [
         {
           title: '📍 Info Alamat & Lokasi Toko',
@@ -265,7 +273,14 @@ export class MessageService {
           text: `Halo Kak ${contactName}, toko fisik kami buka setiap hari Senin - Sabtu pukul 09.00 - 20.00 WIB. Ditunggu kedatangannya ya Kak!`,
         },
       ];
-    } else if (lastMsgLower.includes('stok') || lastMsgLower.includes('ready') || lastMsgLower.includes('ada') || lastMsgLower.includes('tersedia')) {
+    } else if (
+      lastMsgLower.includes('stok ready') ||
+      lastMsgLower.includes('ready stok') ||
+      lastMsgLower.includes('apakah ready') ||
+      lastMsgLower.includes('stoknya') ||
+      lastMsgLower.includes('ada stok') ||
+      lastMsgLower.includes('masih ada stok')
+    ) {
       options = [
         {
           title: '📦 Konfirmasi Stok Ready',
@@ -280,7 +295,15 @@ export class MessageService {
           text: `Halo Kak ${contactName}, produk tersebut tergolong cepat habis (*fast-moving*). Sebaiknya kami amankan stoknya untuk Kakak sekarang?`,
         },
       ];
-    } else if (lastMsgLower.includes('harga') || lastMsgLower.includes('berapa') || lastMsgLower.includes('biaya') || lastMsgLower.includes('katalog') || lastMsgLower.includes('pricelist') || lastMsgLower.includes('paket')) {
+    } else if (
+      lastMsgLower.includes('berapa harganya') ||
+      lastMsgLower.includes('harganya berapa') ||
+      lastMsgLower.includes('daftar harga') ||
+      lastMsgLower.includes('pricelist') ||
+      lastMsgLower.includes('minta brosur') ||
+      lastMsgLower.includes('rincian biaya') ||
+      lastMsgLower.includes('biaya paket')
+    ) {
       options = [
         {
           title: '🏷️ Info Harga & Brosur Produk',
@@ -295,7 +318,14 @@ export class MessageService {
           text: `Halo Kak ${contactName}, untuk pembelian hari ini kami sedang ada penawaran potongan khusus. Boleh diinfokan kuantitas atau tipe yang dibutuhkan Kakak?`,
         },
       ];
-    } else if (lastMsgLower.includes('resi') || lastMsgLower.includes('kirim') || lastMsgLower.includes('sampai') || lastMsgLower.includes('lacak') || lastMsgLower.includes('pos') || lastMsgLower.includes('paket')) {
+    } else if (
+      lastMsgLower.includes('nomor resi') ||
+      lastMsgLower.includes('status resi') ||
+      lastMsgLower.includes('lacak resi') ||
+      lastMsgLower.includes('kapan dikirim') ||
+      lastMsgLower.includes('sudah dikirim') ||
+      lastMsgLower.includes('lacak paket')
+    ) {
       options = [
         {
           title: '🚚 Cek Status Resi Pengiriman',
@@ -310,7 +340,14 @@ export class MessageService {
           text: `Baik Kak ${contactName}, tim kami terus memantau pengiriman produk Anda. Jika ada keterlambatan dari pihak ekspedisi, kami akan bantu koordinasikan langsung.`,
         },
       ];
-    } else if (lastMsgLower.includes('rekening') || lastMsgLower.includes('bayar') || lastMsgLower.includes('tf') || lastMsgLower.includes('transfer') || lastMsgLower.includes('pembayaran') || lastMsgLower.includes('bca') || lastMsgLower.includes('mandiri')) {
+    } else if (
+      lastMsgLower.includes('nomor rekening') ||
+      lastMsgLower.includes('rekening bca') ||
+      lastMsgLower.includes('rekening mandiri') ||
+      lastMsgLower.includes('transfer ke mana') ||
+      lastMsgLower.includes('bukti transfer') ||
+      lastMsgLower.includes('konfirmasi bayar')
+    ) {
       options = [
         {
           title: '💳 Rincian Rekening Pembayaran Resmi',
@@ -325,7 +362,13 @@ export class MessageService {
           text: `Baik Kak ${contactName}, mohon selesaikan pembayaran sebelum batas waktu berakhir agar pesanan Kakak dapat segera diproses pengirimannya.`,
         },
       ];
-    } else if (lastMsgLower.includes('komplain') || lastMsgLower.includes('rusak') || lastMsgLower.includes('salah') || lastMsgLower.includes('kecewa') || lastMsgLower.includes('batal') || lastMsgLower.includes('retur') || lastMsgLower.includes('garansi')) {
+    } else if (
+      lastMsgLower.includes('barang rusak') ||
+      lastMsgLower.includes('salah kirim') ||
+      lastMsgLower.includes('klaim garansi') ||
+      lastMsgLower.includes('retur barang') ||
+      lastMsgLower.includes('kecewa sekali')
+    ) {
       options = [
         {
           title: '🙏 Permohonan Maaf & Penanganan Fast-Track',
@@ -345,15 +388,15 @@ export class MessageService {
       options = [
         {
           title: '🌟 Balasan Ramah & Kontekstual',
-          text: `Halo Kak ${contactName}! 😊 Terkait pesan Kakak mengenai ${msgSnippet}, baik kak, tim kami dengan senang hati siap memberikan penjelasan lengkapnya. Ada yang perlu kami bantu secara khusus?`,
+          text: `Halo Kak ${contactName}! 😊 Terkait pesan Kakak mengenai ${msgSnippet}, baik kak, tim Customer Service kami dengan senang hati siap memberikan bantuan. Boleh diinfokan lebih lanjut?`,
         },
         {
           title: '⚡ Balasan Langsung & Solutif',
-          text: `Baik Kak ${contactName}, mengenai ${msgSnippet}, pesan Kakak sudah kami catat dan tim kami siap memberikan solusi terbaik. Boleh bantu berikan detail tambahan?`,
+          text: `Baik Kak ${contactName}, mengenai ${msgSnippet}, pesan Kakak sudah kami terima dan sedang diproses oleh tim kami.`,
         },
         {
           title: '💼 Balasan Formal & Profesional',
-          text: `Selamat hari ini, Kak ${contactName}. Terima kasih telah menghubungi layanan resmi kami terkait ${msgSnippet}. Mohon tunggu sebentar, tim kami sedang menyiapkan informasi yang Kakak butuhkan.`,
+          text: `Selamat hari ini Kak ${contactName}. Terima kasih telah menghubungi kami perihal ${msgSnippet}. Tim kami akan menindaklanjuti pesan Anda secepatnya.`,
         },
       ];
     } else {
