@@ -5,7 +5,7 @@
 import { Elysia, t } from 'elysia';
 import { join } from 'path';
 import { existsSync, mkdirSync } from 'fs';
-import { jwtMiddleware } from '../../middleware/jwt.middleware';
+import { authPlugin } from '../../middleware/auth';
 
 export const mediaRoutes = new Elysia({ prefix: '/media' })
   .get(
@@ -29,7 +29,7 @@ export const mediaRoutes = new Elysia({ prefix: '/media' })
       }),
     }
   )
-  .use(jwtMiddleware)
+  .use(authPlugin)
   .post(
     '/upload',
     async ({ body, set }) => {
