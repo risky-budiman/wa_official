@@ -792,6 +792,7 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
       .select({
         operatingHours: organizations.operatingHours,
         aiAgentConfig: organizations.aiAgentConfig,
+        chatbotConfig: organizations.chatbotConfig,
       })
       .from(organizations)
       .where(eq(organizations.id, user.orgId))
@@ -817,6 +818,7 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
 
     let hours = org?.operatingHours;
     let ai = org?.aiAgentConfig;
+    let chatbot = org?.chatbotConfig;
 
     if (typeof hours === 'string') {
       try { hours = JSON.parse(hours); } catch (_) {}
@@ -824,15 +826,19 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
     if (typeof ai === 'string') {
       try { ai = JSON.parse(ai); } catch (_) {}
     }
+    if (typeof chatbot === 'string') {
+      try { chatbot = JSON.parse(chatbot); } catch (_) {}
+    }
 
     return {
       success: true,
       operatingHours: hours || defaultHours,
       aiAgentConfig: ai || defaultAi,
+      chatbotConfig: chatbot || null,
     };
   })
 
-  // ─── PATCH /settings/operating-hours — Save Operating Hours & AI Agent Config ──
+  // ─── PATCH & POST /settings/operating-hours — Save Operating Hours & AI Agent Config ──
   .patch(
     '/operating-hours',
     async ({ user, body, set }) => {
@@ -840,7 +846,7 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
         set.status = 401;
         return { success: false, error: 'Unauthorized' };
       }
-      if (user.role !== 'ADMINISTRATOR' && user.role !== 'SUPERVISOR') {
+      if (user.role !== 'ADMINISTRATOR' && user.role !== 'SUPER_ADMIN' && user.role !== 'SUPERVISOR') {
         set.status = 403;
         return { success: false, error: 'Akses ditolak (Khusus Administrator atau Supervisor)' };
       }
@@ -850,6 +856,7 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
         
         let hoursToSave = body.operatingHours;
         let aiToSave = body.aiAgentConfig;
+        let chatbotToSave = body.chatbotConfig;
 
         if (typeof hoursToSave === 'string') {
           try { hoursToSave = JSON.parse(hoursToSave); } catch (_) {}
@@ -857,13 +864,18 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
         if (typeof aiToSave === 'string') {
           try { aiToSave = JSON.parse(aiToSave); } catch (_) {}
         }
+        if (typeof chatbotToSave === 'string') {
+          try { chatbotToSave = JSON.parse(chatbotToSave); } catch (_) {}
+        }
+
+        const updateData: any = {};
+        if (hoursToSave !== undefined) updateData.operatingHours = hoursToSave;
+        if (aiToSave !== undefined) updateData.aiAgentConfig = aiToSave;
+        if (chatbotToSave !== undefined) updateData.chatbotConfig = chatbotToSave;
 
         await db
           .update(organizations)
-          .set({
-            operatingHours: hoursToSave as any,
-            aiAgentConfig: aiToSave as any,
-          })
+          .set(updateData)
           .where(eq(organizations.id, user.orgId));
 
         console.log(`✅ Operating Hours & AI Agent updated successfully for org ${user.orgId}`);
@@ -885,6 +897,69 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
       body: t.Object({
         operatingHours: t.Optional(t.Any()),
         aiAgentConfig: t.Optional(t.Any()),
+        chatbotConfig: t.Optional(t.Any()),
+      }),
+    }
+  )
+  .post(
+    '/operating-hours',
+    async ({ user, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { success: false, error: 'Unauthorized' };
+      }
+      if (user.role !== 'ADMINISTRATOR' && user.role !== 'SUPER_ADMIN' && user.role !== 'SUPERVISOR') {
+        set.status = 403;
+        return { success: false, error: 'Akses ditolak (Khusus Administrator atau Supervisor)' };
+      }
+
+      try {
+        console.log(`🕒 Updating Operating Hours & AI Agent for org ${user.orgId}...`);
+        
+        let hoursToSave = body.operatingHours;
+        let aiToSave = body.aiAgentConfig;
+        let chatbotToSave = body.chatbotConfig;
+
+        if (typeof hoursToSave === 'string') {
+          try { hoursToSave = JSON.parse(hoursToSave); } catch (_) {}
+        }
+        if (typeof aiToSave === 'string') {
+          try { aiToSave = JSON.parse(aiToSave); } catch (_) {}
+        }
+        if (typeof chatbotToSave === 'string') {
+          try { chatbotToSave = JSON.parse(chatbotToSave); } catch (_) {}
+        }
+
+        const updateData: any = {};
+        if (hoursToSave !== undefined) updateData.operatingHours = hoursToSave;
+        if (aiToSave !== undefined) updateData.aiAgentConfig = aiToSave;
+        if (chatbotToSave !== undefined) updateData.chatbotConfig = chatbotToSave;
+
+        await db
+          .update(organizations)
+          .set(updateData)
+          .where(eq(organizations.id, user.orgId));
+
+        console.log(`✅ Operating Hours & AI Agent updated successfully for org ${user.orgId}`);
+
+        return {
+          success: true,
+          message: 'Pengaturan Jam Operasional & AI Agent berhasil disimpan!',
+        };
+      } catch (err: any) {
+        console.error('❌ Failed to update operating hours:', err);
+        set.status = 500;
+        return {
+          success: false,
+          error: err.message || 'Gagal menyimpan ke database',
+        };
+      }
+    },
+    {
+      body: t.Object({
+        operatingHours: t.Optional(t.Any()),
+        aiAgentConfig: t.Optional(t.Any()),
+        chatbotConfig: t.Optional(t.Any()),
       }),
     }
   )
@@ -900,11 +975,13 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
 
       try {
         const { AiAgentService } = await import('../../services/ai-agent.service');
-        const reply = await AiAgentService.generateGeminiResponse({
+        const reply = await AiAgentService.generateAiResponse({
+          provider: body.provider as any,
           systemPrompt: body.systemPrompt || '',
           userMessage: body.userMessage || 'Halo, saya mau tanya apakah ada promo hari ini?',
           apiKey: body.apiKey || undefined,
-          model: body.model || 'gemini-2.0-flash',
+          model: body.model,
+          baseUrl: body.baseUrl,
         });
 
         return {
@@ -921,10 +998,12 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
     },
     {
       body: t.Object({
+        provider: t.Optional(t.String()),
         systemPrompt: t.String(),
         userMessage: t.String(),
         apiKey: t.Optional(t.String()),
         model: t.Optional(t.String()),
+        baseUrl: t.Optional(t.String()),
       }),
     }
   )

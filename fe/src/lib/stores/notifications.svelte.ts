@@ -130,22 +130,20 @@ export class NotificationStore {
       const res = await apiRequest<{ items: any[] }>('/conversations');
       if (res && res.success && Array.isArray(res.items)) {
         for (const conv of res.items) {
-          const msgKey = `${conv.id}:${conv.lastMessageAt}:${conv.lastMessagePreview}`;
-          if (!this.lastKnownMessageIds.has(conv.id)) {
-            // First time tracking this conversation ID
-            this.lastKnownMessageIds.add(conv.id);
-            // If it has a recent message within last 10 minutes and unassigned, seed into notifications
+          const msgKey = `${conv.id}:${conv.lastMessageAt}`;
+          if (!this.lastKnownMessageIds.has(msgKey)) {
+            const isFirstLoad = this.lastKnownMessageIds.size === 0;
+            this.lastKnownMessageIds.add(msgKey);
+            
+            // If new incoming message or unassigned chat within last 15 minutes, trigger chime & notification
             const diffMs = Date.now() - new Date(conv.lastMessageAt).getTime();
-            if (diffMs < 10 * 60 * 1000 && conv.status === 'UNASSIGNED') {
-              this.items.push({
-                id: 'init-' + conv.id,
-                title: `Pesan Masuk: ${conv.contact.name}`,
+            if (!isFirstLoad && diffMs < 15 * 60 * 1000) {
+              this.addNotification({
+                title: `Pesan Masuk: ${conv.contact?.name || 'Pelanggan'}`,
                 desc: conv.lastMessagePreview || 'Pesan baru dari pelanggan',
                 time: new Date(conv.lastMessageAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                unread: true,
-                type: 'chat',
+                type: conv.status === 'UNASSIGNED' ? 'queue' : 'chat',
                 conversationId: conv.id,
-                createdAt: conv.lastMessageAt,
               });
             }
           }

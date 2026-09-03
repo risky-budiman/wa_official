@@ -23,10 +23,12 @@ import { billingRoutes } from './modules/billing/billing.routes';
 import { wsPlugin } from './websocket/ws.server';
 import './modules/webhook/webhook.processor'; // Initialize BullMQ worker
 import { AutoResolveService } from './services/auto-resolve.service';
+import { autoMigrateSchema } from './db/auto-migrate';
 
 // Validate environment and initialize database on startup
 validateEnv();
 await testConnection();
+await autoMigrateSchema();
 
 // Start Inactivity Auto-Resolve Background Worker
 AutoResolveService.startWorker(60000);

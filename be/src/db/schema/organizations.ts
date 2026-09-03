@@ -17,11 +17,26 @@ export interface AiAgentConfig {
   enabled: boolean;
   triggerMode?: 'OUT_OF_HOURS' | 'ALWAYS'; // OUT_OF_HOURS (di luar jam kerja) atau ALWAYS (24/7 selalu aktif)
   mode: 'AI_ASSISTANT' | 'STATIC_MESSAGE';
-  provider: 'gemini' | 'openai';
+  provider: 'gemini' | 'openai' | 'claude' | 'custom_llm';
   apiKey?: string;
   model?: string;
   systemPrompt?: string;
   staticMessage?: string;
+  baseUrl?: string; // Optional custom LLM endpoint (Ollama / LocalAI / vLLM)
+}
+
+export interface ChatbotRule {
+  id: string;
+  keywords: string[];
+  title: string;
+  replyText: string;
+  action: 'REPLY' | 'HANDOFF_HUMAN' | 'HANDOVER_AI';
+}
+
+export interface ChatbotConfig {
+  greetingText?: string;
+  rules?: ChatbotRule[];
+  fallbackMode?: 'AI_AGENT' | 'HANDOFF_HUMAN' | 'STATIC_MESSAGE';
 }
 
 export const orgStatusEnum = ['ACTIVE', 'SUSPENDED', 'TRIAL', 'EXPIRED'] as const;
@@ -49,6 +64,7 @@ export const organizations = mysqlTable('organizations', {
   careWindowHours: int('care_window_hours').default(24), // Customer Care Window in Hours
   operatingHours: json('operating_hours').$type<OperatingHoursConfig>(),
   aiAgentConfig: json('ai_agent_config').$type<AiAgentConfig>(),
+  chatbotConfig: json('chatbot_config').$type<ChatbotConfig>(),
   createdAt: datetime('created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: datetime('updated_at').default(sql`CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`).notNull(),
 });

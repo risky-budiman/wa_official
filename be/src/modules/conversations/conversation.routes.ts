@@ -10,6 +10,8 @@ import { phoneNumbers, contacts, conversations, messages } from '../../db/schema
 import { authPlugin } from '../../middleware/auth';
 import { ConversationService } from './conversation.service';
 import { MessageService } from '../messages/message.service';
+import { AiAgentService } from '../../services/ai-agent.service';
+import { ChatbotService } from '../../services/chatbot.service';
 import type { ConversationStatus } from '../../db/schema/conversations';
 
 export const conversationRoutes = new Elysia({ prefix: '/conversations' })
@@ -355,6 +357,20 @@ export const conversationRoutes = new Elysia({ prefix: '/conversations' })
           isInternalNote: false,
           status: 'DELIVERED',
         });
+
+        // 5. Trigger Hybrid Chatbot / AI Agent Auto-Responder
+        try {
+          await ChatbotService.processInbound({
+            orgId,
+            convId: convId!,
+            contactWaId: cleanWaId,
+            contactName: senderName?.trim() || 'Pelanggan +' + cleanWaId,
+            incomingText: messageText,
+            phoneRecordId: phoneId,
+          });
+        } catch (botErr: any) {
+          console.warn('Chatbot trigger error in simulate-inbound:', botErr?.message);
+        }
 
         return {
           success: true,

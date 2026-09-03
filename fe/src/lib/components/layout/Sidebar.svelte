@@ -42,8 +42,9 @@
       label: 'Administration',
       items: [
         { name: 'Kelola Tim & Agen', path: '/admin/users', icon: Users, roles: ['SUPER_ADMIN', 'ADMINISTRATOR'] },
+        { name: 'Pengaturan Chatbot & AI', path: '/admin/settings/chatbot', icon: Bot, roles: ['SUPER_ADMIN', 'ADMINISTRATOR'] },
+        { name: 'Pengaturan WABA Channel', path: '/admin/settings', icon: Settings, roles: ['SUPER_ADMIN', 'ADMINISTRATOR'] },
         { name: 'Paket & Langganan', path: '/admin/subscription', icon: CreditCard, roles: ['SUPER_ADMIN', 'ADMINISTRATOR'] },
-        { name: 'Pengaturan WABA', path: '/admin/settings', icon: Settings, roles: ['SUPER_ADMIN', 'ADMINISTRATOR'] },
         { name: 'API Key & Developer', path: '/admin/api-keys', icon: Key, roles: ['SUPER_ADMIN', 'ADMINISTRATOR'] }
       ]
     }
@@ -104,7 +105,11 @@
           </div>
           <div class="space-y-1">
             {#each visibleItems as item}
-              {@const isActive = $page.url.pathname === item.path || ($page.url.pathname.startsWith(item.path) && item.path !== '/')}
+              {@const hasQuery = item.path.includes('?')}
+              {@const currentFullUrl = $page.url.pathname + $page.url.search}
+              {@const isActive = hasQuery
+                ? currentFullUrl === item.path
+                : ($page.url.pathname === item.path && !$page.url.search.includes('tab='))}
               {@const Icon = item.icon}
               <a
                 href={item.path}

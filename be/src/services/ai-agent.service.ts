@@ -199,6 +199,150 @@ export class AiAgentService {
   }
 
   /**
+   * Generate AI response using OpenAI API (GPT-4o, GPT-4o-mini, GPT-3.5-turbo)
+   */
+  static async generateOpenAiResponse(params: {
+    systemPrompt: string;
+    userMessage: string;
+    conversationHistory?: { role: 'user' | 'model'; text: string }[];
+    apiKey?: string;
+    model?: string;
+    baseUrl?: string;
+  }): Promise<string> {
+    const apiKey = params.apiKey || process.env.OPENAI_API_KEY || '';
+    if (!apiKey) {
+      throw new Error('OpenAI API Key belum diatur. Harap masukkan API Key OpenAI di Pengaturan AI.');
+    }
+
+    const model = params.model || 'gpt-4o-mini';
+    const baseUrl = (params.baseUrl || 'https://api.openai.com').replace(/\/$/, '');
+
+    const messagesPayload: any[] = [];
+    if (params.systemPrompt) {
+      messagesPayload.push({ role: 'system', content: params.systemPrompt });
+    }
+    if (params.conversationHistory) {
+      for (const item of params.conversationHistory) {
+        messagesPayload.push({
+          role: item.role === 'user' ? 'user' : 'assistant',
+          content: item.text,
+        });
+      }
+    }
+    messagesPayload.push({ role: 'user', content: params.userMessage });
+
+    const res = await fetch(`${baseUrl}/v1/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: messagesPayload,
+        temperature: 0.3,
+        max_tokens: 800,
+      }),
+    });
+
+    const data = await res.json();
+    if (!res.ok || data?.error) {
+      throw new Error(`OpenAI API Error: ${data?.error?.message || res.statusText}`);
+    }
+
+    const reply = data?.choices?.[0]?.message?.content;
+    if (reply) {
+      console.log(`✨ OpenAI successfully replied using model [${model}]`);
+      return reply.trim();
+    }
+    throw new Error('OpenAI tidak memberikan teks balasan.');
+  }
+
+  /**
+   * Generate AI response using Anthropic Claude API (Claude 3.5 Sonnet, Claude 3 Haiku)
+   */
+  static async generateClaudeResponse(params: {
+    systemPrompt: string;
+    userMessage: string;
+    conversationHistory?: { role: 'user' | 'model'; text: string }[];
+    apiKey?: string;
+    model?: string;
+  }): Promise<string> {
+    const apiKey = params.apiKey || process.env.ANTHROPIC_API_KEY || '';
+    if (!apiKey) {
+      throw new Error('Anthropic API Key belum diatur. Harap masukkan API Key Claude di Pengaturan AI.');
+    }
+
+    const model = params.model || 'claude-3-5-sonnet-20240620';
+    const messagesPayload: any[] = [];
+    if (params.conversationHistory) {
+      for (const item of params.conversationHistory) {
+        messagesPayload.push({
+          role: item.role === 'user' ? 'user' : 'assistant',
+          content: item.text,
+        });
+      }
+    }
+    messagesPayload.push({ role: 'user', content: params.userMessage });
+
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model,
+        system: params.systemPrompt,
+        messages: messagesPayload,
+        max_tokens: 800,
+      }),
+    });
+
+    const data = await res.json();
+    if (!res.ok || data?.error) {
+      throw new Error(`Claude API Error: ${data?.error?.message || res.statusText}`);
+    }
+
+    const reply = data?.content?.[0]?.text;
+    if (reply) {
+      console.log(`✨ Claude successfully replied using model [${model}]`);
+      return reply.trim();
+    }
+    throw new Error('Claude tidak memberikan teks balasan.');
+  }
+
+  /**
+   * Master Unified Multi-AI Dispatcher: Gemini, OpenAI, Claude, Custom LLM
+   */
+  static async generateAiResponse(params: {
+    provider?: 'gemini' | 'openai' | 'claude' | 'custom_llm';
+    systemPrompt: string;
+    userMessage: string;
+    conversationHistory?: { role: 'user' | 'model'; text: string }[];
+    apiKey?: string;
+    model?: string;
+    baseUrl?: string;
+  }): Promise<string> {
+    const provider = params.provider || 'gemini';
+
+    if (provider === 'openai') {
+      return this.generateOpenAiResponse(params);
+    } else if (provider === 'claude') {
+      return this.generateClaudeResponse(params);
+    } else if (provider === 'custom_llm') {
+      return this.generateOpenAiResponse({
+        ...params,
+        baseUrl: params.baseUrl || 'http://localhost:11434', // Default Ollama / LocalAI endpoint
+      });
+    }
+
+    // Default: Gemini
+    return this.generateGeminiResponse(params);
+  }
+
+  /**
    * Process out-of-hours inbound message and auto-reply to customer
    */
   static async handleOutOfHoursInbound(params: {
@@ -241,9 +385,16 @@ export class AiAgentService {
       return;
     }
 
-    const aiConfig = org.aiAgentConfig;
-    if (!aiConfig || !aiConfig.enabled) {
-      return; // AI Agent disabled
+    const defaultConfig: AiAgentConfig = {
+      enabled: true,
+      mode: 'AI_ASSISTANT',
+      provider: 'gemini',
+    };
+    const aiConfig: AiAgentConfig = org.aiAgentConfig ? { ...defaultConfig, ...org.aiAgentConfig } : defaultConfig;
+
+    if (aiConfig.enabled === false) {
+      console.log('ℹ️ AI Agent dinonaktifkan untuk organisasi ini.');
+      return;
     }
 
     // 2. Fetch Phone details
@@ -253,7 +404,7 @@ export class AiAgentService {
       .where(eq(phoneNumbers.id, phoneRecordId))
       .limit(1);
 
-    if (!phone) return;
+    const phoneNumberId = phone?.phoneNumberId || 'phone_default_id';
 
     const activeToken =
       org.accessToken && !org.accessToken.startsWith('EAAGm0PX4ZCBO')
@@ -298,12 +449,14 @@ Tugas Anda:
           ? `[PANDUAN & ATURAN UTAMA DARI PERUSAHAAN]\n${aiConfig.systemPrompt.trim()}\n\n[ATURAN WAJIB]: Anda WAJIB mematuhi seluruh panduan, logika, jawaban FAQ, dan batasan yang tertera di atas.`
           : defaultPrompt;
 
-        responseText = await AiAgentService.generateGeminiResponse({
+        responseText = await AiAgentService.generateAiResponse({
+          provider: aiConfig.provider || 'gemini',
           systemPrompt: finalSystemPrompt,
           userMessage: incomingText,
           conversationHistory: history,
           apiKey: aiConfig.apiKey,
-          model: aiConfig.model || 'gemini-2.0-flash',
+          model: aiConfig.model,
+          baseUrl: aiConfig.baseUrl,
         });
       } catch (aiErr: any) {
         console.error('❌ AI Agent response error:', aiErr.message);
@@ -320,7 +473,7 @@ Tugas Anda:
     try {
       const metaRes = await MetaApiService.sendTextMessage(
         {
-          phoneNumberId: phone.phoneNumberId,
+          phoneNumberId: phoneNumberId,
           recipientWaId: contactWaId,
           text: responseText,
         },

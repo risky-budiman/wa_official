@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { page } from '$app/stores';
+  import { goto } from '$app/navigation';
   import { apiRequest } from '$lib/api/client';
   import { authStore } from '$lib/stores/auth.svelte';
   import { channelStore } from '$lib/stores/channel.svelte';
@@ -62,6 +64,18 @@
 
   // Main Section Tabs: WABA Channel vs Operating Hours & AI vs Operations & SLA
   let mainSettingsTab = $state<'WABA' | 'HOURS_AI' | 'OPERATIONS'>('WABA');
+
+  // Reactively sync active tab with URL query parameter ?tab=
+  $effect(() => {
+    const tabParam = $page.url.searchParams.get('tab');
+    if (tabParam === 'HOURS_AI' || tabParam === 'AI' || tabParam === 'CHATBOT') {
+      goto('/admin/settings/chatbot');
+    } else if (tabParam === 'WABA') {
+      mainSettingsTab = 'WABA';
+    } else if (tabParam === 'OPERATIONS') {
+      mainSettingsTab = 'OPERATIONS';
+    }
+  });
 
   // Operating Hours State
   let operatingHours = $state({
@@ -553,10 +567,14 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
 
 
   onMount(() => {
-    // 1. Check if this window is an OAuth redirect containing ?code=
+    // 1. Check tab URL parameter or OAuth redirect containing ?code=
     const urlParams = new URLSearchParams(window.location.search);
+    const tabParam = urlParams.get('tab');
+    if (tabParam === 'HOURS_AI' || tabParam === 'AI' || tabParam === 'CHATBOT') {
+      mainSettingsTab = 'HOURS_AI';
+    }
+
     const code = urlParams.get('code');
-    
     if (code) {
       if (window.opener && window.opener !== window) {
         try {
@@ -661,18 +679,6 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
       <span>Saluran WhatsApp (WABA)</span>
     </button>
 
-    <button
-      onclick={() => (mainSettingsTab = 'HOURS_AI')}
-      class="flex-1 py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer {mainSettingsTab === 'HOURS_AI' 
-        ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm border border-slate-200/80 dark:border-slate-700/80' 
-        : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}"
-    >
-      <Clock class="w-4 h-4" />
-      <span>Jam Operasional & AI Agent</span>
-      {#if operatingHours.enabled && aiAgentConfig.enabled}
-        <span class="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
-      {/if}
-    </button>
 
     <button
       onclick={() => (mainSettingsTab = 'OPERATIONS')}
