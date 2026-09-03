@@ -838,7 +838,7 @@ export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
 
         // Test Phone Number ID with Meta Graph API
         const phoneRes = await fetch(
-          `https://graph.facebook.com/v21.0/${targetPhoneId}?fields=id,display_phone_number,verified_name,quality_rating,code_verification_status,platform_type,throughput`,
+          `https://graph.facebook.com/v21.0/${targetPhoneId}?fields=id,display_phone_number,verified_name,quality_rating,code_verification_status,platform_type,throughput,messaging_limit_tier`,
           {
             headers: {
               Authorization: `Bearer ${targetToken}`,

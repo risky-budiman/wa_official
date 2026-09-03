@@ -4812,30 +4812,28 @@
 
                 {#if metaTestResult.data?.phoneNumber}
                   <div
-                    class="grid grid-cols-2 gap-2 pt-2 border-t border-emerald-200 dark:border-emerald-900 text-[11px] font-mono"
+                    class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2.5 border-t border-emerald-200 dark:border-emerald-900 text-[11px] font-mono"
                   >
                     <div>
-                      Nomor: <strong
-                        >{metaTestResult.data.phoneNumber
-                          .display_phone_number}</strong
-                      >
+                      Nomor: <strong>{metaTestResult.data.phoneNumber.display_phone_number || '-'}</strong>
                     </div>
                     <div>
-                      Nama: <strong
-                        >{metaTestResult.data.phoneNumber.verified_name}</strong
-                      >
+                      Nama Bisnis: <strong>{metaTestResult.data.phoneNumber.verified_name || metaOrg?.name}</strong>
                     </div>
                     <div>
-                      Kualitas: <strong class="uppercase text-emerald-600"
-                        >{metaTestResult.data.phoneNumber
-                          .quality_rating}</strong
-                      >
+                      Kualitas: <strong class="uppercase text-emerald-600 dark:text-emerald-400">{metaTestResult.data.phoneNumber.quality_rating || 'GREEN'}</strong>
                     </div>
                     <div>
-                      Status Verif: <strong
-                        >{metaTestResult.data.phoneNumber
-                          .code_verification_status || "VERIFIED"}</strong
-                      >
+                      Status Verif: <strong>{metaTestResult.data.phoneNumber.code_verification_status || 'VERIFIED'}</strong>
+                    </div>
+                    <div class="sm:col-span-2 p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-900 dark:text-emerald-200 flex items-center justify-between font-sans">
+                      <span class="font-bold flex items-center gap-1.5">
+                        <Gauge class="w-3.5 h-3.5 text-emerald-500" />
+                        Batas Quota Meta (Messaging Limit):
+                      </span>
+                      <strong class="font-mono text-xs font-black text-emerald-700 dark:text-emerald-300">
+                        {metaTestResult.data.phoneNumber.messaging_limit_tier === 'TIER_1K' ? '1,000 Pesan / 24 Jam' : metaTestResult.data.phoneNumber.messaging_limit_tier === 'TIER_10K' ? '10,000 Pesan / 24 Jam' : metaTestResult.data.phoneNumber.messaging_limit_tier === 'TIER_100K' ? '100,000 Pesan / 24 Jam' : metaTestResult.data.phoneNumber.messaging_limit_tier === 'TIER_UNLIMITED' ? '♾️ Unlimited / 24 Jam' : '250 Pesan / 24 Jam (Tier 250)'}
+                      </strong>
                     </div>
                   </div>
                 {/if}
