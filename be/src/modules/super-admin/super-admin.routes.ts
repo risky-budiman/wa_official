@@ -1594,26 +1594,25 @@ export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
         dbSyncStatus = `Catatan sinkronisasi database: ${dbErr?.message || dbErr}`;
       }
 
-      // 3. Jalankan build frontend & restart systemctl di background secara asinkron (agar Nginx tidak 502 Bad Gateway)
-      setTimeout(async () => {
-        try {
-          const path = await import('path');
-          const feDir = path.join(repoDir, 'fe');
-          await execAsync('bun run build || npm run build', { cwd: feDir, timeout: 180000 });
-        } catch (buildErr: any) {
-          console.warn('Background build warning:', buildErr?.message);
-        }
-        try {
-          await execAsync('sudo systemctl restart wa-crm-backend wa-crm-frontend || sudo systemctl restart wa-backend wa-frontend || true');
-        } catch (restartErr: any) {
-          console.warn('Background restart warning:', restartErr?.message);
-        }
-      }, 1000);
+      // 3. Spawns completely detached background process for frontend build and systemctl restart
+      // Using detached child process with 3s delay ensures HTTP response closes cleanly before systemctl restart
+      try {
+        const { spawn } = await import('child_process');
+        const bgCmd = 'sleep 3 && (cd fe && (bun run build || npm run build || true)) && (sudo systemctl restart wa-crm-backend wa-crm-frontend || sudo systemctl restart wa-backend wa-frontend || true)';
+        const child = spawn('sh', ['-c', bgCmd], {
+          cwd: repoDir,
+          detached: true,
+          stdio: 'ignore',
+        });
+        child.unref();
+      } catch (spawnErr: any) {
+        console.warn('Background spawn error:', spawnErr?.message);
+      }
 
       return {
         success: true,
-        message: 'Pembaruan dari GitHub & skema database berhasil diterapkan! Build frontend & restart systemctl sedang berjalan di latar belakang.',
-        output: `${gitOutput}\n\n[Database Migration Sync]\n${dbSyncStatus}\n\n[Service Background Action]\nProses "bun run build" dan "sudo systemctl restart wa-crm-backend wa-crm-frontend" telah dikirimkan ke background server VPS. Layanan akan otomatis memuat versi terbaru dalam 1-2 menit.`,
+        message: 'Pembaruan dari GitHub & skema database berhasil diterapkan! Build frontend & restart systemctl dipemicu secara aman di latar belakang.',
+        output: `${gitOutput}\n\n[Database Migration Sync]\n${dbSyncStatus}\n\n[Service Background Action]\nProses "bun run build" dan "sudo systemctl restart wa-crm-backend wa-crm-frontend" telah dijadwalkan secara aman di background server VPS. Tampilan web akan otomatis memuat versi terbaru dalam 1-2 menit.`,
       };
     } catch (err: any) {
       set.status = 500;
