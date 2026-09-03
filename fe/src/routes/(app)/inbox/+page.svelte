@@ -1476,26 +1476,33 @@
 
             <!-- Action Row -->
             <div class="flex items-center justify-between gap-2">
-              <div class="flex items-center gap-2 flex-wrap">
+              <div class="flex items-center gap-1.5">
+                <!-- 📝 Icon Catatan Tim Internal (Document / Whisper Note) -->
                 <button
                   onclick={() => (isInternalNote = !isInternalNote)}
-                  class="px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer {isInternalNote 
-                    ? 'bg-amber-500 text-slate-950 shadow-sm' 
-                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'}"
+                  class="p-2 rounded-xl text-xs font-semibold flex items-center justify-center transition cursor-pointer {isInternalNote 
+                    ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20' 
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-slate-200 dark:hover:bg-slate-700'}"
+                  title="{isInternalNote ? 'Catatan Internal Tim (Aktif)' : 'Beri Catatan Tim (Dokumen Internal)'}"
                 >
-                  <Eye class="w-3.5 h-3.5" />
-                  {isInternalNote ? 'Catatan Internal (Aktif)' : 'Beri Catatan Tim'}
+                  <FileText class="w-4 h-4" />
                 </button>
 
+                <!-- ✨ Icon Saran Balasan AI (AI Emoticon / Sparkles) -->
                 <button
                   onclick={fetchAiSuggestions}
                   disabled={isAiGenerating}
-                  class="px-2.5 py-1 rounded-lg text-xs font-bold bg-gradient-to-r from-purple-500/10 via-indigo-500/10 to-emerald-500/10 hover:from-purple-500/20 hover:to-emerald-500/20 text-purple-700 dark:text-purple-300 border border-purple-500/30 flex items-center gap-1.5 transition cursor-pointer disabled:opacity-60 shadow-sm"
-                  title="Dapatkan rekomendasi balasan pintar AI kontekstual"
+                  class="p-2 rounded-xl text-xs font-bold bg-gradient-to-r from-purple-500/10 via-indigo-500/10 to-emerald-500/10 hover:from-purple-500/20 hover:to-emerald-500/20 text-purple-600 dark:text-purple-300 border border-purple-500/30 flex items-center justify-center transition cursor-pointer disabled:opacity-60 shadow-sm"
+                  title="✨ Saran Balasan Pintar AI"
                 >
-                  <Sparkles class="w-3.5 h-3.5 text-purple-500 {isAiGenerating ? 'animate-spin' : ''}" />
-                  <span>{isAiGenerating ? 'AI Berpikir...' : '✨ Saran Balasan AI'}</span>
+                  <Sparkles class="w-4 h-4 text-purple-500 {isAiGenerating ? 'animate-spin' : ''}" />
                 </button>
+
+                {#if isInternalNote}
+                  <span class="text-[11px] font-bold text-amber-600 dark:text-amber-400 animate-pulse ml-1">
+                    Catatan Tim Aktif
+                  </span>
+                {/if}
               </div>
 
               <span class="text-[10px] text-slate-400 hidden sm:inline">Ketik / untuk balas cepat • Shift+Enter baris baru • Enter kirim</span>
