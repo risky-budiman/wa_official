@@ -4852,6 +4852,9 @@
                       <div>
                         Status Bisnis Meta: <strong class="uppercase text-emerald-600 dark:text-emerald-400">{metaTestResult.data.waba.business_verification_status || 'VERIFIED'}</strong>
                       </div>
+                      <div class="sm:col-span-2">
+                        Metode Pembayaran Meta: <strong class="{metaTestResult.data.waba.primary_funding_id ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}">{metaTestResult.data.waba.primary_funding_id ? '🟢 Metode Pembayaran Terhubung di Meta' : '⚠️ Kartu Pembayaran Belum Terhubung di Meta Business Suite'}</strong>
+                      </div>
                     {/if}
                     {#if metaTestResult.data.phoneNumber?.throughput?.level}
                       <div>
