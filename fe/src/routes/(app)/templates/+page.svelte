@@ -488,13 +488,15 @@
           <FileText class="w-5 h-5" />
         </div>
         <div>
-          <h2 class="text-xl font-extrabold text-slate-900 dark:text-white tracking-tight">Template Pesan WhatsApp</h2>
+          <h2 class="text-xl font-extrabold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+            Template WhatsApp Meta (WABA Broadcast)
+          </h2>
           <div class="flex items-center gap-2 mt-0.5">
-            <span class="px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold border border-emerald-200 dark:border-emerald-800 flex items-center gap-1 font-mono">
-              <Sparkles class="w-3 h-3" /> Meta Cloud API Sync
+            <span class="px-2 py-0.5 rounded-full bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 text-[10px] font-bold border border-purple-200 dark:border-purple-800 flex items-center gap-1 font-mono">
+              <Sparkles class="w-3 h-3 text-purple-500" /> Meta WABA Approved
             </span>
             <span class="text-xs text-slate-500 dark:text-slate-400">
-              Total {templateList.length} template terdaftar
+              Khusus Broadcast Massal ({templateList.length} Terdaftar)
             </span>
           </div>
         </div>

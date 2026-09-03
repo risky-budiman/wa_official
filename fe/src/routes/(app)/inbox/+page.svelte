@@ -127,6 +127,10 @@
     ];
   }
 
+  const canManageQuickReplies = $derived(
+    ['SUPER_ADMIN', 'ADMINISTRATOR', 'SUPERVISOR'].includes(authStore.role || '')
+  );
+
   function saveQuickReplies() {
     if (typeof window !== 'undefined') {
       localStorage.setItem('wa_crm_quick_replies', JSON.stringify(customQuickReplies));
@@ -134,6 +138,11 @@
   }
 
   function handleSaveQr() {
+    if (!canManageQuickReplies) {
+      alert('Hanya Supervisor & Admin yang dapat menambah atau mengedit template balas cepat.');
+      return;
+    }
+
     if (!newQrShortcut.trim() || !newQrTitle.trim() || !newQrBody.trim()) {
       alert('Harap isi shortcut, judul, dan isi balasan cepat.');
       return;
@@ -167,6 +176,7 @@
   }
 
   function editQr(qr: QuickReplyItem) {
+    if (!canManageQuickReplies) return;
     editingQrId = qr.id;
     newQrShortcut = qr.shortcut;
     newQrTitle = qr.title;
@@ -174,12 +184,14 @@
   }
 
   function deleteQr(id: string) {
+    if (!canManageQuickReplies) return;
     if (!confirm('Hapus balasan cepat ini?')) return;
     customQuickReplies = customQuickReplies.filter((q) => q.id !== id);
     saveQuickReplies();
   }
 
   function resetDefaultQr() {
+    if (!canManageQuickReplies) return;
     if (!confirm('Kembalikan ke daftar balasan cepat bawaan awal?')) return;
     if (typeof window !== 'undefined') {
       localStorage.removeItem('wa_crm_quick_replies');

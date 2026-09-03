@@ -18,7 +18,8 @@
     Building2,
     ShieldAlert,
     ArrowLeft,
-    CreditCard
+    CreditCard,
+    Zap
   } from 'lucide-svelte';
 
   const menuItems = $derived([
@@ -27,7 +28,8 @@
       items: [
         { name: 'Live Inbox', path: '/inbox', icon: MessageSquare, roles: ['SUPER_ADMIN', 'ADMINISTRATOR', 'SUPERVISOR', 'AGENT'] },
         { name: 'Kontak Pelanggan', path: '/contacts', icon: Contact, roles: ['SUPER_ADMIN', 'ADMINISTRATOR', 'SUPERVISOR', 'AGENT'] },
-        { name: 'Template WA', path: '/templates', icon: FileText, roles: ['SUPER_ADMIN', 'ADMINISTRATOR', 'SUPERVISOR'] },
+        { name: 'Balas Cepat CS', path: '/quick-replies', icon: Zap, roles: ['SUPER_ADMIN', 'ADMINISTRATOR', 'SUPERVISOR', 'AGENT'] },
+        { name: 'Template WA Meta', path: '/templates', icon: FileText, roles: ['SUPER_ADMIN', 'ADMINISTRATOR', 'SUPERVISOR'] },
         { name: 'Broadcast', path: '/broadcast', icon: Radio, roles: ['SUPER_ADMIN', 'ADMINISTRATOR', 'SUPERVISOR'] },
         { name: 'Laporan & SLA', path: '/reports', icon: BarChart3, roles: ['SUPER_ADMIN', 'ADMINISTRATOR', 'SUPERVISOR'] }
       ]
