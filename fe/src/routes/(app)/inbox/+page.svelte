@@ -553,6 +553,17 @@
   async function sendMessage() {
     if (!messageText.trim() || !selectedConvId) return;
 
+    if (!isInternalNote && selectedConv) {
+      const effExpires = selectedConv.windowExpiresAt 
+        ? new Date(selectedConv.windowExpiresAt).getTime() 
+        : (selectedConv.lastMessageAt ? new Date(selectedConv.lastMessageAt).getTime() + 24 * 60 * 60 * 1000 : 0);
+      if (effExpires && effExpires - Date.now() <= 0) {
+        notificationStore.error('Sesi 24 Jam Meta telah kadaluarsa. Silakan gunakan Template WhatsApp Resmi.');
+        showTemplatePicker = true;
+        return;
+      }
+    }
+
     const textToSend = messageText.trim();
     messageText = '';
     showEmojiPicker = false;
@@ -1140,84 +1151,106 @@
           {@const isExpiredInput = effectiveExpiresAtInput ? (effectiveExpiresAtInput - Date.now() <= 0) : false}
 
           {#if isExpiredInput && !isInternalNote}
-            <div class="p-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center justify-between gap-2 text-xs text-amber-800 dark:text-amber-300">
-              <div class="flex items-center gap-2 min-w-0">
-                <AlertTriangle class="w-4 h-4 text-amber-500 shrink-0" />
-                <span class="truncate">⚠️ <strong>Sesi 24 Jam Meta Kadaluarsa</strong>. Balasan biasa mungkin gagal. Disarankan pakai <strong>Template</strong>.</span>
+            <!-- LOCKED BANNER FOR EXPIRED SESSION -->
+            <div class="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-2xl space-y-3 shadow-sm">
+              <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/20">
+                  <Lock class="w-5 h-5" />
+                </div>
+                <div class="flex-1 min-w-0">
+                  <p class="font-bold text-xs text-amber-900 dark:text-amber-200">Sesi 24 Jam Meta Telah Kadaluarsa (&gt;24 Jam)</p>
+                  <p class="text-[11px] text-amber-700/90 dark:text-amber-300/90 leading-relaxed mt-0.5">
+                    Pesan balasan biasa dikunci oleh Meta karena sudah lebih dari 24 jam sejak pesan terakhir pelanggan. Gunakan <strong>Template Resmi</strong> untuk menyapa kembali pelanggan.
+                  </p>
+                </div>
               </div>
+
+              <div class="flex items-center justify-between gap-2 pt-2.5 border-t border-amber-200/60 dark:border-amber-800/40">
+                <button
+                  type="button"
+                  onclick={() => (isInternalNote = true)}
+                  class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
+                >
+                  <Eye class="w-3.5 h-3.5 text-amber-500" />
+                  <span>Beri Catatan Tim Internal</span>
+                </button>
+
+                <button
+                  type="button"
+                  onclick={() => (showTemplatePicker = true)}
+                  class="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-md shadow-amber-500/20 transition cursor-pointer"
+                >
+                  <FileText class="w-4 h-4" />
+                  <span>Pilih Template WhatsApp</span>
+                </button>
+              </div>
+            </div>
+          {:else}
+            <!-- Action Row -->
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-2 flex-wrap">
+                <button
+                  onclick={() => (isInternalNote = !isInternalNote)}
+                  class="px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer {isInternalNote 
+                    ? 'bg-amber-500 text-slate-950 shadow-sm' 
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'}"
+                >
+                  <Eye class="w-3.5 h-3.5" />
+                  {isInternalNote ? 'Catatan Internal (Aktif)' : 'Beri Catatan Tim'}
+                </button>
+
+                <button
+                  onclick={() => (showTemplatePicker = true)}
+                  class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white flex items-center gap-1.5 transition cursor-pointer"
+                >
+                  <FileText class="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  Template Picker
+                </button>
+              </div>
+
+              <span class="text-[10px] text-slate-400 hidden sm:inline">Tekan Enter untuk kirim</span>
+            </div>
+
+            <!-- Input Box -->
+            <div class="flex items-center gap-2">
+              <div class="flex items-center gap-1 text-slate-500 dark:text-slate-400 shrink-0">
+                <button
+                  onclick={() => alert('Fitur upload lampiran terhubung ke media storage.')}
+                  class="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                  title="Kirim Media"
+                >
+                  <Paperclip class="w-4 h-4" />
+                </button>
+                <button
+                  onclick={() => (showEmojiPicker = !showEmojiPicker)}
+                  class="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                  title="Emoji"
+                >
+                  <Smile class="w-4 h-4" />
+                </button>
+              </div>
+
+              <input
+                bind:this={messageInputRef}
+                type="text"
+                bind:value={messageText}
+                onkeydown={(e) => { if (e.key === 'Enter') sendMessage(); }}
+                placeholder={isInternalNote ? 'Ketik catatan internal untuk seluruh tim chat...' : 'Ketik balasan WhatsApp resmi...'}
+                class="flex-1 px-4 py-2.5 rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none transition {isInternalNote 
+                  ? 'bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700 focus:border-amber-500' 
+                  : 'bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:border-emerald-500'}"
+              />
+
               <button
-                onclick={() => (showTemplatePicker = true)}
-                class="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-[11px] shrink-0 transition cursor-pointer"
+                onclick={sendMessage}
+                class="p-2.5 rounded-xl text-white font-bold transition shadow-sm shrink-0 {isInternalNote 
+                  ? 'bg-amber-500 hover:bg-amber-400 text-slate-950' 
+                  : 'bg-emerald-600 hover:bg-emerald-500'} cursor-pointer"
               >
-                Pilih Template
+                <Send class="w-4 h-4" />
               </button>
             </div>
           {/if}
-
-          <!-- Action Row -->
-          <div class="flex items-center justify-between gap-2">
-            <div class="flex items-center gap-2 flex-wrap">
-              <button
-                onclick={() => isInternalNote = !isInternalNote}
-                class="px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer {isInternalNote 
-                  ? 'bg-amber-500 text-slate-950 shadow-sm' 
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'}"
-              >
-                <Eye class="w-3.5 h-3.5" />
-                {isInternalNote ? 'Catatan Internal (Aktif)' : 'Beri Catatan Tim'}
-              </button>
-
-              <button
-                onclick={() => (showTemplatePicker = true)}
-                class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white flex items-center gap-1.5 transition cursor-pointer"
-              >
-                <FileText class="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                Template Picker
-              </button>
-            </div>
-
-            <span class="text-[10px] text-slate-400 hidden sm:inline">Tekan Enter untuk kirim</span>
-          </div>
-
-          <!-- Input Box -->
-          <div class="flex items-center gap-2">
-            <div class="flex items-center gap-1 text-slate-500 dark:text-slate-400 shrink-0">
-              <button
-                onclick={() => alert('Fitur upload lampiran terhubung ke media storage.')}
-                class="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
-                title="Kirim Media"
-              >
-                <Paperclip class="w-4 h-4" />
-              </button>
-              <button
-                onclick={() => (showEmojiPicker = !showEmojiPicker)}
-                class="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
-                title="Emoji"
-              >
-                <Smile class="w-4 h-4" />
-              </button>
-            </div>
-
-            <input
-              bind:this={messageInputRef}
-              type="text"
-              bind:value={messageText}
-              onkeydown={(e) => { if (e.key === 'Enter') sendMessage(); }}
-              placeholder={isInternalNote ? 'Ketik catatan internal untuk seluruh tim chat...' : 'Ketik balasan WhatsApp resmi...'}
-              class="flex-1 px-4 py-2.5 rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none transition {isInternalNote 
-                ? 'bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700 focus:border-amber-500' 
-                : 'bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:border-emerald-500'}"
-            />
-
-            <button
-              onclick={sendMessage}
-              class="p-2.5 rounded-xl text-white font-bold transition shadow-sm shrink-0 {isInternalNote 
-                ? 'bg-amber-500 hover:bg-amber-400 text-slate-950' 
-                : 'bg-emerald-600 hover:bg-emerald-500'} cursor-pointer"
-            >
-              <Send class="w-4 h-4" />
-            </button>
-          </div>
         {/if}
       </div>
     {:else}
