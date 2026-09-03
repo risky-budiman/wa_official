@@ -56,7 +56,7 @@
   let showReassignModal = $state(false);
   let showAddCollaboratorModal = $state(false);
   let showTagModal = $state(false);
-  let showQuickReplyManager = $state(false);
+  let showResolveConfirmModal = $state(false);
   let showEmojiPicker = $state(false);
   let messagesContainer = $state<HTMLDivElement | null>(null);
   let messageInputRef = $state<HTMLTextAreaElement | null>(null);
@@ -580,13 +580,14 @@
     }
   }
 
-  async function resolveConversation() {
+  function promptResolveConversation() {
     if (!selectedConvId || isActionLoading) return;
+    showResolveConfirmModal = true;
+  }
 
-    const contactName = selectedConv?.contact.name || 'pelanggan ini';
-    if (!confirm(`Apakah Anda yakin ingin menyelesaikan (Resolve) tiket percakapan dengan ${contactName}? Tiket ini akan diselesaikan dan dikunci.`)) {
-      return;
-    }
+  async function confirmResolveConversation() {
+    if (!selectedConvId || isActionLoading) return;
+    showResolveConfirmModal = false;
 
     isActionLoading = true;
     const res = await apiRequest(`/conversations/${selectedConvId}/status`, {
@@ -1124,7 +1125,7 @@
             </div>
           {:else}
             <button
-              onclick={resolveConversation}
+              onclick={promptResolveConversation}
               disabled={isActionLoading}
               class="py-1.5 px-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs flex items-center gap-1.5 transition cursor-pointer"
               title="Tandai Tiket Selesai"
@@ -1825,7 +1826,60 @@
   </div>
 {/if}
 
+<!-- ─── 4. MODAL KONFIRMASI RESOLVE TIKET PERCAKAPAN ─── -->
+{#if showResolveConfirmModal}
+  <div class="fixed inset-0 bg-slate-950/75 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in">
+    <div class="glass-panel w-full max-w-md rounded-3xl p-6 border border-slate-200 dark:border-slate-700 shadow-2xl space-y-5 text-center">
+      <div class="w-14 h-14 rounded-2xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center mx-auto border border-purple-500/20 shadow-sm">
+        <CheckCircle2 class="w-7 h-7" />
+      </div>
 
+      <div class="space-y-1.5">
+        <h3 class="text-base font-bold text-slate-900 dark:text-white">
+          Selesaikan Tiket Percakapan Ini?
+        </h3>
+        <p class="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+          Apakah Anda yakin ingin mengunci dan me-resolve tiket obrolan dengan <strong class="text-slate-900 dark:text-white">{selectedConv?.contact.name || 'Pelanggan'}</strong>?
+        </p>
+      </div>
+
+      <div class="p-3.5 rounded-2xl bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/60 text-left text-xs text-purple-900 dark:text-purple-200 leading-relaxed flex items-start gap-2.5">
+        <Lock class="w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0 mt-0.5" />
+        <div class="text-[11px] space-y-1">
+          <p class="font-bold">Informasi Penyelesaian Tiket:</p>
+          <p class="text-purple-700/90 dark:text-purple-300/90">
+            Kolom pesan balasan akan dikunci secara permanen. Pesan baru berikutnya dari pelanggan ini di masa mendatang akan otomatis dibuat sebagai tiket percakapan antrean baru.
+          </p>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-end gap-2.5 pt-1">
+        <button
+          type="button"
+          onclick={() => (showResolveConfirmModal = false)}
+          class="flex-1 py-2.5 px-4 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold transition cursor-pointer"
+        >
+          Batal
+        </button>
+
+        <button
+          type="button"
+          onclick={confirmResolveConversation}
+          disabled={isActionLoading}
+          class="flex-1 py-2.5 px-4 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-purple-600/25 transition cursor-pointer disabled:opacity-60"
+        >
+          {#if isActionLoading}
+            <div class="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+            <span>Memproses...</span>
+          {:else}
+            <CheckCircle2 class="w-4 h-4" />
+            <span>Ya, Selesaikan Tiket</span>
+          {/if}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 <!-- ─── 5. INLINE MEDIA LIGHTBOX MODAL ─── -->
 {#if activeLightboxUrl}
