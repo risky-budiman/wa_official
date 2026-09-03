@@ -57,9 +57,49 @@
   let showAddCollaboratorModal = $state(false);
   let showTagModal = $state(false);
   let showResolveConfirmModal = $state(false);
+  let showAiModal = $state(false);
+  let isAiGenerating = $state(false);
+  let aiSuggestions = $state<{ title: string; text: string }[]>([]);
+  let aiMode = $state<'SMART_REPLY' | 'POLISH_DRAFT'>('SMART_REPLY');
   let showEmojiPicker = $state(false);
   let messagesContainer = $state<HTMLDivElement | null>(null);
   let messageInputRef = $state<HTMLTextAreaElement | null>(null);
+
+  async function fetchAiSuggestions() {
+    if (!selectedConvId || isAiGenerating) return;
+    isAiGenerating = true;
+    try {
+      const res = await apiRequest<{
+        success: boolean;
+        mode: 'SMART_REPLY' | 'POLISH_DRAFT';
+        suggestions: { title: string; text: string }[];
+      }>('/messages/ai-suggest', {
+        method: 'POST',
+        body: JSON.stringify({
+          conversationId: selectedConvId,
+          currentDraft: messageText,
+        }),
+      });
+
+      if (res.success && res.suggestions) {
+        aiSuggestions = res.suggestions;
+        aiMode = res.mode;
+        showAiModal = true;
+      }
+    } catch (_) {
+      alert('Gagal mengambil rekomendasi AI.');
+    } finally {
+      isAiGenerating = false;
+    }
+  }
+
+  function applyAiSuggestion(text: string) {
+    messageText = text;
+    showAiModal = false;
+    if (messageInputRef) {
+      messageInputRef.focus();
+    }
+  }
 
   // Quick Reply Slash Menu (/nama_template)
   let showSlashMenu = $state(false);
@@ -1446,6 +1486,16 @@
                   <Eye class="w-3.5 h-3.5" />
                   {isInternalNote ? 'Catatan Internal (Aktif)' : 'Beri Catatan Tim'}
                 </button>
+
+                <button
+                  onclick={fetchAiSuggestions}
+                  disabled={isAiGenerating}
+                  class="px-2.5 py-1 rounded-lg text-xs font-bold bg-gradient-to-r from-purple-500/10 via-indigo-500/10 to-emerald-500/10 hover:from-purple-500/20 hover:to-emerald-500/20 text-purple-700 dark:text-purple-300 border border-purple-500/30 flex items-center gap-1.5 transition cursor-pointer disabled:opacity-60 shadow-sm"
+                  title="Dapatkan rekomendasi balasan pintar AI kontekstual"
+                >
+                  <Sparkles class="w-3.5 h-3.5 text-purple-500 {isAiGenerating ? 'animate-spin' : ''}" />
+                  <span>{isAiGenerating ? 'AI Berpikir...' : '✨ Saran Balasan AI'}</span>
+                </button>
               </div>
 
               <span class="text-[10px] text-slate-400 hidden sm:inline">Ketik / untuk balas cepat • Shift+Enter baris baru • Enter kirim</span>
@@ -1875,6 +1925,76 @@
             <CheckCircle2 class="w-4 h-4" />
             <span>Ya, Selesaikan Tiket</span>
           {/if}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<!-- 🤖 MODAL SARAN BALASAN AI (AI SMART REPLY ASSISTANT) -->
+{#if showAiModal}
+  <div class="fixed inset-0 bg-slate-950/75 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in">
+    <div class="glass-panel w-full max-w-xl rounded-3xl p-6 border border-slate-200 dark:border-slate-700 shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800 shrink-0">
+        <div class="flex items-center gap-2.5">
+          <div class="p-2 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
+            <Sparkles class="w-5 h-5 text-purple-500" />
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              Asisten Balasan Pintar AI
+            </h3>
+            <p class="text-xs text-slate-500 dark:text-slate-400">
+              {aiMode === 'POLISH_DRAFT' ? 'Variasi Poles Teks Draf Anda' : 'Rekomendasi Balasan Kontekstual Berdasarkan Pesan Pelanggan'}
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onclick={() => (showAiModal = false)}
+          class="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-white transition cursor-pointer"
+        >
+          <X class="w-5 h-5" />
+        </button>
+      </div>
+
+      <div class="flex-1 overflow-y-auto space-y-3 pr-1">
+        {#each aiSuggestions as suggestion, idx}
+          <div class="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2.5 hover:border-purple-300 dark:hover:border-purple-800/80 transition shadow-sm group">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-purple-700 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/60 px-2.5 py-1 rounded-lg border border-purple-200 dark:border-purple-800/60">
+                {suggestion.title}
+              </span>
+              <span class="text-[10px] text-slate-400 font-mono">Opsi #{idx + 1}</span>
+            </div>
+
+            <p class="text-xs text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap font-sans bg-slate-50/70 dark:bg-slate-950/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800/50">
+              {suggestion.text}
+            </p>
+
+            <div class="flex justify-end pt-1">
+              <button
+                type="button"
+                onclick={() => applyAiSuggestion(suggestion.text)}
+                class="py-1.5 px-3.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-purple-500/20 transition cursor-pointer"
+              >
+                <span>Gunakan Balasan Ini</span>
+                <Send class="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        {/each}
+      </div>
+
+      <div class="pt-2 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0">
+        <span class="text-[11px] text-slate-400">💡 Anda masih bisa mengedit teks sebelum dikirim ke pelanggan.</span>
+        <button
+          type="button"
+          onclick={() => (showAiModal = false)}
+          class="py-1.5 px-4 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold cursor-pointer"
+        >
+          Tutup
         </button>
       </div>
     </div>

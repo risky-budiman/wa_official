@@ -100,4 +100,32 @@ export const messageRoutes = new Elysia({ prefix: '/messages' })
         body: t.String({ minLength: 1 }),
       }),
     }
+  )
+
+  // ─── POST /messages/ai-suggest — Generate AI Reply Suggestions
+  .post(
+    '/ai-suggest',
+    async ({ user, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { success: false, error: 'Unauthorized' };
+      }
+
+      try {
+        const result = await MessageService.generateAiSuggestions(user, body.conversationId, body.currentDraft);
+        return {
+          success: true,
+          ...result,
+        };
+      } catch (err: any) {
+        set.status = 400;
+        return { success: false, error: err.message };
+      }
+    },
+    {
+      body: t.Object({
+        conversationId: t.String(),
+        currentDraft: t.Optional(t.String()),
+      }),
+    }
   );
