@@ -403,8 +403,9 @@ SKILLS:
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
           <!-- Trigger Mode -->
           <div class="space-y-1.5">
-            <label class="text-xs font-semibold text-slate-700 dark:text-slate-300">Waktu Pemicu Respons</label>
+            <label for="ai_trigger_mode" class="text-xs font-semibold text-slate-700 dark:text-slate-300">Waktu Pemicu Respons</label>
             <select
+              id="ai_trigger_mode"
               bind:value={aiAgentConfig.triggerMode}
               class="w-full p-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
             >
@@ -415,8 +416,9 @@ SKILLS:
 
           <!-- Engine Mode -->
           <div class="space-y-1.5">
-            <label class="text-xs font-semibold text-slate-700 dark:text-slate-300">Modus Balasan</label>
+            <label for="ai_mode" class="text-xs font-semibold text-slate-700 dark:text-slate-300">Modus Balasan</label>
             <select
+              id="ai_mode"
               bind:value={aiAgentConfig.mode}
               class="w-full p-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
             >
@@ -431,11 +433,12 @@ SKILLS:
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <!-- AI Provider Selector -->
               <div class="space-y-1.5">
-                <label class="text-xs font-bold text-indigo-900 dark:text-indigo-300 flex items-center gap-1.5">
+                <label for="ai_provider" class="text-xs font-bold text-indigo-900 dark:text-indigo-300 flex items-center gap-1.5">
                   <Zap class="w-4 h-4 text-indigo-500" />
                   Penyedia Mesin AI (Multi-Provider)
                 </label>
                 <select
+                  id="ai_provider"
                   bind:value={aiAgentConfig.provider}
                   onchange={(e) => handleProviderChange((e.target as HTMLSelectElement).value)}
                   class="w-full p-2.5 text-xs rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
@@ -449,8 +452,9 @@ SKILLS:
 
               <!-- Model Selector (Dropdown Select List) -->
               <div class="space-y-1.5">
-                <label class="text-xs font-semibold text-slate-700 dark:text-slate-300">Model AI Resmi</label>
+                <label for="ai_model" class="text-xs font-semibold text-slate-700 dark:text-slate-300">Model AI Resmi</label>
                 <select
+                  id="ai_model"
                   value={isCustomModel ? 'CUSTOM' : aiAgentConfig.model}
                   onchange={(e) => handleModelSelect((e.target as HTMLSelectElement).value)}
                   class="w-full p-2.5 text-xs rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-bold focus:ring-2 focus:ring-indigo-500 outline-none"
@@ -473,8 +477,9 @@ SKILLS:
 
             <!-- API Key Input -->
             <div class="space-y-1.5">
-              <label class="text-xs font-semibold text-slate-700 dark:text-slate-300">API Key ({aiAgentConfig.provider?.toUpperCase()})</label>
+              <label for="ai_api_key" class="text-xs font-semibold text-slate-700 dark:text-slate-300">API Key ({aiAgentConfig.provider?.toUpperCase()})</label>
               <input
+                id="ai_api_key"
                 type="password"
                 bind:value={aiAgentConfig.apiKey}
                 placeholder="Masukkan API Key (cth: AIzaSy... / sk-proj...)"
@@ -484,8 +489,9 @@ SKILLS:
           </div>
         {:else}
           <div class="space-y-1.5">
-            <label class="text-xs font-semibold text-slate-700 dark:text-slate-300">Pesan Balasan Otomatis (Teks Statis)</label>
+            <label for="ai_static_message" class="text-xs font-semibold text-slate-700 dark:text-slate-300">Pesan Balasan Otomatis (Teks Statis)</label>
             <textarea
+              id="ai_static_message"
               bind:value={aiAgentConfig.staticMessage}
               rows="3"
               class="w-full p-3 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
@@ -519,8 +525,9 @@ SKILLS:
 
       <!-- Greeting Menu Input -->
       <div class="space-y-1.5">
-        <label class="text-xs font-semibold text-slate-700 dark:text-slate-300">Teks Ucapan Selamat Datang (Greeting Menu)</label>
+        <label for="chatbot_greeting" class="text-xs font-semibold text-slate-700 dark:text-slate-300">Teks Ucapan Selamat Datang (Greeting Menu)</label>
         <textarea
+          id="chatbot_greeting"
           bind:value={chatbotConfig.greetingText}
           rows="5"
           placeholder="Ketikkan menu ucapan selamat datang..."
@@ -548,8 +555,9 @@ SKILLS:
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div class="space-y-1">
-                <label class="text-[11px] font-semibold text-slate-600 dark:text-slate-400">Kata Kunci (dipisahkan koma)</label>
+                <label for={"rule_kw_" + rule.id} class="text-[11px] font-semibold text-slate-600 dark:text-slate-400">Kata Kunci (dipisahkan koma)</label>
                 <input
+                  id={"rule_kw_" + rule.id}
                   type="text"
                   value={rule.keywords.join(', ')}
                   onchange={(e) => (rule.keywords = (e.target as HTMLInputElement).value.split(',').map(s => s.trim()))}
@@ -559,8 +567,9 @@ SKILLS:
               </div>
 
               <div class="space-y-1">
-                <label class="text-[11px] font-semibold text-slate-600 dark:text-slate-400">Tindakan Aksi (*Action*)</label>
+                <label for={"rule_act_" + rule.id} class="text-[11px] font-semibold text-slate-600 dark:text-slate-400">Tindakan Aksi (*Action*)</label>
                 <select
+                  id={"rule_act_" + rule.id}
                   bind:value={rule.action}
                   class="w-full p-2 text-xs rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-bold"
                 >
@@ -572,8 +581,9 @@ SKILLS:
             </div>
 
             <div class="space-y-1">
-              <label class="text-[11px] font-semibold text-slate-600 dark:text-slate-400">Teks Balasan Statis</label>
+              <label for={"rule_text_" + rule.id} class="text-[11px] font-semibold text-slate-600 dark:text-slate-400">Teks Balasan Statis</label>
               <textarea
+                id={"rule_text_" + rule.id}
                 bind:value={rule.replyText}
                 rows="2"
                 placeholder="Ketik balasan teks statis..."
@@ -625,8 +635,9 @@ SKILLS:
 
         <!-- Custom Prompt Textarea -->
         <div class="space-y-1.5 pt-2">
-          <label class="text-xs font-semibold text-slate-700 dark:text-slate-300">Teks Instruksi System Prompt</label>
+          <label for="ai_system_prompt" class="text-xs font-semibold text-slate-700 dark:text-slate-300">Teks Instruksi System Prompt</label>
           <textarea
+            id="ai_system_prompt"
             bind:value={aiAgentConfig.systemPrompt}
             rows="7"
             placeholder="Ketik aturan khusus, SOP perusahaan, atau FAQ produk Anda di sini..."
@@ -659,7 +670,7 @@ SKILLS:
         <div class="space-y-4 pt-1">
           <!-- Active Days Selector -->
           <div class="space-y-2">
-            <label class="text-xs font-semibold text-slate-700 dark:text-slate-300">Hari Kerja Aktif</label>
+            <span class="text-xs font-semibold text-slate-700 dark:text-slate-300">Hari Kerja Aktif</span>
             <div class="flex flex-wrap gap-2">
               {#each daysOfWeek as day}
                 <button
@@ -678,24 +689,27 @@ SKILLS:
           <!-- Time Range & Timezone -->
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div class="space-y-1.5">
-              <label class="text-xs font-semibold text-slate-700 dark:text-slate-300">Jam Mulai (Buka)</label>
+              <label for="hours_start" class="text-xs font-semibold text-slate-700 dark:text-slate-300">Jam Mulai (Buka)</label>
               <input
+                id="hours_start"
                 type="time"
                 bind:value={operatingHours.startTime}
                 class="w-full p-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-semibold focus:ring-2 focus:ring-emerald-500 outline-none"
               />
             </div>
             <div class="space-y-1.5">
-              <label class="text-xs font-semibold text-slate-700 dark:text-slate-300">Jam Selesai (Tutup)</label>
+              <label for="hours_end" class="text-xs font-semibold text-slate-700 dark:text-slate-300">Jam Selesai (Tutup)</label>
               <input
+                id="hours_end"
                 type="time"
                 bind:value={operatingHours.endTime}
                 class="w-full p-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-semibold focus:ring-2 focus:ring-emerald-500 outline-none"
               />
             </div>
             <div class="space-y-1.5">
-              <label class="text-xs font-semibold text-slate-700 dark:text-slate-300">Zona Waktu</label>
+              <label for="hours_timezone" class="text-xs font-semibold text-slate-700 dark:text-slate-300">Zona Waktu</label>
               <select
+                id="hours_timezone"
                 bind:value={operatingHours.timezone}
                 class="w-full p-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-emerald-500 outline-none"
               >
