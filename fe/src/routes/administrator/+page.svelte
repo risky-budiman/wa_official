@@ -92,6 +92,7 @@
     wabaId: string | null;
     appId: string | null;
     hasAccessToken: boolean;
+    maskedToken?: string | null;
     createdAt: string;
     updatedAt: string;
     users?: Array<{
@@ -2932,10 +2933,19 @@
 
                           {#if org.wabaId}
                             <div
-                              class="text-[10px] font-mono text-slate-400 truncate max-w-[140px]"
-                              title={org.wabaId}
+                              class="text-[10px] font-mono text-slate-400 truncate max-w-[160px]"
+                              title="Meta WABA Account ID: {org.wabaId}"
                             >
-                              WABA: {org.wabaId}
+                              WABA ID: {org.wabaId}
+                            </div>
+                          {/if}
+
+                          {#if phoneItem?.phoneNumberId}
+                            <div
+                              class="text-[10px] font-mono text-slate-400 truncate max-w-[160px]"
+                              title="Phone Number ID: {phoneItem.phoneNumberId}"
+                            >
+                              Phone ID: {phoneItem.phoneNumberId}
                             </div>
                           {/if}
                         </div>
@@ -4660,16 +4670,17 @@
                 for="meta_waba"
                 class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1"
               >
-                Meta WABA ID *
+                Meta WABA Account ID (ID Akun Bisnis Meta) *
               </label>
               <input
                 id="meta_waba"
                 type="text"
                 bind:value={metaWabaId}
-                placeholder="e.g. 109823912039123"
+                placeholder="cth: 1461623865804185"
                 class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
                 required
               />
+              <p class="text-[10px] text-slate-400 mt-1">ID Akun WhatsApp Business dari Meta Business Suite.</p>
             </div>
 
             <div>
@@ -4677,32 +4688,47 @@
                 for="meta_phone_id"
                 class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1"
               >
-                Phone Number ID *
+                Phone Number ID (ID Nomor WhatsApp Meta) *
               </label>
               <input
                 id="meta_phone_id"
                 type="text"
                 bind:value={metaPhoneId}
-                placeholder="e.g. 192830192830192"
+                placeholder="cth: 109283749283749"
                 class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
                 required
               />
+              <p class="text-[10px] text-slate-400 mt-1">ID Nomor Telepon spesifik dari WhatsApp Manager.</p>
             </div>
 
             <div class="sm:col-span-2">
-              <label
-                for="meta_token"
-                class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1"
-              >
-                Permanent System User Access Token *
-              </label>
+              <div class="flex items-center justify-between mb-1">
+                <label
+                  for="meta_token"
+                  class="block text-xs font-bold text-slate-700 dark:text-slate-300"
+                >
+                  Permanent System User Access Token *
+                </label>
+                {#if metaOrg?.hasAccessToken}
+                  <span class="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                    🟢 Token Terpasang ({metaOrg.maskedToken || 'Aktif'})
+                  </span>
+                {:else}
+                  <span class="text-[10px] font-bold text-rose-600 dark:text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded-full border border-rose-500/20">
+                    🔴 Token Belum Diisi
+                  </span>
+                {/if}
+              </div>
               <input
                 id="meta_token"
                 type="password"
                 bind:value={metaAccessToken}
-                placeholder="EAAGm... (Kosongkan jika ingin memakai token yang sudah tersimpan)"
+                placeholder={metaOrg?.hasAccessToken ? "Token sudah tersimpan. Biarkan kosong jika tidak ingin mengganti token." : "Tempelkan System User Access Token (EAAGm...)"}
                 class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
               />
+              <p class="text-[10px] text-slate-400 mt-1">
+                Token permanen dari Meta Business Manager System User dengan izin <code class="bg-slate-200 dark:bg-slate-800 px-1 rounded">whatsapp_business_messaging</code>.
+              </p>
             </div>
 
             <div>

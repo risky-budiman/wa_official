@@ -242,7 +242,8 @@ export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
           notes: org.notes,
           wabaId: org.wabaId,
           appId: org.appId,
-          hasAccessToken: !!org.accessToken && !org.accessToken.startsWith('EAAGm0PX4ZCBO'),
+          hasAccessToken: Boolean(org.accessToken && org.accessToken.trim().length > 10),
+          maskedToken: org.accessToken && org.accessToken.trim().length > 10 ? `${org.accessToken.trim().slice(0, 7)}...${org.accessToken.trim().slice(-4)}` : null,
           createdAt: org.createdAt,
           updatedAt: org.updatedAt,
           stats: {
