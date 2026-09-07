@@ -414,7 +414,17 @@ export class MetaApiService {
         return data.data[0].id as string;
       }
 
-      // 3. Fallback: Query debug_token using App Access Token to inspect target_ids / granular_scopes
+      // 3. Fallback: Try GET /v20.0/me/whatsapp_business_accounts
+      res = await fetch(`${this.baseUrl}/me/whatsapp_business_accounts`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      data = await res.json();
+      if (res.ok && data.data && data.data.length > 0) {
+        console.log(`✨ Dynamically discovered User WABA ID: ${data.data[0].id}`);
+        return data.data[0].id as string;
+      }
+
+      // 4. Fallback: Query debug_token using App Access Token to inspect target_ids / granular_scopes
       const appId = customAppId || env.META_APP_ID;
       const appSecret = env.META_APP_SECRET;
       if (appId && appSecret) {

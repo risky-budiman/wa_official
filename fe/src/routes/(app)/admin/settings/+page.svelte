@@ -566,8 +566,6 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
       method: 'POST',
       body: JSON.stringify({
         code,
-        appId: appId.trim() || undefined,
-        wabaId: wabaId.trim() || undefined,
       }),
     });
     isConnectingFb = false;
