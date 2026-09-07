@@ -323,7 +323,7 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
         id: org?.id,
         name: metaLiveWaba?.name || org?.name,
         wabaId: org?.wabaId,
-        appId: org?.appId || env.META_APP_ID || '',
+        appId: env.META_APP_ID || org?.appId || '',
       },
       webhookVerifyToken: env.META_WEBHOOK_VERIFY_TOKEN || 'c815d80a7f3608e9edc744580250728aca2574307b8fb724',
       phoneNumbers: phones,
@@ -624,7 +624,7 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
             .limit(1);
 
           try {
-            const exchangedToken = await MetaApiService.exchangeCodeForToken(code, orgData?.appId || undefined);
+            const exchangedToken = await MetaApiService.exchangeCodeForToken(code, env.META_APP_ID || orgData?.appId || undefined);
             if (exchangedToken) {
               finalAccessToken = exchangedToken;
             } else {

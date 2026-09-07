@@ -533,7 +533,7 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
     const realAppId = appId.trim();
 
     if (!realAppId) {
-      fbErrorMsg = 'Harap masukkan Meta App ID resmi Anda pada kotak di bawah sebelum mengklik tombol Facebook Login.';
+      fbErrorMsg = 'Meta App ID belum dikonfigurasi pada server backend (.env). Harap hubungi Administrator sistem.';
       return;
     }
 
@@ -871,11 +871,9 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
                 <p class="text-xs text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">Hubungkan akun Facebook Anda untuk mengotorisasi nomor WhatsApp Business secara instan ke sistem CRM ini.</p>
               </div>
             </div>
-            <div class="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-3">
-              <div>
-                <label for="fb_app_id" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Meta App ID Resmi Anda</label>
-                <input id="fb_app_id" type="text" bind:value={appId} placeholder="Contoh: 123456789012345" class="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono" />
-              </div>
+            <div class="p-4 rounded-xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-900/40 text-xs text-blue-800 dark:text-blue-300 leading-relaxed flex items-center gap-3">
+              <Zap class="w-4 h-4 shrink-0 text-[#1877F2]" />
+              <span>Integrasi otomatis via Meta Tech Provider. Pengguna tidak perlu memasukkan App ID manual.</span>
             </div>
             <button onclick={connectWithFacebook} disabled={isConnectingFb} class="py-3 px-6 rounded-xl bg-[#1877F2] hover:bg-[#166fe5] text-white font-bold text-xs flex items-center gap-2.5 shadow-md transition cursor-pointer">
               {#if isConnectingFb}<div class="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin"></div>{:else}<div class="w-4 h-4 rounded-full bg-white text-[#1877F2] flex items-center justify-center text-[10px] font-black font-serif">f</div>{/if}

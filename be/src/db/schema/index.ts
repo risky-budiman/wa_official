@@ -11,6 +11,9 @@ export type { Team, NewTeam } from './teams';
 export { users, userRoleEnum, userStatusEnum } from './users';
 export type { User, NewUser, UserRole, UserStatus } from './users';
 
+export { superAdmins, superAdminRoleEnum, superAdminStatusEnum } from './super-admins';
+export type { SuperAdmin, NewSuperAdmin, SuperAdminRole, SuperAdminStatus } from './super-admins';
+
 export { phoneNumbers } from './phone-numbers';
 export type { PhoneNumber, NewPhoneNumber } from './phone-numbers';
 

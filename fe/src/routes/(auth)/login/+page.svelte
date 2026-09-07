@@ -158,20 +158,11 @@
       </div>
       {/if}
 
-      <div class="mt-4 text-center space-y-2">
+      <div class="mt-4 text-center">
         <p class="text-xs text-slate-500 dark:text-slate-400">
           Belum punya organisasi?
           <a href="/register" class="text-emerald-600 dark:text-emerald-400 hover:underline font-semibold ml-1">Daftar sekarang</a>
         </p>
-        <div class="pt-2 border-t border-slate-200/80 dark:border-slate-800/80">
-          <a
-            href="/administrator/login"
-            class="text-[11px] font-semibold text-slate-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 transition inline-flex items-center gap-1"
-          >
-            <span>Administrator Platform?</span>
-            <span class="font-bold underline text-indigo-600 dark:text-indigo-400">Portal Master Admin →</span>
-          </a>
-        </div>
       </div>
     </div>
   </div>

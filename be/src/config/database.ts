@@ -84,37 +84,53 @@ export async function testConnection(): Promise<void> {
       await connection.query(`ALTER TABLE users ADD COLUMN is_primary_admin TINYINT(1) DEFAULT 0;`);
     } catch (_) {}
 
-    // Auto-detach platform admin accounts from any tenant/organization
+    // Auto-create super_admins table if not exists & migrate platform admins from users
     try {
-      // Ensure admin@perusahaan.com and riskybudiman1@gmail.com are set as standalone Primary SUPER_ADMIN
       await connection.query(`
-        UPDATE users 
-        SET organization_id = NULL, role = 'SUPER_ADMIN', is_primary_admin = 1 
-        WHERE email = 'admin@perusahaan.com' OR email = 'admin@ids.net.id' OR email = 'riskybudiman1@gmail.com';
+        CREATE TABLE IF NOT EXISTS super_admins (
+          id VARCHAR(36) PRIMARY KEY,
+          email VARCHAR(255) NOT NULL UNIQUE,
+          password_hash VARCHAR(255) NOT NULL,
+          full_name VARCHAR(255) NOT NULL,
+          role VARCHAR(50) NOT NULL DEFAULT 'SUPER_ADMIN',
+          status VARCHAR(30) NOT NULL DEFAULT 'ACTIVE',
+          is_primary_admin TINYINT(1) DEFAULT 0,
+          two_factor_secret VARCHAR(255) NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP NOT NULL,
+          INDEX idx_super_admin_email (email)
+        ) ENGINE=InnoDB;
       `);
-      // Ensure all other SUPER_ADMIN, CO_SUPER_ADMIN, ADMIN_FINANCE, ADMIN_SUPPORT have organization_id = NULL
+
+      // Migrate any existing platform admin accounts from users table into super_admins table
       await connection.query(`
-        UPDATE users 
-        SET organization_id = NULL 
+        INSERT IGNORE INTO super_admins (id, email, password_hash, full_name, role, status, is_primary_admin, created_at, updated_at)
+        SELECT id, email, password_hash, full_name, role, status, is_primary_admin, created_at, updated_at
+        FROM users
         WHERE role IN ('SUPER_ADMIN', 'CO_SUPER_ADMIN', 'ADMIN_FINANCE', 'ADMIN_SUPPORT');
       `);
-    } catch (_) {}
 
-    // Auto-seed default Finance Staff (finance@perusahaan.com) if not exists
-    try {
-      const [finRows]: any = await connection.query(`SELECT id FROM users WHERE email = 'finance@perusahaan.com' LIMIT 1;`);
-      if (!finRows || finRows.length === 0) {
+      // Seed default Primary Super Admin into super_admins table if table is completely empty
+      const [saRows]: any = await connection.query(`SELECT id FROM super_admins LIMIT 1;`);
+      if (!saRows || saRows.length === 0) {
         const { hash } = await import('argon2');
         const defaultHash = await hash('admin12345');
-        await connection.query(
-          `INSERT INTO users (id, organization_id, team_id, email, password_hash, full_name, role, status, is_online, max_active_chats, created_at, updated_at)
-           VALUES ('usr-staff-finance', NULL, NULL, 'finance@perusahaan.com', ?, 'Dewi Sartika (Finance Staff)', 'ADMIN_FINANCE', 'ACTIVE', 0, 0, NOW(), NOW());`,
-          [defaultHash]
-        );
-        console.log('✅ Akun Staf Keuangan Platform Berdiri Sendiri dibuat: finance@perusahaan.com');
+        await connection.query(`
+          INSERT IGNORE INTO super_admins (id, email, password_hash, full_name, role, status, is_primary_admin, created_at, updated_at)
+          VALUES 
+            ('sa-primary-001', 'admin@perusahaan.com', ?, 'Administrator Utama SaaS', 'SUPER_ADMIN', 'ACTIVE', 1, NOW(), NOW()),
+            ('sa-primary-002', 'riskybudiman1@gmail.com', ?, 'Risky Budiman (Super Admin)', 'SUPER_ADMIN', 'ACTIVE', 1, NOW(), NOW()),
+            ('sa-finance-001', 'finance@perusahaan.com', ?, 'Dewi Sartika (Finance Staff)', 'ADMIN_FINANCE', 'ACTIVE', 0, NOW(), NOW());
+        `, [defaultHash, defaultHash, defaultHash]);
+        console.log('✅ Default Platform Super Admins seeded into super_admins table');
       }
+
+      // Cleanup users table: remove platform admins from users table so users table only contains tenant agents/admins
+      await connection.query(`
+        DELETE FROM users WHERE role IN ('SUPER_ADMIN', 'CO_SUPER_ADMIN', 'ADMIN_FINANCE', 'ADMIN_SUPPORT');
+      `);
     } catch (err: any) {
-      console.warn('Finance staff seed notice:', err?.message || err);
+      console.warn('super_admins table setup notice:', err?.message || err);
     }
 
     // Auto-create api_keys table if not exists

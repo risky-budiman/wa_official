@@ -6,6 +6,7 @@ import { Elysia, t } from 'elysia';
 import { db, testConnection } from '../../config/database';
 import { organizations, type OrgStatus, type OrgPlan } from '../../db/schema/organizations';
 import { users, type UserRole, type UserStatus } from '../../db/schema/users';
+import { superAdmins, type SuperAdminRole, type SuperAdminStatus } from '../../db/schema/super-admins';
 import { conversations } from '../../db/schema/conversations';
 import { messages } from '../../db/schema/messages';
 import { contacts } from '../../db/schema/contacts';
@@ -972,19 +973,17 @@ export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
   .get('/staff', async () => {
     const staffMembers = await db
       .select({
-        id: users.id,
-        fullName: users.fullName,
-        email: users.email,
-        role: users.role,
-        status: users.status,
-        isOnline: users.isOnline,
-        isPrimaryAdmin: users.isPrimaryAdmin,
-        createdAt: users.createdAt,
-        updatedAt: users.updatedAt,
+        id: superAdmins.id,
+        fullName: superAdmins.fullName,
+        email: superAdmins.email,
+        role: superAdmins.role,
+        status: superAdmins.status,
+        isPrimaryAdmin: superAdmins.isPrimaryAdmin,
+        createdAt: superAdmins.createdAt,
+        updatedAt: superAdmins.updatedAt,
       })
-      .from(users)
-      .where(isNull(users.organizationId))
-      .orderBy(desc(users.createdAt));
+      .from(superAdmins)
+      .orderBy(desc(superAdmins.createdAt));
 
     return {
       success: true,
@@ -996,9 +995,8 @@ export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
   .post(
     '/staff',
     async ({ user, body, set }) => {
-      // Only SUPER_ADMIN can create staff
       if (user!.role !== 'SUPER_ADMIN') {
-        const [dbUser] = await db.select({ role: users.role }).from(users).where(eq(users.id, user!.id)).limit(1);
+        const [dbUser] = await db.select({ role: superAdmins.role }).from(superAdmins).where(eq(superAdmins.id, user!.id)).limit(1);
         if (dbUser?.role !== 'SUPER_ADMIN') {
           set.status = 403;
           return { success: false, error: 'Hanya Master Super Administrator yang berhak membuat akun staf platform.' };
@@ -1006,7 +1004,7 @@ export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
       }
 
       const cleanEmail = body.email.toLowerCase().trim();
-      const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, cleanEmail)).limit(1);
+      const [existing] = await db.select({ id: superAdmins.id }).from(superAdmins).where(eq(superAdmins.email, cleanEmail)).limit(1);
       if (existing) {
         set.status = 400;
         return { success: false, error: `Email "${body.email}" sudah digunakan di sistem.` };
@@ -1017,19 +1015,16 @@ export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
         cost: 10,
       });
 
-      const staffId = `staff_${nanoid(12)}`;
+      const staffId = `sa_staff_${nanoid(12)}`;
 
-      await db.insert(users).values({
+      await db.insert(superAdmins).values({
         id: staffId,
-        organizationId: null, // Standalone platform staff
-        teamId: null,
         email: cleanEmail,
         passwordHash,
         fullName: body.fullName.trim(),
-        role: body.role as UserRole,
+        role: body.role as SuperAdminRole,
         status: 'ACTIVE',
-        isOnline: false,
-        maxActiveChats: 0,
+        isPrimaryAdmin: false,
       });
 
       return {
@@ -1063,9 +1058,8 @@ export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
   .put(
     '/staff/:id',
     async ({ params, user, body, set }) => {
-      // Only SUPER_ADMIN can update staff
       if (user!.role !== 'SUPER_ADMIN') {
-        const [dbUser] = await db.select({ role: users.role }).from(users).where(eq(users.id, user!.id)).limit(1);
+        const [dbUser] = await db.select({ role: superAdmins.role }).from(superAdmins).where(eq(superAdmins.id, user!.id)).limit(1);
         if (dbUser?.role !== 'SUPER_ADMIN') {
           set.status = 403;
           return { success: false, error: 'Hanya Master Super Administrator yang berhak mengubah data staf platform.' };
@@ -1074,26 +1068,26 @@ export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
 
       const [target] = await db
         .select()
-        .from(users)
-        .where(and(eq(users.id, params.id), isNull(users.organizationId)))
+        .from(superAdmins)
+        .where(eq(superAdmins.id, params.id))
         .limit(1);
 
       if (!target) {
         set.status = 404;
-        return { success: false, error: 'Akun staf platform tidak ditemukan atau bukan akun independen.' };
+        return { success: false, error: 'Akun staf platform tidak ditemukan.' };
       }
 
       const updateData: Record<string, any> = {};
       if (body.fullName && body.fullName.trim()) updateData.fullName = body.fullName.trim();
-      if (body.role) updateData.role = body.role as UserRole;
-      if (body.status) updateData.status = body.status as UserStatus;
+      if (body.role) updateData.role = body.role as SuperAdminRole;
+      if (body.status) updateData.status = body.status as SuperAdminStatus;
 
       if (body.email && body.email.toLowerCase().trim() !== target.email.toLowerCase()) {
         const cleanEmail = body.email.toLowerCase().trim();
         const [duplicate] = await db
-          .select({ id: users.id })
-          .from(users)
-          .where(and(eq(users.email, cleanEmail), sql`${users.id} != ${params.id}`))
+          .select({ id: superAdmins.id })
+          .from(superAdmins)
+          .where(and(eq(superAdmins.email, cleanEmail), sql`${superAdmins.id} != ${params.id}`))
           .limit(1);
         if (duplicate) {
           set.status = 400;
@@ -1110,7 +1104,7 @@ export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
       }
 
       if (Object.keys(updateData).length > 0) {
-        await db.update(users).set(updateData).where(eq(users.id, params.id));
+        await db.update(superAdmins).set(updateData).where(eq(superAdmins.id, params.id));
       }
 
       return {
@@ -1144,9 +1138,8 @@ export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
 
   // ─── DELETE /super-admin/staff/:id (Delete Standalone Platform Staff) ────────
   .delete('/staff/:id', async ({ params, user, set }) => {
-    // Only SUPER_ADMIN can delete staff
     if (user!.role !== 'SUPER_ADMIN') {
-      const [dbUser] = await db.select({ role: users.role }).from(users).where(eq(users.id, user!.id)).limit(1);
+      const [dbUser] = await db.select({ role: superAdmins.role }).from(superAdmins).where(eq(superAdmins.id, user!.id)).limit(1);
       if (dbUser?.role !== 'SUPER_ADMIN') {
         set.status = 403;
         return { success: false, error: 'Hanya Master Super Administrator yang berhak menghapus staf platform.' };
@@ -1160,33 +1153,16 @@ export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
 
     const [target] = await db
       .select()
-      .from(users)
-      .where(and(eq(users.id, params.id), isNull(users.organizationId)))
+      .from(superAdmins)
+      .where(eq(superAdmins.id, params.id))
       .limit(1);
 
     if (!target) {
       set.status = 404;
-      return { success: false, error: 'Akun staf platform tidak ditemukan atau bukan akun independen.' };
+      return { success: false, error: 'Akun staf platform tidak ditemukan.' };
     }
 
-    // Clean up dependent foreign keys safely before deleting staff
-    try {
-      await db.execute(sql`UPDATE conversations SET assigned_user_id = NULL WHERE assigned_user_id = ${params.id}`);
-    } catch (_) {}
-    try {
-      await db.execute(sql`DELETE FROM conversation_participants WHERE user_id = ${params.id}`);
-    } catch (_) {}
-    try {
-      await db.execute(sql`UPDATE broadcast_campaigns SET created_by_id = NULL WHERE created_by_id = ${params.id}`);
-    } catch (_) {}
-    try {
-      await db.execute(sql`UPDATE subscription_orders SET user_id = NULL WHERE user_id = ${params.id}`);
-    } catch (_) {}
-    try {
-      await db.execute(sql`UPDATE activity_logs SET user_id = NULL WHERE user_id = ${params.id}`);
-    } catch (_) {}
-
-    await db.delete(users).where(eq(users.id, params.id));
+    await db.delete(superAdmins).where(eq(superAdmins.id, params.id));
 
     return {
       success: true,
