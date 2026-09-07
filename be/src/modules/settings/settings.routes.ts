@@ -609,8 +609,8 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
         const { code, wabaId, phoneNumberId, displayPhoneNumber, verifiedName } = body;
 
         let finalAccessToken = env.META_ACCESS_TOKEN || ('EAAGm0PX4ZCBO' + nanoid(32));
-        let finalWabaId = wabaId || env.META_WABA_ID || '';
-        let finalPhoneId = phoneNumberId || env.META_PHONE_NUMBER_ID || ('phone_' + nanoid(14));
+        let finalWabaId = wabaId || '';
+        let finalPhoneId = phoneNumberId || '';
         let finalDisplayName = verifiedName || 'Akun WhatsApp Business Resmi';
         let finalPhone = displayPhoneNumber || '';
         let detectedCompanyName = null;
@@ -624,9 +624,17 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
             .limit(1);
 
           try {
-            const exchangedToken = await MetaApiService.exchangeCodeForToken(code, env.META_APP_ID || orgData?.appId || undefined);
+            const targetAppId = env.META_APP_ID || orgData?.appId || undefined;
+            const exchangedToken = await MetaApiService.exchangeCodeForToken(code, targetAppId);
             if (exchangedToken) {
               finalAccessToken = exchangedToken;
+
+              // Dynamically discover true WABA ID from the logged-in Facebook account!
+              const discoveredWabaId = await MetaApiService.fetchSharedWabaId(exchangedToken, targetAppId);
+              if (discoveredWabaId) {
+                finalWabaId = discoveredWabaId;
+                console.log(`✅ Successfully linked dynamic WABA ID: ${finalWabaId}`);
+              }
             } else {
               finalAccessToken = (orgData?.accessToken && !orgData.accessToken.startsWith('EAAGm0PX4ZCBO'))
                 ? orgData.accessToken
@@ -637,6 +645,12 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
               ? orgData.accessToken
               : env.META_ACCESS_TOKEN;
           }
+        }
+
+        // Fallback to org's existing WABA ID or env.META_WABA_ID only if no WABA ID was discovered
+        if (!finalWabaId) {
+          const [orgData] = await db.select({ wabaId: organizations.wabaId }).from(organizations).where(eq(organizations.id, user.orgId)).limit(1);
+          finalWabaId = orgData?.wabaId || env.META_WABA_ID || '';
         }
 
         // 2. Automatically fetch live business name & phone numbers from Meta

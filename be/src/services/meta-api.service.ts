@@ -388,6 +388,63 @@ export class MetaApiService {
   }
 
   /**
+   * Dynamically discover shared WABA ID(s) associated with an Access Token (Facebook Login / Embedded Signup)
+   */
+  static async fetchSharedWabaId(accessToken: string, customAppId?: string): Promise<string | null> {
+    if (!accessToken) return null;
+
+    try {
+      // 1. Try GET /v20.0/me/shared_wabas
+      let res = await fetch(`${this.baseUrl}/me/shared_wabas`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      let data = await res.json();
+      if (res.ok && data.data && data.data.length > 0) {
+        console.log(`✨ Dynamically discovered Shared WABA ID: ${data.data[0].id}`);
+        return data.data[0].id as string;
+      }
+
+      // 2. Fallback: Try GET /v20.0/me/client_whatsapp_business_accounts
+      res = await fetch(`${this.baseUrl}/me/client_whatsapp_business_accounts`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      data = await res.json();
+      if (res.ok && data.data && data.data.length > 0) {
+        console.log(`✨ Dynamically discovered Client WABA ID: ${data.data[0].id}`);
+        return data.data[0].id as string;
+      }
+
+      // 3. Fallback: Query debug_token using App Access Token to inspect target_ids / granular_scopes
+      const appId = customAppId || env.META_APP_ID;
+      const appSecret = env.META_APP_SECRET;
+      if (appId && appSecret) {
+        const appToken = `${appId}|${appSecret}`;
+        res = await fetch(`${this.baseUrl}/debug_token?input_token=${accessToken}&access_token=${appToken}`);
+        data = await res.json();
+        const targetIds = data.data?.target_ids;
+        if (targetIds && targetIds.length > 0) {
+          console.log(`✨ Discovered WABA ID from debug_token target_ids: ${targetIds[0]}`);
+          return targetIds[0] as string;
+        }
+        const granularScopes = data.data?.granular_scopes;
+        if (granularScopes && Array.isArray(granularScopes)) {
+          for (const scope of granularScopes) {
+            if (scope.target_ids && scope.target_ids.length > 0) {
+              console.log(`✨ Discovered WABA ID from granular_scopes: ${scope.target_ids[0]}`);
+              return scope.target_ids[0] as string;
+            }
+          }
+        }
+      }
+
+      return null;
+    } catch (err: any) {
+      console.warn('⚠️ Error discovering shared WABA ID:', err.message);
+      return null;
+    }
+  }
+
+  /**
    * Download Inbound Media (Images, Documents, Audio, Video) from WhatsApp Cloud API and save locally
    */
   static async downloadMedia(
