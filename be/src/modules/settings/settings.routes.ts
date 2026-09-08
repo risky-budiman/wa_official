@@ -11,6 +11,70 @@ import { organizations, phoneNumbers, messages, conversations, broadcastCampaign
 import { authPlugin } from '../../middleware/auth';
 import { MetaApiService } from '../../services/meta-api.service';
 
+/**
+ * Safely upsert a phone number record for an organization without triggering UNIQUE index conflicts or FK delete failures
+ */
+async function safeUpsertPhoneNumber(
+  orgId: string,
+  targetPhoneId: string,
+  displayPhoneNumber: string,
+  verifiedName?: string,
+  qualityRating = 'GREEN'
+) {
+  if (!orgId || !targetPhoneId) return;
+
+  // 1. Check if targetPhoneId is already in phoneNumbers table anywhere
+  const [existingByPhoneId] = await db
+    .select()
+    .from(phoneNumbers)
+    .where(eq(phoneNumbers.phoneNumberId, targetPhoneId))
+    .limit(1);
+
+  if (existingByPhoneId) {
+    // Transfer & update this existing phone record to current orgId
+    await db
+      .update(phoneNumbers)
+      .set({
+        organizationId: orgId,
+        displayPhoneNumber: displayPhoneNumber || existingByPhoneId.displayPhoneNumber,
+        verifiedName: verifiedName || existingByPhoneId.verifiedName || 'Akun WhatsApp Business Resmi',
+        qualityRating: qualityRating || existingByPhoneId.qualityRating || 'GREEN',
+        status: 'CONNECTED',
+      })
+      .where(eq(phoneNumbers.id, existingByPhoneId.id));
+    return;
+  }
+
+  // 2. Check if current organization already has a phone record
+  const existingPhones = await db
+    .select()
+    .from(phoneNumbers)
+    .where(eq(phoneNumbers.organizationId, orgId));
+
+  if (existingPhones.length > 0) {
+    await db
+      .update(phoneNumbers)
+      .set({
+        phoneNumberId: targetPhoneId,
+        displayPhoneNumber: displayPhoneNumber || existingPhones[0].displayPhoneNumber,
+        verifiedName: verifiedName || existingPhones[0].verifiedName || 'Akun WhatsApp Business Resmi',
+        qualityRating: qualityRating || existingPhones[0].qualityRating || 'GREEN',
+        status: 'CONNECTED',
+      })
+      .where(eq(phoneNumbers.id, existingPhones[0].id));
+  } else {
+    await db.insert(phoneNumbers).values({
+      id: nanoid(),
+      organizationId: orgId,
+      phoneNumberId: targetPhoneId,
+      displayPhoneNumber: displayPhoneNumber || 'Nomor WhatsApp Business',
+      verifiedName: verifiedName || 'Akun WhatsApp Business Resmi',
+      qualityRating: qualityRating || 'GREEN',
+      status: 'CONNECTED',
+    });
+  }
+}
+
 export const settingsRoutes = new Elysia({ prefix: '/settings' })
   .use(authPlugin)
 
@@ -244,8 +308,6 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
           .set({ wabaId: discoveredWaba })
           .where(eq(organizations.id, org.id));
       }
-    }
-
     // Automatically sync live phone number and business name from Meta API & Subscribe WABA to App
     if (activeWabaId && activeWabaId !== '1386698372551547' && activeAccessToken) {
       try {
@@ -253,30 +315,16 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
         await MetaApiService.subscribeAppToWaba(activeWabaId, activeAccessToken);
 
         const metaPhones = await MetaApiService.fetchWabaPhoneNumbers(activeWabaId, activeAccessToken);
-          if (metaPhones && metaPhones.length > 0) {
-            metaLivePhone = metaPhones[0];
-            if (metaLivePhone?.id) {
-              await db
-                .delete(phoneNumbers)
-                .where(and(eq(phoneNumbers.phoneNumberId, metaLivePhone.id), sql`organization_id != ${user.orgId}`));
-            }
-
-            const existingPhones = await db
-              .select()
-              .from(phoneNumbers)
-              .where(eq(phoneNumbers.organizationId, user.orgId));
-
-          if (existingPhones.length > 0) {
-            await db
-              .update(phoneNumbers)
-              .set({
-                phoneNumberId: metaLivePhone.id || existingPhones[0].phoneNumberId,
-                displayPhoneNumber: metaLivePhone.display_phone_number || existingPhones[0].displayPhoneNumber,
-                verifiedName: metaLivePhone.verified_name || existingPhones[0].verifiedName,
-                qualityRating: metaLivePhone.quality_rating || existingPhones[0].qualityRating,
-                status: 'CONNECTED',
-              })
-              .where(eq(phoneNumbers.id, existingPhones[0].id));
+        if (metaPhones && metaPhones.length > 0) {
+          metaLivePhone = metaPhones[0];
+          if (metaLivePhone?.id) {
+            await safeUpsertPhoneNumber(
+              user.orgId,
+              metaLivePhone.id,
+              metaLivePhone.display_phone_number,
+              metaLivePhone.verified_name,
+              metaLivePhone.quality_rating
+            );
           }
         }
 
@@ -502,41 +550,15 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
         .set(orgUpdateData)
         .where(eq(organizations.id, user.orgId));
 
-      // If WABA ID is provided, ensure phoneNumbers table is synced
+      // If WABA ID is provided, ensure phoneNumbers table is safely synced
       if (finalWabaId) {
-        if (detectedPhoneId) {
-          await db
-            .delete(phoneNumbers)
-            .where(and(eq(phoneNumbers.phoneNumberId, detectedPhoneId), sql`organization_id != ${user.orgId}`));
-        }
-
-        const existingPhones = await db
-          .select()
-          .from(phoneNumbers)
-          .where(eq(phoneNumbers.organizationId, user.orgId));
-
-        if (existingPhones.length > 0) {
-          await db
-            .update(phoneNumbers)
-            .set({
-              phoneNumberId: detectedPhoneId,
-              displayPhoneNumber: detectedPhoneNumber,
-              verifiedName: detectedVerifiedName,
-              qualityRating: detectedQuality,
-              status: 'CONNECTED',
-            })
-            .where(eq(phoneNumbers.id, existingPhones[0].id));
-        } else {
-          await db.insert(phoneNumbers).values({
-            id: nanoid(),
-            organizationId: user.orgId,
-            phoneNumberId: detectedPhoneId,
-            displayPhoneNumber: detectedPhoneNumber,
-            verifiedName: detectedVerifiedName,
-            qualityRating: detectedQuality,
-            status: 'CONNECTED',
-          });
-        }
+        await safeUpsertPhoneNumber(
+          user.orgId,
+          detectedPhoneId,
+          detectedPhoneNumber,
+          detectedVerifiedName,
+          detectedQuality
+        );
       }
 
       return {
@@ -701,50 +723,21 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
           .set(orgUpdateData)
           .where(eq(organizations.id, user.orgId));
 
-        // Upsert phone number into database (ensuring phone_number_id & display_phone_number are never empty strings)
-        const existingPhones = await db
-          .select()
-          .from(phoneNumbers)
-          .where(eq(phoneNumbers.organizationId, user.orgId));
-
-        const existingPhone = existingPhones.length > 0 ? existingPhones[0] : null;
-
         const safePhoneId = (finalPhoneId && finalPhoneId.trim())
           ? finalPhoneId.trim()
-          : (existingPhone?.phoneNumberId || ('phone_' + nanoid(10)));
+          : ('phone_' + nanoid(10));
 
         const safePhoneNumber = (finalPhone && finalPhone.trim())
           ? finalPhone.trim()
-          : (existingPhone?.displayPhoneNumber && existingPhone.displayPhoneNumber !== '+62 812-3456-7890' ? existingPhone.displayPhoneNumber : 'Nomor WhatsApp Business');
+          : 'Nomor WhatsApp Business';
 
-        if (safePhoneId) {
-          await db
-            .delete(phoneNumbers)
-            .where(and(eq(phoneNumbers.phoneNumberId, safePhoneId), sql`organization_id != ${user.orgId}`));
-        }
-
-        if (existingPhone) {
-          await db
-            .update(phoneNumbers)
-            .set({
-              phoneNumberId: safePhoneId,
-              displayPhoneNumber: safePhoneNumber,
-              verifiedName: finalDisplayName || existingPhone.verifiedName || 'Akun WhatsApp Business Resmi',
-              qualityRating: 'GREEN',
-              status: 'CONNECTED',
-            })
-            .where(eq(phoneNumbers.id, existingPhone.id));
-        } else {
-          await db.insert(phoneNumbers).values({
-            id: nanoid(),
-            organizationId: user.orgId,
-            phoneNumberId: safePhoneId,
-            displayPhoneNumber: safePhoneNumber,
-            verifiedName: finalDisplayName || 'Akun WhatsApp Business Resmi',
-            qualityRating: 'GREEN',
-            status: 'CONNECTED',
-          });
-        }
+        await safeUpsertPhoneNumber(
+          user.orgId,
+          safePhoneId,
+          safePhoneNumber,
+          finalDisplayName,
+          'GREEN'
+        );
 
         return {
           success: true,
