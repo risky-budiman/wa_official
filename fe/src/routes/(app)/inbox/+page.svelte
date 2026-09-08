@@ -43,6 +43,7 @@
     Loader2,
   } from "lucide-svelte";
   import { formatWhatsAppMarkdown } from "$lib/utils/whatsapp-formatter";
+  import SendSingleTemplateModal from "$lib/components/templates/SendSingleTemplateModal.svelte";
 
   let activeTab = $state<"ALL" | "MINE" | "UNASSIGNED">("ALL");
   let statusFilter = $state<"ALL" | "OPEN" | "RESOLVED">("ALL");
@@ -55,6 +56,7 @@
   let isClaimingNext = $state(false);
   let unassignedQueueCount = $state(0);
   let myActiveCount = $state(0);
+  let showTemplateSendModal = $state(false);
 
   // Modals & Drawers state
   let showReassignModal = $state(false);
@@ -1295,6 +1297,13 @@
         </div>
       {:else}
         {#each filteredConversations as conv}
+          {@const convExpiresAt = conv.windowExpiresAt
+            ? new Date(conv.windowExpiresAt).getTime()
+            : conv.lastMessageAt
+              ? new Date(conv.lastMessageAt).getTime() + 24 * 60 * 60 * 1000
+              : 0}
+          {@const isConvExpired = convExpiresAt > 0 && Date.now() > convExpiresAt}
+
           <button
             onclick={() => selectConversation(conv.id)}
             class="w-full text-left p-3.5 flex items-start gap-3 transition cursor-pointer {selectedConvId ===
@@ -1312,6 +1321,15 @@
                 <span
                   class="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-purple-500 ring-2 ring-white dark:ring-slate-900"
                   title="Selesai"
+                ></span>
+              {:else if isConvExpired}
+                <span
+                  class="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-rose-500 ring-2 ring-white dark:ring-slate-900 animate-pulse"
+                  title="Sesi 24 Jam Meta Kadaluarsa (>24 Jam)"
+                ></span>
+                <span
+                  class="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-rose-500 ring-2 ring-white dark:ring-slate-900"
+                  title="Sesi 24 Jam Meta Kadaluarsa (>24 Jam)"
                 ></span>
               {:else if conv.status === "UNASSIGNED" || !conv.assignedUser}
                 <span
@@ -1360,6 +1378,16 @@
                   </span>
                 {/if}
 
+                {#if isConvExpired && conv.status !== "RESOLVED"}
+                  <span
+                    class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/30 flex items-center gap-1"
+                    title="Sesi 24 Jam Meta Kadaluarsa"
+                  >
+                    <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                    Sesi Expired
+                  </span>
+                {/if}
+
                 {#if conv.status === "RESOLVED"}
                   <span
                     class="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-purple-500/10 text-purple-700 dark:text-purple-400 border border-purple-500/20 flex items-center gap-0.5"
@@ -1390,16 +1418,35 @@
   <!-- 2. MIDDLE COLUMN: Active Chat Thread -->
   <div class="flex-1 flex flex-col bg-white dark:bg-slate-950 min-w-0">
     {#if selectedConv}
+      {@const effectiveExpiresAtHeader = selectedConv.windowExpiresAt
+        ? new Date(selectedConv.windowExpiresAt).getTime()
+        : selectedConv.lastMessageAt
+          ? new Date(selectedConv.lastMessageAt).getTime() +
+            24 * 60 * 60 * 1000
+          : 0}
+      {@const isHeaderExpired = effectiveExpiresAtHeader ? effectiveExpiresAtHeader - Date.now() <= 0 : false}
       <!-- Chat Header (Clean, Premium, Non-overlapping) -->
       <div
         class="h-16 px-4 border-b border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-900 flex items-center justify-between gap-3 shrink-0 shadow-sm"
       >
         <!-- Left: Contact Details -->
         <div class="flex items-center gap-3 min-w-0 flex-1">
-          <div
-            class="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center font-bold text-sm text-emerald-600 dark:text-emerald-400 border border-slate-200 dark:border-slate-700 shrink-0 shadow-sm"
-          >
-            {selectedConv.contact.name.charAt(0)}
+          <div class="relative shrink-0">
+            <div
+              class="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center font-bold text-sm text-emerald-600 dark:text-emerald-400 border border-slate-200 dark:border-slate-700 shrink-0 shadow-sm"
+            >
+              {selectedConv.contact.name.charAt(0)}
+            </div>
+            {#if isHeaderExpired}
+              <span
+                class="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-rose-500 ring-2 ring-white dark:ring-slate-900 animate-pulse"
+                title="Sesi 24 Jam Meta Kadaluarsa"
+              ></span>
+              <span
+                class="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-rose-500 ring-2 ring-white dark:ring-slate-900"
+                title="Sesi 24 Jam Meta Kadaluarsa"
+              ></span>
+            {/if}
           </div>
           <div class="min-w-0">
             <div class="flex items-center gap-2">
@@ -1891,50 +1938,59 @@
           {#if isExpiredInput && !isInternalNote}
             <!-- LOCKED BANNER FOR EXPIRED SESSION -->
             <div
-              class="p-4 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-2xl space-y-3 shadow-sm"
+              class="p-4 bg-rose-50/75 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 rounded-2xl space-y-3 shadow-sm"
             >
               <div class="flex items-center gap-3">
                 <div
-                  class="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/20"
+                  class="w-9 h-9 rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0 border border-rose-500/20"
                 >
                   <Lock class="w-5 h-5" />
                 </div>
                 <div class="flex-1 min-w-0">
                   <p
-                    class="font-bold text-xs text-amber-900 dark:text-amber-200"
+                    class="font-bold text-xs text-rose-900 dark:text-rose-200 flex items-center gap-1.5"
                   >
-                    Sesi 24 Jam Meta Telah Kadaluarsa (&gt;24 Jam)
+                    <span class="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+                    <span>Sesi 24 Jam Meta Telah Kadaluarsa (&gt;24 Jam)</span>
                   </p>
                   <p
-                    class="text-[11px] text-amber-700/90 dark:text-amber-300/90 leading-relaxed mt-0.5"
+                    class="text-[11px] text-rose-700/90 dark:text-rose-300/90 leading-relaxed mt-0.5"
                   >
                     Pesan balasan biasa dikunci oleh Meta karena sudah lebih
-                    dari 24 jam sejak pesan terakhir pelanggan. Template Resmi
-                    Meta khusus digunakan untuk <strong>Broadcast Massal</strong
-                    >.
+                    dari 24 jam sejak pesan terakhir pelanggan. Gunakan <strong>Template WhatsApp Resmi</strong> untuk melanjutkan percakapan ke nomor ini.
                   </p>
                 </div>
               </div>
 
               <div
-                class="flex items-center justify-between gap-2 pt-2.5 border-t border-amber-200/60 dark:border-amber-800/40"
+                class="flex items-center justify-between gap-2 pt-2.5 border-t border-rose-200/60 dark:border-rose-800/40"
               >
                 <button
                   type="button"
                   onclick={() => (isInternalNote = true)}
-                  class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
+                  class="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer border border-slate-200 dark:border-slate-700 shadow-2xs"
                 >
-                  <Eye class="w-3.5 h-3.5 text-amber-500" />
+                  <Eye class="w-3.5 h-3.5 text-slate-500" />
                   <span>Beri Catatan Tim Internal</span>
                 </button>
 
-                <a
-                  href="/broadcast"
-                  class="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow-md shadow-amber-500/20 transition cursor-pointer"
-                >
-                  <Send class="w-4 h-4" />
-                  <span>Ke Halaman Broadcast</span>
-                </a>
+                <div class="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onclick={() => (showTemplateSendModal = true)}
+                    class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-emerald-600/20 transition cursor-pointer"
+                  >
+                    <Zap class="w-4 h-4 fill-current" />
+                    <span>Kirim Template Instan</span>
+                  </button>
+
+                  <a
+                    href="/broadcast"
+                    class="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer"
+                  >
+                    <span>Broadcast</span>
+                  </a>
+                </div>
               </div>
             </div>
           {:else}
@@ -2910,3 +2966,20 @@
     />
   </div>
 {/if}
+
+<!-- ─── 6. MODAL KIRIM TEMPLATE LANGSUNG DARI INBOX ─── -->
+<SendSingleTemplateModal
+  bind:isOpen={showTemplateSendModal}
+  templates={availableTemplates}
+  initialPhoneNumber={selectedConv?.contact.waId || ""}
+  initialContactName={selectedConv?.contact.name || ""}
+  onClose={() => {
+    showTemplateSendModal = false;
+  }}
+  onSuccess={() => {
+    if (selectedConvId) {
+      loadMessages(selectedConvId, true);
+      loadConversations();
+    }
+  }}
+/>
