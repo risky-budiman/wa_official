@@ -360,13 +360,15 @@ export class MetaApiService {
   /**
    * Exchange OAuth Code from Facebook Login Embedded Signup for Permanent / User Access Token
    */
-  static async exchangeCodeForToken(code: string, redirectUri?: string, customAppId?: string): Promise<string | null> {
+  static async exchangeCodeForToken(code: string, redirectUri?: string, customAppId?: string): Promise<{ accessToken?: string; error?: string }> {
     const appId = customAppId || env.META_APP_ID;
     const appSecret = env.META_APP_SECRET;
 
-    if (!code || !appId || !appSecret) {
-      console.warn('⚠️ Cannot exchange OAuth code: code, META_APP_ID, or META_APP_SECRET is missing');
-      return null;
+    if (!code) {
+      return { error: 'Kode otorisasi (code) dari Facebook kosong.' };
+    }
+    if (!appId || !appSecret) {
+      return { error: `META_APP_ID (${appId ? 'ADA' : 'KOSONG'}) atau META_APP_SECRET (${appSecret ? 'ADA' : 'KOSONG'}) belum diset di file .env server backend.` };
     }
 
     try {
@@ -379,14 +381,15 @@ export class MetaApiService {
 
       if (res.ok && data.access_token) {
         console.log('✅ Meta OAuth code successfully exchanged for Access Token');
-        return data.access_token as string;
+        return { accessToken: data.access_token as string };
       } else {
-        console.warn('⚠️ Meta OAuth exchange failed:', JSON.stringify(data));
-        return null;
+        const metaErrMsg = data.error?.message || JSON.stringify(data);
+        console.warn('⚠️ Meta OAuth exchange failed:', metaErrMsg);
+        return { error: `Meta OAuth Error: ${metaErrMsg}` };
       }
     } catch (err: any) {
       console.warn('⚠️ Meta OAuth exchange exception:', err.message);
-      return null;
+      return { error: `Network Exception: ${err.message}` };
     }
   }
 

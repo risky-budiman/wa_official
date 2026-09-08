@@ -620,12 +620,12 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
             .limit(1);
 
           const targetAppId = env.META_APP_ID || orgData?.appId || undefined;
-          const exchangedToken = await MetaApiService.exchangeCodeForToken(code, redirectUri, targetAppId);
-          if (exchangedToken) {
-            finalAccessToken = exchangedToken;
+          const tokenResult = await MetaApiService.exchangeCodeForToken(code, redirectUri, targetAppId);
+          if (tokenResult.accessToken) {
+            finalAccessToken = tokenResult.accessToken;
 
             // Dynamically discover true WABA ID from the logged-in Facebook account!
-            const discoveredWabaId = await MetaApiService.fetchSharedWabaId(exchangedToken, targetAppId);
+            const discoveredWabaId = await MetaApiService.fetchSharedWabaId(finalAccessToken, targetAppId);
             if (discoveredWabaId) {
               finalWabaId = discoveredWabaId;
               console.log(`✅ Successfully linked dynamic WABA ID: ${finalWabaId}`);
@@ -637,7 +637,7 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
             set.status = 400;
             return {
               success: false,
-              error: 'Gagal menukarkan kode otorisasi Facebook (OAuth exchange failed). Harap pastikan META_APP_ID dan META_APP_SECRET pada file .env server sudah sesuai.',
+              error: tokenResult.error || 'Gagal menukarkan kode otorisasi Facebook (OAuth exchange failed). Harap pastikan META_APP_ID dan META_APP_SECRET pada file .env server sudah sesuai.',
             };
           }
         }

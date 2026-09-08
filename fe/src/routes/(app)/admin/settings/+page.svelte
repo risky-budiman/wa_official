@@ -530,10 +530,15 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
     fbSuccessMsg = null;
     fbErrorMsg = null;
 
-    const realAppId = appId.trim();
+    let realAppId = appId.trim();
 
     if (!realAppId) {
-      fbErrorMsg = 'Meta App ID belum dikonfigurasi pada server backend (.env). Harap hubungi Administrator sistem.';
+      await loadSettings();
+      realAppId = appId.trim();
+    }
+
+    if (!realAppId) {
+      fbErrorMsg = 'Meta App ID belum dikonfigurasi pada server backend (.env). Harap periksa nilai META_APP_ID di file .env server backend.';
       return;
     }
 
