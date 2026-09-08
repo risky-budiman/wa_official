@@ -860,31 +860,59 @@ export const templateRoutes = new Elysia({ prefix: '/templates' })
 
         const wamid = metaRes.messages?.[0]?.id || `wamid.${nanoid()}`;
 
-        // 5. Log Message in DB
+        // 6. Reconstruct human-readable rendered template text for Inbox display
+        let renderedText = '';
+        if (headerComp?.text) {
+          let hText = headerComp.text;
+          const hMatches = hText.match(/\{\{\d+\}\}/g) || [];
+          const clientHeader = sanitizedComponents.find((c: any) => c.type === 'header');
+          hMatches.forEach((match: string, idx: number) => {
+            const val = clientHeader?.parameters?.[idx]?.text || '';
+            if (val) hText = hText.replace(match, val);
+          });
+          renderedText += `*${hText.trim()}*\n\n`;
+        }
+
+        if (bodyComp?.text) {
+          let bText = bodyComp.text;
+          const bMatches = bText.match(/\{\{\d+\}\}/g) || [];
+          const clientBody = sanitizedComponents.find((c: any) => c.type === 'body');
+          bMatches.forEach((match: string, idx: number) => {
+            const val = clientBody?.parameters?.[idx]?.text || '';
+            if (val) bText = bText.replace(match, val);
+          });
+          renderedText += bText.trim();
+        }
+
+        if (footerComp?.text) {
+          renderedText += `\n\n_${footerComp.text.trim()}_`;
+        }
+
+        if (!renderedText.trim()) {
+          renderedText = `[Template: ${body.templateName}]`;
+        }
+
+        // 7. Log Message in DB with full body text
         const messageId = nanoid();
         await db.insert(messages).values({
           id: messageId,
           conversationId,
+          wamId: wamid,
           senderType: 'AGENT',
           senderId: user.id,
           direction: 'OUTBOUND',
           messageType: 'template',
-          content: JSON.stringify({
-            templateName: body.templateName,
-            languageCode: body.languageCode || 'id',
-            components: body.components,
-          }),
-          wamid,
+          body: renderedText,
           status: 'SENT',
           isInternalNote: false,
           createdAt: new Date(),
         });
 
-        // 6. Update Conversation Status
+        // 8. Update Conversation Status & Preview
         await db
           .update(conversations)
           .set({
-            lastMessagePreview: `Template: ${body.templateName}`,
+            lastMessagePreview: renderedText.slice(0, 150),
             lastMessageAt: new Date(),
             status: existingConv?.status === 'RESOLVED' || existingConv?.status === 'EXPIRED' ? 'OPEN' : (existingConv?.status || 'OPEN'),
           })
