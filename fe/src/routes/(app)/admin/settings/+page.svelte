@@ -534,7 +534,7 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
 
     if (!realAppId) {
       await loadSettings();
-      realAppId = appId.trim();
+      realAppId = appId.trim() || '1680616759700162';
     }
 
     if (!realAppId) {

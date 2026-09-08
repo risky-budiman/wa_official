@@ -46,7 +46,7 @@ export const env = {
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '7d',
 
   // Meta WhatsApp Cloud API
-  META_APP_ID: process.env.META_APP_ID || '',
+  META_APP_ID: process.env.META_APP_ID || '1680616759700162',
   META_APP_SECRET: process.env.META_APP_SECRET || '',
   META_ACCESS_TOKEN: process.env.META_ACCESS_TOKEN || '',
   META_PHONE_NUMBER_ID: process.env.META_PHONE_NUMBER_ID || '',
