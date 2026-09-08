@@ -5,6 +5,26 @@
 import fs from 'fs';
 import path from 'path';
 
+function getEnvFileValue(key: string): string {
+  try {
+    const envPath = path.resolve(process.cwd(), '.env');
+    if (fs.existsSync(envPath)) {
+      const content = fs.readFileSync(envPath, 'utf-8');
+      for (const line of content.split('\n')) {
+        const trimmed = line.trim();
+        if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
+          const idx = trimmed.indexOf('=');
+          const k = trimmed.slice(0, idx).trim();
+          if (k === key) {
+            return trimmed.slice(idx + 1).trim().replace(/^["']|["']$/g, '');
+          }
+        }
+      }
+    }
+  } catch (_) {}
+  return '';
+}
+
 // Explicitly parse .env file at module load time
 const envPath = path.resolve(process.cwd(), '.env');
 if (fs.existsSync(envPath)) {
@@ -45,9 +65,13 @@ export const env = {
   JWT_SECRET: process.env.JWT_SECRET || 'change-this-to-a-random-secret-key-min-32-chars',
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '7d',
 
-  // Meta WhatsApp Cloud API
-  META_APP_ID: (process.env.META_APP_ID || '').trim(),
-  META_APP_SECRET: (process.env.META_APP_SECRET || '').trim(),
+  // Meta WhatsApp Cloud API (Dynamic live getters)
+  get META_APP_ID() {
+    return (process.env.META_APP_ID || (globalThis as any).Bun?.env?.META_APP_ID || getEnvFileValue('META_APP_ID') || '').trim();
+  },
+  get META_APP_SECRET() {
+    return (process.env.META_APP_SECRET || (globalThis as any).Bun?.env?.META_APP_SECRET || getEnvFileValue('META_APP_SECRET') || '').trim();
+  },
   META_ACCESS_TOKEN: process.env.META_ACCESS_TOKEN || '',
   META_PHONE_NUMBER_ID: process.env.META_PHONE_NUMBER_ID || '',
   META_WABA_ID: process.env.META_WABA_ID || '',
