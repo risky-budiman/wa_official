@@ -360,7 +360,7 @@ export class MetaApiService {
   /**
    * Exchange OAuth Code from Facebook Login Embedded Signup for Permanent / User Access Token
    */
-  static async exchangeCodeForToken(code: string, customAppId?: string): Promise<string | null> {
+  static async exchangeCodeForToken(code: string, redirectUri?: string, customAppId?: string): Promise<string | null> {
     const appId = customAppId || env.META_APP_ID;
     const appSecret = env.META_APP_SECRET;
 
@@ -370,7 +370,10 @@ export class MetaApiService {
     }
 
     try {
-      const url = `https://graph.facebook.com/${env.META_API_VERSION}/oauth/access_token?client_id=${appId}&client_secret=${appSecret}&code=${encodeURIComponent(code)}`;
+      let url = `https://graph.facebook.com/${env.META_API_VERSION}/oauth/access_token?client_id=${appId}&client_secret=${appSecret}&code=${encodeURIComponent(code)}`;
+      if (redirectUri) {
+        url += `&redirect_uri=${encodeURIComponent(redirectUri)}`;
+      }
       const res = await fetch(url);
       const data = await res.json();
 
@@ -378,7 +381,7 @@ export class MetaApiService {
         console.log('✅ Meta OAuth code successfully exchanged for Access Token');
         return data.access_token as string;
       } else {
-        console.warn('⚠️ Meta OAuth exchange failed:', data.error?.message);
+        console.warn('⚠️ Meta OAuth exchange failed:', JSON.stringify(data));
         return null;
       }
     } catch (err: any) {
@@ -415,7 +418,7 @@ export class MetaApiService {
       }
 
       // 3. Fallback: Try GET /v20.0/me/whatsapp_business_accounts
-      res = await fetch(`${this.baseUrl}/me/whatsapp_business_accounts`, {
+      res = await fetch(`${this.baseUrl}/me/whatsapp_business_accounts?fields=id,name,phone_numbers{id,display_phone_number,verified_name,quality_rating}`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
       data = await res.json();

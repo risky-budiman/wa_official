@@ -562,10 +562,13 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
     isConnectingFb = true;
     fbSuccessMsg = 'Menerima otorisasi Facebook, mengambil data akun WhatsApp asli dari Meta...';
     
+    const redirectUri = window.location.origin + '/admin/settings';
+
     const res = await apiRequest<any>('/settings/waba/embedded-signup', {
       method: 'POST',
       body: JSON.stringify({
         code,
+        redirectUri,
       }),
     });
     isConnectingFb = false;
@@ -573,9 +576,11 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
     if (res.success && res.connectedChannel) {
       channelStore.setConnected(res.connectedChannel);
       fbSuccessMsg = 'Selamat! Akun WhatsApp Business resmi Anda berhasil terhubung via Facebook!';
+      await channelStore.checkStatus();
       await loadSettings();
       setTimeout(() => (fbSuccessMsg = null), 6000);
     } else {
+      fbSuccessMsg = null;
       fbErrorMsg = res.error || 'Gagal menyelesaikan otorisasi Facebook';
     }
   }

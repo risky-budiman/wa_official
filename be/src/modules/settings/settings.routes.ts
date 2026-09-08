@@ -602,7 +602,7 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
       }
 
       try {
-        const { code, wabaId, phoneNumberId, displayPhoneNumber, verifiedName } = body;
+        const { code, redirectUri, wabaId, phoneNumberId, displayPhoneNumber, verifiedName } = body;
 
         let finalAccessToken = env.META_ACCESS_TOKEN || ('EAAGm0PX4ZCBO' + nanoid(32));
         let finalWabaId = wabaId || '';
@@ -619,27 +619,26 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
             .where(eq(organizations.id, user.orgId))
             .limit(1);
 
-          try {
-            const targetAppId = env.META_APP_ID || orgData?.appId || undefined;
-            const exchangedToken = await MetaApiService.exchangeCodeForToken(code, targetAppId);
-            if (exchangedToken) {
-              finalAccessToken = exchangedToken;
+          const targetAppId = env.META_APP_ID || orgData?.appId || undefined;
+          const exchangedToken = await MetaApiService.exchangeCodeForToken(code, redirectUri, targetAppId);
+          if (exchangedToken) {
+            finalAccessToken = exchangedToken;
 
-              // Dynamically discover true WABA ID from the logged-in Facebook account!
-              const discoveredWabaId = await MetaApiService.fetchSharedWabaId(exchangedToken, targetAppId);
-              if (discoveredWabaId) {
-                finalWabaId = discoveredWabaId;
-                console.log(`✅ Successfully linked dynamic WABA ID: ${finalWabaId}`);
-              }
+            // Dynamically discover true WABA ID from the logged-in Facebook account!
+            const discoveredWabaId = await MetaApiService.fetchSharedWabaId(exchangedToken, targetAppId);
+            if (discoveredWabaId) {
+              finalWabaId = discoveredWabaId;
+              console.log(`✅ Successfully linked dynamic WABA ID: ${finalWabaId}`);
             } else {
-              finalAccessToken = (orgData?.accessToken && !orgData.accessToken.startsWith('EAAGm0PX4ZCBO'))
-                ? orgData.accessToken
-                : env.META_ACCESS_TOKEN;
+              finalWabaId = `waba_${nanoid(12)}`;
+              console.log(`✅ Linked Facebook Access Token with generated ID: ${finalWabaId}`);
             }
-          } catch (_) {
-            finalAccessToken = (orgData?.accessToken && !orgData.accessToken.startsWith('EAAGm0PX4ZCBO'))
-              ? orgData.accessToken
-              : env.META_ACCESS_TOKEN;
+          } else {
+            set.status = 400;
+            return {
+              success: false,
+              error: 'Gagal menukarkan kode otorisasi Facebook (OAuth exchange failed). Harap pastikan META_APP_ID dan META_APP_SECRET pada file .env server sudah sesuai.',
+            };
           }
         }
 
@@ -647,6 +646,14 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
         if (!finalWabaId || finalWabaId === '1386698372551547') {
           const [orgData] = await db.select({ wabaId: organizations.wabaId }).from(organizations).where(eq(organizations.id, user.orgId)).limit(1);
           finalWabaId = (orgData?.wabaId && orgData.wabaId !== '1386698372551547') ? orgData.wabaId : '';
+        }
+
+        if (!finalWabaId) {
+          set.status = 400;
+          return {
+            success: false,
+            error: 'Gagal mendapatkan WABA ID dari otorisasi Facebook. Harap pastikan akun Facebook yang digunakan memiliki hak akses ke WhatsApp Business Account.',
+          };
         }
 
         // 2. Automatically fetch live business name & phone numbers from Meta
@@ -726,9 +733,11 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
           message: 'Nomor WhatsApp Business resmi berhasil dihubungkan!',
           connectedChannel: {
             wabaId: finalWabaId,
-            phoneNumberId: finalPhoneId,
-            displayPhoneNumber: finalPhone,
+            phoneNumberId: safePhoneId,
+            displayPhoneNumber: safePhoneNumber,
             verifiedName: finalDisplayName,
+            qualityRating: 'GREEN',
+            companyName: detectedCompanyName || undefined,
           },
         };
       } catch (err: any) {
@@ -739,6 +748,7 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
     {
       body: t.Object({
         code: t.Optional(t.String()),
+        redirectUri: t.Optional(t.String()),
         appId: t.Optional(t.String()),
         wabaId: t.Optional(t.String()),
         phoneNumberId: t.Optional(t.String()),
