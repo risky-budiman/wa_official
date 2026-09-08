@@ -253,12 +253,18 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
         await MetaApiService.subscribeAppToWaba(activeWabaId, activeAccessToken);
 
         const metaPhones = await MetaApiService.fetchWabaPhoneNumbers(activeWabaId, activeAccessToken);
-        if (metaPhones && metaPhones.length > 0) {
-          metaLivePhone = metaPhones[0];
-          const existingPhones = await db
-            .select()
-            .from(phoneNumbers)
-            .where(eq(phoneNumbers.organizationId, user.orgId));
+          if (metaPhones && metaPhones.length > 0) {
+            metaLivePhone = metaPhones[0];
+            if (metaLivePhone?.id) {
+              await db
+                .delete(phoneNumbers)
+                .where(and(eq(phoneNumbers.phoneNumberId, metaLivePhone.id), sql`organization_id != ${user.orgId}`));
+            }
+
+            const existingPhones = await db
+              .select()
+              .from(phoneNumbers)
+              .where(eq(phoneNumbers.organizationId, user.orgId));
 
           if (existingPhones.length > 0) {
             await db
@@ -498,6 +504,12 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
 
       // If WABA ID is provided, ensure phoneNumbers table is synced
       if (finalWabaId) {
+        if (detectedPhoneId) {
+          await db
+            .delete(phoneNumbers)
+            .where(and(eq(phoneNumbers.phoneNumberId, detectedPhoneId), sql`organization_id != ${user.orgId}`));
+        }
+
         const existingPhones = await db
           .select()
           .from(phoneNumbers)
@@ -704,6 +716,12 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
         const safePhoneNumber = (finalPhone && finalPhone.trim())
           ? finalPhone.trim()
           : (existingPhone?.displayPhoneNumber && existingPhone.displayPhoneNumber !== '+62 812-3456-7890' ? existingPhone.displayPhoneNumber : 'Nomor WhatsApp Business');
+
+        if (safePhoneId) {
+          await db
+            .delete(phoneNumbers)
+            .where(and(eq(phoneNumbers.phoneNumberId, safePhoneId), sql`organization_id != ${user.orgId}`));
+        }
 
         if (existingPhone) {
           await db
