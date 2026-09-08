@@ -1317,12 +1317,7 @@
               >
                 {conv.contact.name.charAt(0)}
               </div>
-              {#if conv.status === "RESOLVED"}
-                <span
-                  class="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-purple-500 ring-2 ring-white dark:ring-slate-900"
-                  title="Selesai"
-                ></span>
-              {:else if isConvExpired}
+              {#if isConvExpired}
                 <span
                   class="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-rose-500 ring-2 ring-white dark:ring-slate-900 animate-pulse"
                   title="Sesi 24 Jam Meta Kadaluarsa (>24 Jam)"
@@ -1330,6 +1325,11 @@
                 <span
                   class="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-rose-500 ring-2 ring-white dark:ring-slate-900"
                   title="Sesi 24 Jam Meta Kadaluarsa (>24 Jam)"
+                ></span>
+              {:else if conv.status === "RESOLVED"}
+                <span
+                  class="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-purple-500 ring-2 ring-white dark:ring-slate-900"
+                  title="Selesai"
                 ></span>
               {:else if conv.status === "UNASSIGNED" || !conv.assignedUser}
                 <span
@@ -1378,7 +1378,7 @@
                   </span>
                 {/if}
 
-                {#if isConvExpired && conv.status !== "RESOLVED"}
+                {#if isConvExpired}
                   <span
                     class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/30 flex items-center gap-1"
                     title="Sesi 24 Jam Meta Kadaluarsa"
