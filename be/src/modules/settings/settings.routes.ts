@@ -42,6 +42,16 @@ async function safeUpsertPhoneNumber(
         status: 'CONNECTED',
       })
       .where(eq(phoneNumbers.id, existingByPhoneId.id));
+
+    // Remove any remaining dummy/disconnected records for this org to prevent multi-number confusion
+    await db
+      .delete(phoneNumbers)
+      .where(
+        and(
+          eq(phoneNumbers.organizationId, orgId),
+          ne(phoneNumbers.id, existingByPhoneId.id)
+        )
+      );
     return;
   }
 
@@ -62,6 +72,18 @@ async function safeUpsertPhoneNumber(
         status: 'CONNECTED',
       })
       .where(eq(phoneNumbers.id, existingPhones[0].id));
+
+    // Remove duplicate records for this org if any
+    if (existingPhones.length > 1) {
+      await db
+        .delete(phoneNumbers)
+        .where(
+          and(
+            eq(phoneNumbers.organizationId, orgId),
+            ne(phoneNumbers.id, existingPhones[0].id)
+          )
+        );
+    }
   } else {
     await db.insert(phoneNumbers).values({
       id: nanoid(),
@@ -632,14 +654,12 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
         })
         .where(eq(organizations.id, user.orgId));
 
+      // Remove phone records for this disconnecting tenant so the number is completely free and unhindered
       await db
-        .update(phoneNumbers)
-        .set({
-          status: 'DISCONNECTED',
-        })
+        .delete(phoneNumbers)
         .where(eq(phoneNumbers.organizationId, user.orgId));
 
-      return { success: true, message: 'Koneksi WhatsApp WABA berhasil diputuskan' };
+      return { success: true, message: 'Koneksi WhatsApp WABA berhasil diputuskan dan nomor berhasil dibersihkan' };
     } catch (err: any) {
       set.status = 400;
       return { success: false, error: err.message };
