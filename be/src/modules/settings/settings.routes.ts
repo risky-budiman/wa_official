@@ -308,6 +308,8 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
           .set({ wabaId: discoveredWaba })
           .where(eq(organizations.id, org.id));
       }
+    }
+
     // Automatically sync live phone number and business name from Meta API & Subscribe WABA to App
     if (activeWabaId && activeWabaId !== '1386698372551547' && activeAccessToken) {
       try {
