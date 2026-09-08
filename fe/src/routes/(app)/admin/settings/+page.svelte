@@ -438,7 +438,7 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
         }
       }
       if (res.organization) {
-        wabaId = res.organization.wabaId || '1680616759700162';
+        wabaId = res.organization.wabaId || '';
         appId = res.organization.appId || '';
         if (!companyName && res.organization.name) {
           companyName = res.organization.name;
@@ -787,11 +787,11 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
               <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 flex flex-col justify-between space-y-1.5">
                 <div class="flex items-center justify-between">
                   <span class="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">WABA ID Resmi</span>
-                  <button onclick={() => copyToClipboard(channelStore.channel?.wabaId || '1386698372551547', 'waba')} class="text-[10px] text-slate-500 hover:text-emerald-600 transition flex items-center gap-1 cursor-pointer">
+                  <button onclick={() => copyToClipboard(channelStore.channel?.wabaId || wabaId || '-', 'waba')} class="text-[10px] text-slate-500 hover:text-emerald-600 transition flex items-center gap-1 cursor-pointer">
                     {#if copiedWaba}<Check class="w-3 h-3 text-emerald-500" />{:else}<Copy class="w-3 h-3" />{/if}
                   </button>
                 </div>
-                <span class="text-xs font-mono font-bold text-slate-900 dark:text-white truncate">{channelStore.channel?.wabaId || '1386698372551547'}</span>
+                <span class="text-xs font-mono font-bold text-slate-900 dark:text-white truncate">{channelStore.channel?.wabaId || wabaId || '-'}</span>
               </div>
 
               <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 flex flex-col justify-between space-y-1.5">

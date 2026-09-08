@@ -227,26 +227,22 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
     let metaLivePhone: any = null;
     let metaLiveWaba: any = null;
 
-    // Token and WABA resolution (org settings first, fallback to env)
+    // Token and WABA resolution for tenant organization
     let activeAccessToken = org?.accessToken && !org.accessToken.startsWith('EAAGm0PX4ZCBO')
       ? org.accessToken
       : env.META_ACCESS_TOKEN;
 
-    let activeWabaId = org?.wabaId && org.wabaId.length > 10
-      ? org.wabaId
-      : env.META_WABA_ID;
+    let activeWabaId = org?.wabaId || '';
 
-    // Dynamically resolve true WABA ID from Phone Number ID if token is present
-    if (activeAccessToken && env.META_PHONE_NUMBER_ID) {
-      const resolvedWaba = await MetaApiService.fetchWabaIdFromPhoneNumberId(env.META_PHONE_NUMBER_ID, activeAccessToken);
-      if (resolvedWaba) {
-        activeWabaId = resolvedWaba;
-        if (org?.id && org.wabaId !== resolvedWaba) {
-          await db
-            .update(organizations)
-            .set({ wabaId: resolvedWaba })
-            .where(eq(organizations.id, org.id));
-        }
+    // If org has connected token but no wabaId stored yet, try discovering from token
+    if (!activeWabaId && org?.accessToken && !org.accessToken.startsWith('EAAGm0PX4ZCBO')) {
+      const discoveredWaba = await MetaApiService.fetchSharedWabaId(org.accessToken);
+      if (discoveredWaba && org.id) {
+        activeWabaId = discoveredWaba;
+        await db
+          .update(organizations)
+          .set({ wabaId: discoveredWaba })
+          .where(eq(organizations.id, org.id));
       }
     }
 
