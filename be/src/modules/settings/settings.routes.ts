@@ -682,30 +682,40 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
           .set(orgUpdateData)
           .where(eq(organizations.id, user.orgId));
 
-        // Upsert phone number into database
+        // Upsert phone number into database (ensuring phone_number_id & display_phone_number are never empty strings)
         const existingPhones = await db
           .select()
           .from(phoneNumbers)
           .where(eq(phoneNumbers.organizationId, user.orgId));
 
-        if (existingPhones.length > 0) {
+        const existingPhone = existingPhones.length > 0 ? existingPhones[0] : null;
+
+        const safePhoneId = (finalPhoneId && finalPhoneId.trim())
+          ? finalPhoneId.trim()
+          : (existingPhone?.phoneNumberId || ('phone_' + nanoid(10)));
+
+        const safePhoneNumber = (finalPhone && finalPhone.trim())
+          ? finalPhone.trim()
+          : (existingPhone?.displayPhoneNumber && existingPhone.displayPhoneNumber !== '+62 812-3456-7890' ? existingPhone.displayPhoneNumber : 'Nomor WhatsApp Business');
+
+        if (existingPhone) {
           await db
             .update(phoneNumbers)
             .set({
-              phoneNumberId: finalPhoneId,
-              displayPhoneNumber: finalPhone,
-              verifiedName: finalDisplayName,
+              phoneNumberId: safePhoneId,
+              displayPhoneNumber: safePhoneNumber,
+              verifiedName: finalDisplayName || existingPhone.verifiedName || 'Akun WhatsApp Business Resmi',
               qualityRating: 'GREEN',
               status: 'CONNECTED',
             })
-            .where(eq(phoneNumbers.id, existingPhones[0].id));
+            .where(eq(phoneNumbers.id, existingPhone.id));
         } else {
           await db.insert(phoneNumbers).values({
             id: nanoid(),
             organizationId: user.orgId,
-            phoneNumberId: finalPhoneId,
-            displayPhoneNumber: finalPhone,
-            verifiedName: finalDisplayName,
+            phoneNumberId: safePhoneId,
+            displayPhoneNumber: safePhoneNumber,
+            verifiedName: finalDisplayName || 'Akun WhatsApp Business Resmi',
             qualityRating: 'GREEN',
             status: 'CONNECTED',
           });
