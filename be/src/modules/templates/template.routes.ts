@@ -761,14 +761,99 @@ export const templateRoutes = new Elysia({ prefix: '/templates' })
           });
         }
 
-        // 4. Dispatch Template via Meta Cloud API
+        // 4. Look up Template Definition to ensure parameter counts match Meta's expectations
+        const [tmpl] = await db
+          .select()
+          .from(messageTemplates)
+          .where(
+            and(
+              eq(messageTemplates.organizationId, user.orgId),
+              eq(messageTemplates.name, body.templateName)
+            )
+          )
+          .limit(1);
+
+        const rawComponents = Array.isArray(tmpl?.components) ? tmpl.components : [];
+        let sanitizedComponents: any[] = [];
+
+        // 4a. Header parameter sanitization
+        const headerComp = rawComponents.find((c: any) => (c.type || '').toUpperCase() === 'HEADER');
+        if (headerComp) {
+          const headerFormat = (headerComp.format || '').toUpperCase();
+          const clientHeader = body.components?.find((c: any) => (c.type || '').toLowerCase() === 'header');
+
+          if (headerFormat === 'TEXT') {
+            const headerMatches = (headerComp.text || '').match(/\{\{\d+\}\}/g) || [];
+            if (headerMatches.length > 0) {
+              const clientParams = clientHeader?.parameters || [];
+              sanitizedComponents.push({
+                type: 'header',
+                parameters: headerMatches.map((_: any, idx: number) => ({
+                  type: 'text',
+                  text: clientParams[idx]?.text || body.contactName || 'Pelanggan',
+                })),
+              });
+            }
+          } else if (['IMAGE', 'DOCUMENT', 'VIDEO'].includes(headerFormat)) {
+            if (clientHeader?.parameters && clientHeader.parameters.length > 0) {
+              sanitizedComponents.push(clientHeader);
+            }
+          }
+        }
+
+        // 4b. Body parameter sanitization
+        const bodyComp = rawComponents.find((c: any) => (c.type || '').toUpperCase() === 'BODY');
+        if (bodyComp) {
+          const bodyMatches = (bodyComp.text || '').match(/\{\{\d+\}\}/g) || [];
+          if (bodyMatches.length > 0) {
+            const clientBody = body.components?.find((c: any) => (c.type || '').toLowerCase() === 'body');
+            const clientParams = clientBody?.parameters || [];
+            sanitizedComponents.push({
+              type: 'body',
+              parameters: bodyMatches.map((_: any, idx: number) => ({
+                type: 'text',
+                text: clientParams[idx]?.text || (idx === 0 ? (body.contactName || 'Pelanggan') : '-'),
+              })),
+            });
+          }
+        }
+
+        // 4c. Button parameter sanitization (e.g. dynamic URLs)
+        const btnComp = rawComponents.find((c: any) => (c.type || '').toUpperCase() === 'BUTTONS');
+        if (btnComp && Array.isArray(btnComp.buttons)) {
+          btnComp.buttons.forEach((btn: any, btnIndex: number) => {
+            const btnType = (btn.type || '').toUpperCase();
+            if (btnType === 'URL' && (btn.url || '').includes('{{')) {
+              sanitizedComponents.push({
+                type: 'button',
+                sub_type: 'url',
+                index: String(btnIndex),
+                parameters: [{ type: 'text', text: 'promo' }],
+              });
+            } else if (btnType === 'COPY_CODE') {
+              sanitizedComponents.push({
+                type: 'button',
+                sub_type: 'copy_code',
+                index: String(btnIndex),
+                parameters: [{ type: 'coupon_code', coupon_code: btn.example || 'PROMO2026' }],
+              });
+            }
+          });
+        }
+
+        // Fallback: If no template in DB or no components found in DB, use client's components
+        if (rawComponents.length === 0 && body.components && body.components.length > 0) {
+          sanitizedComponents = body.components;
+        }
+
+        // 5. Dispatch Template via Meta Cloud API
         const metaRes = await MetaApiService.sendTemplateMessage(
           {
             phoneNumberId: activePhoneNumberId,
             recipientWaId: targetNumber,
             templateName: body.templateName,
-            languageCode: body.languageCode || 'id',
-            components: body.components,
+            languageCode: body.languageCode || tmpl?.language || 'id',
+            components: sanitizedComponents.length > 0 ? sanitizedComponents : undefined,
           },
           activeAccessToken
         );

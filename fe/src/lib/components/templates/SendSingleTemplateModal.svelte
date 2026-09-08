@@ -84,6 +84,17 @@
     return selectedTemplate?.components?.find((c: any) => c.type === 'FOOTER') || null;
   });
 
+  // Check if header needs dynamic parameters
+  let headerNeedsParam = $derived.by(() => {
+    if (!headerComponent) return false;
+    const format = (headerComponent.format || '').toUpperCase();
+    if (format === 'IMAGE' || format === 'DOCUMENT' || format === 'VIDEO') return true;
+    if (format === 'TEXT') {
+      return (headerComponent.text || '').includes('{{');
+    }
+    return false;
+  });
+
   // Extract variable indices in BODY e.g. {{1}}, {{2}}
   let bodyVarIndices = $derived.by(() => {
     const text = bodyComponent?.text || '';
@@ -152,19 +163,20 @@
       // Build Meta API components structure
       const formattedComponents: any[] = [];
 
-      // 1. HEADER parameters
-      if (headerComponent) {
-        if (headerComponent.format === 'TEXT' && headerVar.trim()) {
+      // 1. HEADER parameters (only if header is dynamic)
+      if (headerComponent && headerNeedsParam) {
+        const format = (headerComponent.format || '').toUpperCase();
+        if (format === 'TEXT' && headerVar.trim()) {
           formattedComponents.push({
             type: 'header',
             parameters: [{ type: 'text', text: headerVar.trim() }],
           });
-        } else if (headerComponent.format === 'IMAGE' && headerMediaUrl.trim()) {
+        } else if (format === 'IMAGE' && headerMediaUrl.trim()) {
           formattedComponents.push({
             type: 'header',
             parameters: [{ type: 'image', image: { link: headerMediaUrl.trim() } }],
           });
-        } else if (headerComponent.format === 'DOCUMENT' && headerMediaUrl.trim()) {
+        } else if (format === 'DOCUMENT' && headerMediaUrl.trim()) {
           formattedComponents.push({
             type: 'header',
             parameters: [{ type: 'document', document: { link: headerMediaUrl.trim(), filename: 'Dokumen.pdf' } }],
@@ -325,16 +337,16 @@
 
           <!-- Variabel Form (jika ada variable {{1}}, {{2}} dll) -->
           {#if selectedTemplate}
-            {#if headerComponent && (headerComponent.format === 'TEXT' || headerComponent.format === 'IMAGE' || headerComponent.format === 'DOCUMENT')}
+            {#if headerComponent && headerNeedsParam}
               <div class="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 space-y-2">
                 <span class="text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-                  Header Template ({headerComponent.format}):
+                  Variabel Header ({headerComponent.format}):
                 </span>
                 {#if headerComponent.format === 'TEXT'}
                   <input
                     type="text"
                     bind:value={headerVar}
-                    placeholder="Isi teks header..."
+                    placeholder="Isi teks variabel header..."
                     class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-semibold focus:outline-none focus:border-emerald-500"
                   />
                 {:else if headerComponent.format === 'IMAGE' || headerComponent.format === 'DOCUMENT'}
