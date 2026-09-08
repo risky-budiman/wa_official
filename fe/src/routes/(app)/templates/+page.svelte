@@ -26,8 +26,10 @@
     Send,
     Link,
     Phone,
-    ExternalLink
+    ExternalLink,
+    Zap
   } from 'lucide-svelte';
+  import SendSingleTemplateModal from '$lib/components/templates/SendSingleTemplateModal.svelte';
 
   interface TemplateComponent {
     type: 'HEADER' | 'BODY' | 'FOOTER' | 'BUTTONS';
@@ -144,6 +146,15 @@
   let modalMode = $state<'create' | 'edit'>('create');
   let editingId = $state<string | null>(null);
   let isSubmitting = $state(false);
+
+  // Send Single Template Modal State
+  let showSendSingleModal = $state(false);
+  let singleModalTemplate = $state<TemplateItem | null>(null);
+
+  function openSendSingleModal(tpl: TemplateItem) {
+    singleModalTemplate = tpl;
+    showSendSingleModal = true;
+  }
 
   // Form Fields
   let formName = $state('');
@@ -756,8 +767,19 @@
           <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
             <span>Dibuat: {new Date(tpl.createdAt).toLocaleDateString('id-ID')}</span>
 
-            {#if authStore.role !== 'AGENT'}
-              <div class="flex items-center gap-1">
+            <div class="flex items-center gap-1.5">
+              {#if tpl.status === 'APPROVED'}
+                <button
+                  onclick={() => openSendSingleModal(tpl)}
+                  class="py-1 px-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white font-bold text-[11px] flex items-center gap-1 shadow-xs transition cursor-pointer"
+                  title="Kirim pesan template ini ke nomor WhatsApp tertentu tanpa broadcast"
+                >
+                  <Zap class="w-3.5 h-3.5 fill-current" />
+                  <span>Kirim Instan</span>
+                </button>
+              {/if}
+
+              {#if authStore.role !== 'AGENT'}
                 <!-- Edit Button -->
                 <button
                   onclick={() => openEditModal(tpl)}
@@ -775,14 +797,31 @@
                 >
                   <Trash2 class="w-3.5 h-3.5" />
                 </button>
-              </div>
-            {/if}
+              {/if}
+            </div>
           </div>
         </div>
       {/each}
     </div>
   {/if}
 </div>
+
+<!-- Modal Kirim Single Template -->
+<SendSingleTemplateModal
+  bind:isOpen={showSendSingleModal}
+  templates={templateList}
+  initialTemplate={singleModalTemplate}
+  onClose={() => {
+    showSendSingleModal = false;
+  }}
+  onSuccess={() => {
+    feedbackMessage = {
+      text: 'Pesan template berhasil terkirim!',
+      type: 'success'
+    };
+    setTimeout(() => (feedbackMessage = null), 4500);
+  }}
+/>
 
 <!-- Modal Create / Edit Template -->
 {#if showModal}

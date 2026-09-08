@@ -19,8 +19,11 @@
     Tag,
     Clock,
     RefreshCw,
-    Sparkles
+    Sparkles,
+    Zap,
+    Send
   } from 'lucide-svelte';
+  import SendSingleTemplateModal from '$lib/components/templates/SendSingleTemplateModal.svelte';
 
   interface ContactItem {
     id: string;
@@ -59,6 +62,26 @@
   let editEmail = $state('');
   let editTag = $state('');
   let isSavingEdit = $state(false);
+
+  // Send Template Modal State
+  let showSendTemplateModal = $state(false);
+  let selectedContactForTemplate = $state<ContactItem | null>(null);
+  let approvedTemplates = $state<any[]>([]);
+
+  async function loadApprovedTemplates() {
+    const res = await apiRequest<{ items: any[] }>('/templates');
+    if (res.success && res.items) {
+      approvedTemplates = res.items.filter((t) => t.status === 'APPROVED');
+    }
+  }
+
+  function openSendTemplateModal(contact: ContactItem) {
+    selectedContactForTemplate = contact;
+    showSendTemplateModal = true;
+    if (approvedTemplates.length === 0) {
+      loadApprovedTemplates();
+    }
+  }
 
   async function loadContacts(page = 1) {
     isLoading = true;
@@ -209,6 +232,7 @@
 
   onMount(() => {
     loadContacts(1);
+    loadApprovedTemplates();
   });
 </script>
 
@@ -386,8 +410,17 @@
                 <td class="py-3.5 px-4 text-right">
                   <div class="flex items-center justify-end gap-1.5 opacity-90 group-hover:opacity-100">
                     <button
+                      onclick={() => openSendTemplateModal(contact)}
+                      class="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900 border border-emerald-200 dark:border-emerald-800 transition cursor-pointer flex items-center gap-1 font-bold text-[11px]"
+                      title="Kirim pesan template instan ke nomor ini"
+                    >
+                      <Zap class="w-3.5 h-3.5 fill-current" />
+                      <span class="hidden sm:inline">Kirim Template</span>
+                    </button>
+
+                    <button
                       onclick={() => goto('/inbox')}
-                      class="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800 transition cursor-pointer"
+                      class="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition cursor-pointer"
                       title="Buka Chat di Inbox"
                     >
                       <MessageSquare class="w-3.5 h-3.5" />
@@ -623,3 +656,18 @@
     </div>
   </div>
 {/if}
+
+<!-- Modal Kirim Single Template -->
+<SendSingleTemplateModal
+  bind:isOpen={showSendTemplateModal}
+  templates={approvedTemplates}
+  initialPhoneNumber={selectedContactForTemplate?.waId || ''}
+  initialContactName={selectedContactForTemplate?.name || ''}
+  onClose={() => {
+    showSendTemplateModal = false;
+  }}
+  onSuccess={() => {
+    successMsg = 'Pesan template berhasil terkirim!';
+    setTimeout(() => (successMsg = null), 4500);
+  }}
+/>

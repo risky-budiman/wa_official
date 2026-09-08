@@ -7,7 +7,7 @@ import { eq, and, desc } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { env } from '../../config/env';
 import { db } from '../../config/database';
-import { messageTemplates, organizations } from '../../db/schema';
+import { messageTemplates, organizations, contacts, conversations, messages, phoneNumbers } from '../../db/schema';
 import { authPlugin } from '../../middleware/auth';
 import { rbacPlugin } from '../../middleware/rbac';
 import { MetaApiService } from '../../services/meta-api.service';
@@ -667,6 +667,162 @@ export const templateRoutes = new Elysia({ prefix: '/templates' })
         ),
         language: t.Optional(t.String()),
         components: t.Array(t.Any()),
+      }),
+    }
+  )
+
+  // ─── POST /templates/send-individual (Send Template to 1 Specific Number) ──
+  .post(
+    '/send-individual',
+    async ({ user, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { success: false, error: 'Unauthorized' };
+      }
+
+      try {
+        let targetNumber = (body.recipientWaId || '').replace(/[^0-9]/g, '');
+        if (targetNumber.startsWith('08')) {
+          targetNumber = '62' + targetNumber.slice(1);
+        } else if (targetNumber.startsWith('8')) {
+          targetNumber = '62' + targetNumber;
+        }
+
+        if (!targetNumber || targetNumber.length < 9) {
+          set.status = 400;
+          return { success: false, error: 'Nomor WhatsApp tujuan tidak valid' };
+        }
+
+        // 1. Resolve Contact
+        const [existingContact] = await db
+          .select()
+          .from(contacts)
+          .where(
+            and(
+              eq(contacts.organizationId, user.orgId),
+              eq(contacts.waId, targetNumber)
+            )
+          )
+          .limit(1);
+
+        let contactId = existingContact?.id;
+        if (!contactId) {
+          contactId = nanoid();
+          await db.insert(contacts).values({
+            id: contactId,
+            organizationId: user.orgId,
+            name: body.contactName || `Kontak +${targetNumber}`,
+            phoneNumber: `+${targetNumber}`,
+            waId: targetNumber,
+          });
+        }
+
+        // 2. Resolve Active Credentials & Phone Record
+        const phones = await db
+          .select()
+          .from(phoneNumbers)
+          .where(eq(phoneNumbers.organizationId, user.orgId));
+        const phone = phones.length > 0 ? phones[0] : null;
+        const activePhoneNumberId = phone?.phoneNumberId || env.META_PHONE_NUMBER_ID;
+
+        const [org] = await db
+          .select({ accessToken: organizations.accessToken })
+          .from(organizations)
+          .where(eq(organizations.id, user.orgId))
+          .limit(1);
+
+        const activeAccessToken = org?.accessToken && !org.accessToken.startsWith('EAAGm0PX4ZCBO')
+          ? org.accessToken
+          : env.META_ACCESS_TOKEN;
+
+        // 3. Resolve Conversation
+        const [existingConv] = await db
+          .select()
+          .from(conversations)
+          .where(
+            and(
+              eq(conversations.organizationId, user.orgId),
+              eq(conversations.contactId, contactId)
+            )
+          )
+          .limit(1);
+
+        let conversationId = existingConv?.id;
+        if (!conversationId) {
+          conversationId = nanoid();
+          await db.insert(conversations).values({
+            id: conversationId,
+            organizationId: user.orgId,
+            phoneNumberId: phone?.id || nanoid(),
+            contactId,
+            status: 'OPEN',
+            lastMessagePreview: `Template: ${body.templateName}`,
+            lastMessageAt: new Date(),
+          });
+        }
+
+        // 4. Dispatch Template via Meta Cloud API
+        const metaRes = await MetaApiService.sendTemplateMessage(
+          {
+            phoneNumberId: activePhoneNumberId,
+            recipientWaId: targetNumber,
+            templateName: body.templateName,
+            languageCode: body.languageCode || 'id',
+            components: body.components,
+          },
+          activeAccessToken
+        );
+
+        const wamid = metaRes.messages?.[0]?.id || `wamid.${nanoid()}`;
+
+        // 5. Log Message in DB
+        const messageId = nanoid();
+        await db.insert(messages).values({
+          id: messageId,
+          conversationId,
+          senderType: 'AGENT',
+          senderId: user.id,
+          direction: 'OUTBOUND',
+          messageType: 'template',
+          content: JSON.stringify({
+            templateName: body.templateName,
+            languageCode: body.languageCode || 'id',
+            components: body.components,
+          }),
+          wamid,
+          status: 'SENT',
+          isInternalNote: false,
+          createdAt: new Date(),
+        });
+
+        // 6. Update Conversation Status
+        await db
+          .update(conversations)
+          .set({
+            lastMessagePreview: `Template: ${body.templateName}`,
+            lastMessageAt: new Date(),
+            status: existingConv?.status === 'RESOLVED' || existingConv?.status === 'EXPIRED' ? 'OPEN' : (existingConv?.status || 'OPEN'),
+          })
+          .where(eq(conversations.id, conversationId));
+
+        return {
+          success: true,
+          message: `Pesan template "${body.templateName}" berhasil dikirim ke +${targetNumber}!`,
+          messageId,
+          wamid,
+        };
+      } catch (err: any) {
+        set.status = 400;
+        return { success: false, error: err.message || 'Gagal mengirim pesan template' };
+      }
+    },
+    {
+      body: t.Object({
+        recipientWaId: t.String({ minLength: 9 }),
+        templateName: t.String({ minLength: 2 }),
+        languageCode: t.Optional(t.String()),
+        components: t.Optional(t.Array(t.Any())),
+        contactName: t.Optional(t.String()),
       }),
     }
   )
