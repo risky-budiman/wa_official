@@ -80,8 +80,9 @@ export async function testConnection(): Promise<void> {
       await connection.query(`ALTER TABLE broadcast_campaigns MODIFY COLUMN created_by_id VARCHAR(36) NULL;`);
     } catch (_) {}
 
+    // Auto-migration: Purge any old dummy WABA ID (1386698372551547) from database
     try {
-      await connection.query(`ALTER TABLE users ADD COLUMN is_primary_admin TINYINT(1) DEFAULT 0;`);
+      await connection.query(`UPDATE organizations SET waba_id = NULL WHERE waba_id = '1386698372551547';`);
     } catch (_) {}
 
     // Auto-create super_admins table if not exists & migrate platform admins from users

@@ -643,10 +643,10 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
           }
         }
 
-        // Fallback to org's existing WABA ID or env.META_WABA_ID only if no WABA ID was discovered
-        if (!finalWabaId) {
+        // Fallback to org's existing valid WABA ID if no new WABA ID was discovered
+        if (!finalWabaId || finalWabaId === '1386698372551547') {
           const [orgData] = await db.select({ wabaId: organizations.wabaId }).from(organizations).where(eq(organizations.id, user.orgId)).limit(1);
-          finalWabaId = orgData?.wabaId || env.META_WABA_ID || '';
+          finalWabaId = (orgData?.wabaId && orgData.wabaId !== '1386698372551547') ? orgData.wabaId : '';
         }
 
         // 2. Automatically fetch live business name & phone numbers from Meta
