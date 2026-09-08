@@ -524,20 +524,26 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
     }
   }
 
+  let isProcessingOAuth = false;
+
   // 🔵 Launch Meta Embedded Signup / Login with Facebook
   async function connectWithFacebook() {
     fbSuccessMsg = null;
     fbErrorMsg = null;
+    isProcessingOAuth = false;
 
     let realAppId = appId.trim();
 
     if (!realAppId) {
-      await loadSettings();
-      realAppId = appId.trim();
+      const res = await apiRequest<any>('/settings/waba');
+      if (res && res.success) {
+        realAppId = (res.organization?.appId || res.appId || '').trim();
+        if (realAppId) appId = realAppId;
+      }
     }
 
     if (!realAppId) {
-      fbErrorMsg = 'Meta App ID belum dikonfigurasi pada server backend (.env). Harap periksa nilai META_APP_ID di file .env server backend.';
+      fbErrorMsg = 'Meta App ID belum dikonfigurasi pada file .env server backend (META_APP_ID). Harap periksa nilai META_APP_ID di file .env server backend.';
       return;
     }
 
@@ -555,37 +561,48 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
     const pollTimer = setInterval(async () => {
       if (popup.closed) {
         clearInterval(pollTimer);
-        isConnectingFb = false;
-        await channelStore.checkStatus();
-        await loadSettings();
+        if (!isProcessingOAuth) {
+          isConnectingFb = false;
+          await channelStore.checkStatus();
+          await loadSettings();
+        }
       }
     }, 1000);
   }
 
   async function handleOAuthCode(code: string) {
+    if (isProcessingOAuth) return;
+    isProcessingOAuth = true;
     isConnectingFb = true;
     fbSuccessMsg = 'Menerima otorisasi Facebook, mengambil data akun WhatsApp asli dari Meta...';
     
     const redirectUri = window.location.origin + '/admin/settings';
 
-    const res = await apiRequest<any>('/settings/waba/embedded-signup', {
-      method: 'POST',
-      body: JSON.stringify({
-        code,
-        redirectUri,
-      }),
-    });
-    isConnectingFb = false;
+    try {
+      const res = await apiRequest<any>('/settings/waba/embedded-signup', {
+        method: 'POST',
+        body: JSON.stringify({
+          code,
+          redirectUri,
+        }),
+      });
 
-    if (res.success && res.connectedChannel) {
-      channelStore.setConnected(res.connectedChannel);
-      fbSuccessMsg = 'Selamat! Akun WhatsApp Business resmi Anda berhasil terhubung via Facebook!';
-      await channelStore.checkStatus();
-      await loadSettings();
-      setTimeout(() => (fbSuccessMsg = null), 6000);
-    } else {
+      if (res.success && res.connectedChannel) {
+        channelStore.setConnected(res.connectedChannel);
+        fbSuccessMsg = 'Selamat! Akun WhatsApp Business resmi Anda berhasil terhubung via Facebook!';
+        await channelStore.checkStatus();
+        await loadSettings();
+        setTimeout(() => (fbSuccessMsg = null), 6000);
+      } else {
+        fbSuccessMsg = null;
+        fbErrorMsg = res.error || 'Gagal menyelesaikan otorisasi Facebook';
+      }
+    } catch (err: any) {
       fbSuccessMsg = null;
-      fbErrorMsg = res.error || 'Gagal menyelesaikan otorisasi Facebook';
+      fbErrorMsg = err.message || 'Gagal terhubung dengan Facebook';
+    } finally {
+      isConnectingFb = false;
+      isProcessingOAuth = false;
     }
   }
 
