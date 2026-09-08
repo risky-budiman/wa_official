@@ -168,25 +168,29 @@ export class WebhookProcessor {
         const phoneNumberId = value.metadata?.phone_number_id;
         if (!phoneNumberId) continue;
 
-        // 1. Resolve Organization by Registered Phone Number ID (with Auto-Pair Fallback)
+        // 1. Resolve Organization by Registered Phone Number ID
         let [phone] = await db
           .select()
           .from(phoneNumbers)
           .where(eq(phoneNumbers.phoneNumberId, phoneNumberId))
           .limit(1);
 
-        // Get active user organization (excluding seed org-demo-default)
-        const [activeOrg] = await db
-          .select({ id: organizations.id })
-          .from(organizations)
-          .where(sql`${organizations.id} != 'org-demo-default'`)
-          .orderBy(desc(organizations.createdAt))
-          .limit(1);
+        let targetOrgId: string;
 
-        const targetOrgId = activeOrg?.id || phone?.organizationId || 'org-demo-default';
+        if (phone && phone.organizationId) {
+          // Strictly route to the tenant/organization where this phone number is legitimately linked!
+          targetOrgId = phone.organizationId;
+        } else {
+          // Fallback only if phone number is completely unlinked: find active organization
+          const [activeOrg] = await db
+            .select({ id: organizations.id })
+            .from(organizations)
+            .where(sql`${organizations.id} != 'org-demo-default'`)
+            .orderBy(desc(organizations.createdAt))
+            .limit(1);
 
-        if (!phone) {
-          // Auto-pair fallback: find existing phone record or first organization
+          targetOrgId = activeOrg?.id || 'org-demo-default';
+
           const [firstPhone] = await db.select().from(phoneNumbers).limit(1);
           if (firstPhone) {
             await db
@@ -229,13 +233,6 @@ export class WebhookProcessor {
             };
             console.log(`✨ Auto-created phone record for Phone Number ID ${phoneNumberId}`);
           }
-        } else if (phone.organizationId !== targetOrgId && targetOrgId !== 'org-demo-default') {
-          // Ensure phone is linked to user's real active organization
-          await db
-            .update(phoneNumbers)
-            .set({ organizationId: targetOrgId })
-            .where(eq(phoneNumbers.id, phone.id));
-          phone.organizationId = targetOrgId;
         }
 
         const orgId = targetOrgId;
