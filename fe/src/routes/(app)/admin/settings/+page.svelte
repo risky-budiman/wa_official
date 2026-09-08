@@ -424,7 +424,6 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
     if (channelStore.channel?.companyName) {
       companyName = channelStore.channel.companyName;
     }
-    if (authStore.role !== 'ADMINISTRATOR' && authStore.role !== 'SUPER_ADMIN') return;
 
     const res = await apiRequest<any>('/settings/waba');
     if (res.success) {

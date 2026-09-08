@@ -15,7 +15,7 @@ if (fs.existsSync(envPath)) {
       const idx = trimmed.indexOf('=');
       const key = trimmed.slice(0, idx).trim();
       const val = trimmed.slice(idx + 1).trim().replace(/^["']|["']$/g, '');
-      if (key && !process.env[key]) {
+      if (key && val) {
         process.env[key] = val;
       }
     }
@@ -46,8 +46,8 @@ export const env = {
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '7d',
 
   // Meta WhatsApp Cloud API
-  META_APP_ID: process.env.META_APP_ID || '',
-  META_APP_SECRET: process.env.META_APP_SECRET || '',
+  META_APP_ID: (process.env.META_APP_ID || '').trim(),
+  META_APP_SECRET: (process.env.META_APP_SECRET || '').trim(),
   META_ACCESS_TOKEN: process.env.META_ACCESS_TOKEN || '',
   META_PHONE_NUMBER_ID: process.env.META_PHONE_NUMBER_ID || '',
   META_WABA_ID: process.env.META_WABA_ID || '',
