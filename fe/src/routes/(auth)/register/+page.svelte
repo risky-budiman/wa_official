@@ -2,7 +2,7 @@
   import { authStore } from '$lib/stores/auth.svelte';
   import { apiRequest } from '$lib/api/client';
   import { goto } from '$app/navigation';
-  import { Bot, Lock, Mail, User, Building, ArrowRight, AlertCircle, Users, Plus, Link, CheckCircle2, Shield, Eye, EyeOff } from 'lucide-svelte';
+  import { Bot, Lock, Mail, User, Building, ArrowRight, AlertCircle, Users, Plus, Link, CheckCircle2, Eye, EyeOff } from 'lucide-svelte';
 
   // ─── Mode: 'create' = Buat Organisasi Baru, 'join' = Gabung Organisasi ───
   let mode = $state<'create' | 'join'>('create');
@@ -18,7 +18,6 @@
 
   // ─── Join Org Fields ───
   let organizationId = $state('');
-  let selectedRole = $state<'AGENT' | 'SUPERVISOR'>('AGENT');
   let orgLookup = $state<{ name: string; id: string; memberCount: number } | null>(null);
   let orgLookupLoading = $state(false);
   let orgLookupError = $state<string | null>(null);
@@ -101,7 +100,6 @@
       body.organizationName = organizationName.trim();
     } else {
       body.organizationId = organizationId.trim();
-      body.role = selectedRole;
     }
 
     const res = await authStore.register(body);
@@ -235,35 +233,15 @@
             {/if}
           </div>
 
-          <!-- Role Selector (Join Mode) -->
-          <div>
-            <span class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Peran Anda di Tim</span>
-            <div class="grid grid-cols-2 gap-2.5">
-              <button
-                type="button"
-                onclick={() => selectedRole = 'AGENT'}
-                class="p-3 rounded-xl border text-left transition cursor-pointer
-                  {selectedRole === 'AGENT' ? 'bg-emerald-500/10 border-emerald-500/40 ring-1 ring-emerald-500/30' : 'bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-700/60 hover:border-slate-300 dark:hover:border-slate-600'}"
-              >
-                <div class="flex items-center gap-2 mb-1">
-                  <User class="w-3.5 h-3.5 {selectedRole === 'AGENT' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}" />
-                  <span class="text-xs font-bold {selectedRole === 'AGENT' ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-700 dark:text-slate-300'}">Agent</span>
-                </div>
-                <p class="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed">Menangani chat pelanggan</p>
-              </button>
-              <button
-                type="button"
-                onclick={() => selectedRole = 'SUPERVISOR'}
-                class="p-3 rounded-xl border text-left transition cursor-pointer
-                  {selectedRole === 'SUPERVISOR' ? 'bg-amber-500/10 border-amber-500/40 ring-1 ring-amber-500/30' : 'bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-700/60 hover:border-slate-300 dark:hover:border-slate-600'}"
-              >
-                <div class="flex items-center gap-2 mb-1">
-                  <Shield class="w-3.5 h-3.5 {selectedRole === 'SUPERVISOR' ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400'}" />
-                  <span class="text-xs font-bold {selectedRole === 'SUPERVISOR' ? 'text-amber-700 dark:text-amber-400' : 'text-slate-700 dark:text-slate-300'}">Supervisor</span>
-                </div>
-                <p class="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed">Monitoring & manajemen tim</p>
-              </button>
+          <!-- Role info (Join Mode) — role is assigned by the organization's Administrator -->
+          <div class="p-3 rounded-xl border bg-emerald-500/10 border-emerald-500/40">
+            <div class="flex items-center gap-2 mb-1">
+              <User class="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+              <span class="text-xs font-bold text-emerald-700 dark:text-emerald-400">Bergabung sebagai Agent</span>
             </div>
+            <p class="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed">
+              Akun baru masuk sebagai Agent. Administrator organisasi dapat mengubah peran Anda (mis. Supervisor) lewat menu Manajemen Pengguna.
+            </p>
           </div>
         {/if}
 

@@ -88,7 +88,8 @@
       body: JSON.stringify({
         fullName: newName.trim(),
         email: newEmail.trim(),
-        password: newPassword.trim() || 'admin12345',
+        // Empty → server generates a strong random password and returns it once
+        ...(newPassword.trim() ? { password: newPassword.trim() } : {}),
         role: newRole,
       }),
     });
@@ -100,9 +101,12 @@
       newEmail = '';
       newPassword = '';
       newRole = 'AGENT';
-      successMsg = 'Pengguna baru berhasil ditambahkan!';
+      const generated = (res as any).item?.generatedPassword;
+      successMsg = generated
+        ? `Pengguna baru berhasil ditambahkan! Password sementara: ${generated} — catat & berikan ke pengguna (tidak akan ditampilkan lagi).`
+        : 'Pengguna baru berhasil ditambahkan!';
       await loadUsers();
-      setTimeout(() => (successMsg = null), 4000);
+      setTimeout(() => (successMsg = null), generated ? 60000 : 4000);
     } else {
       errorMsg = res.error || 'Gagal menambahkan pengguna baru';
     }
@@ -436,7 +440,7 @@
         </div>
 
         <div>
-          <label for="new_user_pwd" class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Kata Sandi (Default: admin12345)</label>
+          <label for="new_user_pwd" class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Kata Sandi (kosongkan = dibuatkan otomatis)</label>
           <input
             id="new_user_pwd"
             type="password"

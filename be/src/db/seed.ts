@@ -18,6 +18,12 @@ import {
 import { eq } from 'drizzle-orm';
 
 async function seed() {
+  // 🔒 Demo seed uses the well-known password "admin12345" — never run it on production by accident
+  if ((process.env.NODE_ENV || '') === 'production' && !process.argv.includes('--force')) {
+    console.error('❌ Seed demo dibatalkan: NODE_ENV=production. Seed ini membuat akun dengan password "admin12345".');
+    console.error('   Jika benar-benar ingin menjalankannya (mis. di server lokal), tambahkan flag --force.');
+    process.exit(1);
+  }
   console.log('🌱 Memulai seeding akun default...');
 
   const orgId = 'org-demo-default';

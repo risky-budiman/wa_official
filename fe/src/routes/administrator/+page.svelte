@@ -1646,7 +1646,9 @@
         type: "error",
       };
     }
-    setTimeout(() => (feedbackMessage = null), 5000);
+    // Keep the message longer when it contains a one-time generated password
+    const hasGeneratedPwd = Boolean(res.success && res.data?.generatedAdminPassword);
+    setTimeout(() => (feedbackMessage = null), hasGeneratedPwd ? 60000 : 5000);
   }
 
   async function handleEditTenant(e: Event) {
@@ -2118,6 +2120,7 @@
             </button>
           </form>
 
+          {#if import.meta.env.DEV}
           <div
             class="pt-3 border-t border-slate-100 dark:border-slate-800/80 text-center"
           >
@@ -2128,6 +2131,7 @@
               / <span class="font-mono text-indigo-500">admin12345</span>
             </p>
           </div>
+          {/if}
         </div>
       </div>
     </div>

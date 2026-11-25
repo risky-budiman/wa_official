@@ -2,6 +2,7 @@
 // Meta WhatsApp Cloud API Client Service
 // ===========================================
 
+import { nanoid } from 'nanoid';
 import { env } from '../config/env';
 
 export interface MetaSendTextParams {
@@ -498,7 +499,9 @@ export class MetaApiService {
       else if (mimeType.includes('msword') || mimeType.includes('document')) ext = 'docx';
       else if (mimeType.includes('sheet') || mimeType.includes('excel')) ext = 'xlsx';
 
-      const filename = `${mediaId}.${ext}`;
+      // Random suffix so customer media URLs cannot be guessed from the Meta media ID
+      const safeMediaId = String(mediaId).replace(/[^a-zA-Z0-9_-]/g, '');
+      const filename = `${safeMediaId}_${nanoid(20)}.${ext}`;
 
       // 2. Download binary payload from the temporary lookaside URL
       const resBinary = await fetch(metaData.url, {

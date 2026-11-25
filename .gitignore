@@ -28,3 +28,6 @@ npm-debug.log*
 
 # Drizzle
 src/db/migrations/*.sql
+
+# Auto-generated JWT secret (never commit)
+.jwt-secret

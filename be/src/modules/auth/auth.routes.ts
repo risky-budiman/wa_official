@@ -3,11 +3,12 @@
 // ===========================================
 
 import { Elysia, t } from 'elysia';
-import { authPlugin } from '../../middleware/auth';
+import { authPlugin, invalidateAccountCache } from '../../middleware/auth';
 import { AuthService } from './auth.service';
 import { db } from '../../config/database';
 import { users } from '../../db/schema/users';
 import { organizations } from '../../db/schema/organizations';
+import { superAdmins } from '../../db/schema/super-admins';
 import { eq, and, ne } from 'drizzle-orm';
 
 export const authRoutes = new Elysia({ prefix: '/auth' })
@@ -107,6 +108,27 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
 
     try {
       const [dbUser] = await db.select().from(users).where(eq(users.id, user.id)).limit(1);
+
+      // Platform staff (Super Admin / Finance / Support) live in the super_admins table
+      if (!dbUser) {
+        const [sa] = await db.select().from(superAdmins).where(eq(superAdmins.id, user.id)).limit(1);
+        if (sa) {
+          return {
+            success: true,
+            user: {
+              id: sa.id,
+              email: sa.email,
+              fullName: sa.fullName,
+              role: sa.role,
+              organizationId: null,
+              organizationName: 'Platform Administrator (Independen)',
+              isOnline: true,
+              isPrimaryAdmin: Boolean(sa.isPrimaryAdmin),
+            },
+          };
+        }
+      }
+
       const [org] = (dbUser?.organizationId)
         ? await db.select().from(organizations).where(eq(organizations.id, dbUser.organizationId)).limit(1)
         : [null];
@@ -121,7 +143,7 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
           organizationId: dbUser?.organizationId || null,
           organizationName: org?.name || 'Platform Administrator (Independen)',
           isOnline: dbUser?.isOnline ?? true,
-          isPrimaryAdmin: Boolean(dbUser?.isPrimaryAdmin || dbUser?.email === 'admin@perusahaan.com' || dbUser?.email === 'riskybudiman1@gmail.com'),
+          isPrimaryAdmin: Boolean(dbUser?.isPrimaryAdmin),
         },
       };
     } catch {
@@ -149,7 +171,17 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
         return { success: false, error: 'Unauthorized' };
       }
 
-      const [dbUser] = await db.select().from(users).where(eq(users.id, user.id)).limit(1);
+      // Tenant users live in `users`; platform staff live in `super_admins`
+      const [tenantUser] = await db.select().from(users).where(eq(users.id, user.id)).limit(1);
+      const [platformUser] = tenantUser
+        ? [undefined]
+        : await db.select().from(superAdmins).where(eq(superAdmins.id, user.id)).limit(1);
+      const isPlatform = !tenantUser && !!platformUser;
+      const dbUser = (tenantUser || platformUser) as
+        | { id: string; email: string; fullName: string; role: any; passwordHash: string; organizationId?: string | null }
+        | undefined;
+      const accountTable: any = isPlatform ? superAdmins : users;
+
       if (!dbUser) {
         set.status = 404;
         return { success: false, error: 'Pengguna tidak ditemukan' };
@@ -164,9 +196,9 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
       if (body.email && body.email.trim().toLowerCase() !== dbUser.email.toLowerCase()) {
         const cleanEmail = body.email.trim().toLowerCase();
         const [existing] = await db
-          .select({ id: users.id })
-          .from(users)
-          .where(and(eq(users.email, cleanEmail), ne(users.id, user.id)))
+          .select({ id: accountTable.id })
+          .from(accountTable)
+          .where(and(eq(accountTable.email, cleanEmail), ne(accountTable.id, user.id)))
           .limit(1);
 
         if (existing) {
@@ -177,15 +209,19 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
       }
 
       if (body.newPassword && body.newPassword.trim()) {
-        if (body.currentPassword) {
-          const isCurrentValid = await Bun.password.verify(body.currentPassword, dbUser.passwordHash).catch(() => false);
-          if (!isCurrentValid) {
-            const { verify } = await import('argon2');
-            const isArgonValid = await verify(dbUser.passwordHash, body.currentPassword).catch(() => false);
-            if (!isArgonValid) {
-              set.status = 400;
-              return { success: false, error: 'Password saat ini salah.' };
-            }
+        // 🔒 Changing the password always requires the current password
+        if (!body.currentPassword || !body.currentPassword.trim()) {
+          set.status = 400;
+          return { success: false, error: 'Masukkan password saat ini untuk mengganti password.' };
+        }
+
+        const isCurrentValid = await Bun.password.verify(body.currentPassword, dbUser.passwordHash).catch(() => false);
+        if (!isCurrentValid) {
+          const { verify } = await import('argon2');
+          const isArgonValid = await verify(dbUser.passwordHash, body.currentPassword).catch(() => false);
+          if (!isArgonValid) {
+            set.status = 400;
+            return { success: false, error: 'Password saat ini salah.' };
           }
         }
 
@@ -197,7 +233,8 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
       }
 
       if (Object.keys(updateData).length > 0) {
-        await db.update(users).set(updateData).where(eq(users.id, user.id));
+        await db.update(accountTable).set(updateData).where(eq(accountTable.id, user.id));
+        invalidateAccountCache(user.id);
       }
 
       const finalEmail = updateData.email || dbUser.email;

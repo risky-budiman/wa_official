@@ -4,16 +4,13 @@
 
 import { Elysia, t } from 'elysia';
 import { jwt } from '@elysiajs/jwt';
-import { env } from '../config/env';
-import type { JwtPayload } from '../middleware/auth';
+import { and, eq } from 'drizzle-orm';
+import { db } from '../config/database';
+import { conversations } from '../db/schema/conversations';
+import { jwtConfig, resolveUserFromToken, type JwtPayload } from '../middleware/auth';
 
 export const wsPlugin = new Elysia({ name: 'ws-server' })
-  .use(
-    jwt({
-      name: 'jwt',
-      secret: env.JWT_SECRET,
-    })
-  )
+  .use(jwt(jwtConfig))
   .ws('/ws', {
     query: t.Object({
       token: t.Optional(t.String()),
@@ -28,7 +25,7 @@ export const wsPlugin = new Elysia({ name: 'ws-server' })
       }
 
       try {
-        const user = (await ws.data.jwt.verify(token)) as unknown as JwtPayload;
+        const user = await resolveUserFromToken((t) => ws.data.jwt.verify(t), token);
         if (!user) {
           ws.send({ type: 'ERROR', message: 'Token tidak valid' });
           ws.close();
@@ -62,14 +59,27 @@ export const wsPlugin = new Elysia({ name: 'ws-server' })
         ws.close();
       }
     },
-    message(ws, data: any) {
+    async message(ws, data: any) {
       const user = (ws.data as any).user as JwtPayload | undefined;
       if (!user) return;
 
       // Handle subscription to specific conversation thread
       if (data.type === 'JOIN_CONVERSATION' && data.conversationId) {
-        ws.subscribe(`conv:${data.conversationId}`);
-        ws.send({ type: 'JOINED_CONVERSATION', conversationId: data.conversationId });
+        // 🔒 Only allow joining conversations that belong to the user's organization
+        const conversationId = String(data.conversationId);
+        const [conv] = await db
+          .select({ id: conversations.id })
+          .from(conversations)
+          .where(and(eq(conversations.id, conversationId), eq(conversations.organizationId, user.orgId)))
+          .limit(1);
+
+        if (!conv) {
+          ws.send({ type: 'ERROR', message: 'Percakapan tidak ditemukan atau tidak dapat diakses' });
+          return;
+        }
+
+        ws.subscribe(`conv:${conversationId}`);
+        ws.send({ type: 'JOINED_CONVERSATION', conversationId });
       } else if (data.type === 'LEAVE_CONVERSATION' && data.conversationId) {
         ws.unsubscribe(`conv:${data.conversationId}`);
       }

@@ -101,6 +101,15 @@
   let showCheckoutModal = $state(false);
   let selectedPlanForCheckout = $state<SaaSPlan | null>(null);
   let selectedDurationDays = $state<number>(30);
+
+  // Total harga mengikuti durasi yang dipilih (sama dengan perhitungan di server)
+  function calcCheckoutTotal(plan: SaaSPlan | null, days: number): number {
+    if (!plan) return 0;
+    const price = Number(plan.price) || 0;
+    if (plan.durationType === 'PERMANENT' || price === 0) return price;
+    const baseDays = plan.durationDays && plan.durationDays > 0 ? plan.durationDays : 30;
+    return Math.round((price * (Number(days) || baseDays)) / baseDays);
+  }
   let checkoutMode = $state<'midtrans' | 'manual'>('midtrans');
 
   // Manual WhatsApp Fallback Modal State
@@ -833,7 +842,7 @@
                 <option value={30}>1 Bulan (30 Hari)</option>
                 <option value={90}>3 Bulan (90 Hari)</option>
                 <option value={180}>6 Bulan (180 Hari)</option>
-                <option value={365}>1 Tahun (365 Hari - Hemat)</option>
+                <option value={365}>1 Tahun (365 Hari)</option>
               {/if}
             </select>
           </div>
@@ -843,7 +852,7 @@
             <div>
               <span class="text-xs text-emerald-800 dark:text-emerald-300 font-semibold block">Total Pembayaran:</span>
               <span class="text-xl font-black text-emerald-900 dark:text-emerald-200 font-mono">
-                {formatRupiah(selectedPlanForCheckout.price)}
+                {formatRupiah(calcCheckoutTotal(selectedPlanForCheckout, selectedDurationDays))}
               </span>
             </div>
             <span class="text-[11px] text-emerald-700 dark:text-emerald-400 font-semibold bg-emerald-500/15 px-2.5 py-1 rounded-lg">

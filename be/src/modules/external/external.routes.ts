@@ -20,16 +20,40 @@ import {
 import { apiKeyAuthPlugin } from '../../middleware/api-key-auth';
 import { MetaApiService } from '../../services/meta-api.service';
 
+/**
+ * Map an external endpoint to the permission(s) it needs (any one of them is enough).
+ * Returns null for endpoints that only need a valid key (e.g. /quota).
+ */
+function requiredPermissionsFor(method: string, pathname: string): string[] | null {
+  if (method === 'POST' && pathname.endsWith('/external/messages/send-text')) return ['messages:send'];
+  if (method === 'POST' && pathname.endsWith('/external/messages/send-template')) return ['templates:send'];
+  if (method === 'POST' && pathname.endsWith('/external/contacts')) return ['contacts:write'];
+  if (method === 'GET' && pathname.endsWith('/external/templates')) return ['templates:send', 'messages:send'];
+  return null;
+}
+
 export const externalRoutes = new Elysia({ prefix: '/external' })
   .use(apiKeyAuthPlugin)
 
   // ─── Guard Middleware for External API ────────
-  .onBeforeHandle(({ externalApp, set }) => {
+  .onBeforeHandle(({ externalApp, set, request }) => {
     if (!externalApp) {
       set.status = 401;
       return {
         success: false,
         error: 'Unauthorized: Header X-API-Key atau Authorization Bearer tidak valid atau telah kedaluwarsa.',
+        docs: '/admin/api-keys',
+      };
+    }
+
+    // 🔒 Enforce the permissions granted to this API key
+    const pathname = new URL(request.url).pathname;
+    const required = requiredPermissionsFor(request.method, pathname);
+    if (required && !required.some((p) => externalApp.permissions.includes(p))) {
+      set.status = 403;
+      return {
+        success: false,
+        error: `Forbidden: API Key ini tidak memiliki izin ${required.join(' / ')}.`,
         docs: '/admin/api-keys',
       };
     }

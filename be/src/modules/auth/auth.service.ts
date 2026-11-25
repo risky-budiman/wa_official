@@ -16,10 +16,22 @@ export class AuthService {
    */
   static async register(body: RegisterBody) {
     // Check if org exists or create new one
+    // 🔒 Email must be unique across the whole platform. Otherwise a login without organizationId
+    // would match an arbitrary account (same behaviour as Admin > Tambah Pengguna).
+    const cleanEmail = body.email.trim().toLowerCase();
+    const [emailTaken] = await db.select({ id: users.id }).from(users).where(eq(users.email, cleanEmail)).limit(1);
+    if (emailTaken) {
+      throw new Error('Email sudah terdaftar. Silakan login atau gunakan email lain.');
+    }
+    body = { ...body, email: cleanEmail };
+
     let orgId = body.organizationId;
     let orgName = '';
+    // true only when this registration creates a brand-new organization
+    let isNewOrganization = false;
 
     if (!orgId && body.organizationName) {
+      isNewOrganization = true;
       // Create new organization with default TRIAL profile (14 days active trial, 2 agent seats, 500 broadcast quota)
       orgId = nanoid();
       const trialExpiryDate = new Date();
@@ -72,14 +84,11 @@ export class AuthService {
     // Hash password with Argon2
     const passwordHash = await hash(body.password);
 
-    // Determine role: first user in org becomes ADMINISTRATOR
-    const [userCount] = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(eq(users.organizationId, orgId))
-      .limit(1);
-
-    const role: UserRole = !userCount ? 'ADMINISTRATOR' : (body.role || 'AGENT');
+    // 🔒 Determine role on the server — never trust a role sent by the client.
+    // - Creating a new organization  → the creator becomes ADMINISTRATOR
+    // - Joining an existing organization → always AGENT
+    //   (an Administrator can promote the user afterwards via Manajemen Pengguna)
+    const role: UserRole = isNewOrganization ? 'ADMINISTRATOR' : 'AGENT';
 
     // Create user
     const userId = nanoid();
@@ -153,7 +162,7 @@ export class AuthService {
         role: saUser.role,
         organizationId: null,
         organizationName: 'Platform Administrator (Independen)',
-        isPrimaryAdmin: Boolean(saUser.isPrimaryAdmin || saUser.email === 'admin@perusahaan.com' || saUser.email === 'riskybudiman1@gmail.com'),
+        isPrimaryAdmin: Boolean(saUser.isPrimaryAdmin),
       };
     }
 

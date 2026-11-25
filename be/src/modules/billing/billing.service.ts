@@ -7,7 +7,7 @@ import { db } from '../../config/database';
 import { organizations, users, platformSettings, subscriptionOrders, SubscriptionOrder } from '../../db/schema';
 import { eq, desc, and, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
-import { createHash } from 'crypto';
+import { createHash, timingSafeEqual } from 'crypto';
 
 interface MidtransConfig {
   isEnabled: boolean;
@@ -67,6 +67,42 @@ export class BillingService {
     return plans.filter((p) => p.isActive !== false);
   }
 
+  /** Pilihan durasi (hari) yang boleh dipesan tenant untuk paket non-permanen */
+  static readonly ALLOWED_DURATIONS = [30, 90, 180, 365];
+
+  /**
+   * Hitung durasi & total harga order secara aman di server.
+   * - Paket PERMANENT  → durasi 0 (permanen), harga = harga paket
+   * - Paket gratis     → selalu durasi dasar paket (tidak bisa diperpanjang sesuka hati)
+   * - Paket berbayar   → durasi harus salah satu ALLOWED_DURATIONS (atau durasi dasar paket),
+   *                      harga = harga paket × (durasi / durasi dasar paket)
+   */
+  static calculateOrderPricing(plan: SaaSPlanConfig, requestedDays?: number): { durationDays: number; amount: number } {
+    const basePrice = Number(plan.price) || 0;
+
+    if (plan.durationType === 'PERMANENT') {
+      return { durationDays: 0, amount: basePrice };
+    }
+
+    const baseDays = plan.durationDays && plan.durationDays > 0 ? plan.durationDays : 30;
+
+    if (basePrice === 0) {
+      return { durationDays: baseDays, amount: 0 };
+    }
+
+    let durationDays = baseDays;
+    if (requestedDays !== undefined && requestedDays !== null && Number(requestedDays) > 0) {
+      const req = Math.floor(Number(requestedDays));
+      if (req !== baseDays && !this.ALLOWED_DURATIONS.includes(req)) {
+        throw new Error(`Durasi ${req} hari tidak tersedia. Pilih salah satu: ${this.ALLOWED_DURATIONS.join(', ')} hari.`);
+      }
+      durationDays = req;
+    }
+
+    const amount = Math.round((basePrice * durationDays) / baseDays);
+    return { durationDays, amount };
+  }
+
   /**
    * Buat Pesanan / Order Baru (Tenant Order)
    */
@@ -92,21 +128,13 @@ export class BillingService {
       throw new Error(`Paket dengan kode "${planCode}" tidak ditemukan atau sedang nonaktif.`);
     }
 
-    // Tentukan durasi hari
-    let durationDays = 30;
-    if (customDurationDays && customDurationDays > 0) {
-      durationDays = customDurationDays;
-    } else if (plan.durationDays && plan.durationDays > 0) {
-      durationDays = plan.durationDays;
-    } else if (plan.durationType === 'PERMANENT') {
-      durationDays = 0; // 0 = permanent
-    }
+    // Tentukan durasi hari & total harga (dihitung di server, tidak percaya nilai dari client)
+    const { durationDays, amount } = this.calculateOrderPricing(plan, customDurationDays);
 
     // Generate Order Number: INV-YYYYMMDD-XXXX
     const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     const orderNumber = `INV-${dateStr}-${nanoid(6).toUpperCase()}`;
     const orderId = nanoid();
-    const amount = Number(plan.price) || 0;
 
     let snapToken: string | null = null;
     let snapRedirectUrl: string | null = null;
@@ -275,16 +303,24 @@ export class BillingService {
       return { success: false, message: 'Payload tidak memiliki order_id' };
     }
 
-    // 1. Verifikasi Signature Key Midtrans
+    // 1. Verifikasi Signature Key Midtrans (WAJIB — webhook tanpa signature valid selalu ditolak)
     const midtrans = await this.getMidtransConfig();
-    if (midtrans.serverKey && signature_key) {
-      const stringToHash = `${order_id}${status_code}${gross_amount}${midtrans.serverKey}`;
-      const calculatedSignature = createHash('sha512').update(stringToHash).digest('hex');
+    if (!midtrans.serverKey) {
+      console.warn('⚠️ [MIDTRANS WEBHOOK] Server Key Midtrans belum dikonfigurasi. Webhook ditolak.');
+      return { success: false, message: 'Payment gateway not configured' };
+    }
+    if (!signature_key || typeof signature_key !== 'string') {
+      console.warn('⚠️ [MIDTRANS WEBHOOK] Payload tanpa signature_key ditolak.');
+      return { success: false, message: 'Missing signature key' };
+    }
 
-      if (calculatedSignature !== signature_key) {
-        console.warn('⚠️ [MIDTRANS WEBHOOK] Signature Key Mismatch! Ditolak demi keamanan.');
-        return { success: false, message: 'Invalid signature key' };
-      }
+    const stringToHash = `${order_id}${status_code}${gross_amount}${midtrans.serverKey}`;
+    const calculatedSignature = createHash('sha512').update(stringToHash).digest('hex');
+    const a = Buffer.from(calculatedSignature, 'utf8');
+    const b = Buffer.from(signature_key.toLowerCase(), 'utf8');
+    if (a.length !== b.length || !timingSafeEqual(a, b)) {
+      console.warn('⚠️ [MIDTRANS WEBHOOK] Signature Key Mismatch! Ditolak demi keamanan.');
+      return { success: false, message: 'Invalid signature key' };
     }
 
     // 2. Cari Order di database
@@ -306,6 +342,14 @@ export class BillingService {
 
     // 3. Proses Status Transaksi
     if (transaction_status === 'settlement' || (transaction_status === 'capture' && fraud_status === 'accept')) {
+      // 🔒 Pastikan nominal yang dibayar sama dengan nominal order
+      if (Math.round(Number(gross_amount)) !== Math.round(Number(order.amount))) {
+        console.warn(
+          `⚠️ [MIDTRANS WEBHOOK] Nominal tidak cocok untuk ${order_id}: dibayar=${gross_amount}, tagihan=${order.amount}. Ditolak.`
+        );
+        return { success: false, message: 'Gross amount mismatch' };
+      }
+
       // Pembayaran Berhasil (Lunas)
       await db
         .update(subscriptionOrders)

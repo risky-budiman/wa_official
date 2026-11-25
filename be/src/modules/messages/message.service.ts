@@ -5,7 +5,7 @@
 import { eq, and, desc, asc, ne } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { db } from '../../config/database';
-import { messages, conversations, contacts, phoneNumbers, organizations, users } from '../../db/schema';
+import { messages, conversations, contacts, phoneNumbers, organizations, users, messageTemplates } from '../../db/schema';
 import { ConversationService } from '../conversations/conversation.service';
 import { MetaApiService } from '../../services/meta-api.service';
 import { env } from '../../config/env';
@@ -32,10 +32,11 @@ export class MessageService {
         )
       );
 
-    const limit = query.limit || 50;
+    const limit = Math.min(query.limit || 200, 500);
     const offset = query.offset || 0;
 
-    const items = await db
+    // Fetch the NEWEST messages first (so long chats show the latest messages), then return them oldest → newest
+    const newestFirst = await db
       .select({
         id: messages.id,
         conversationId: messages.conversationId,
@@ -55,9 +56,11 @@ export class MessageService {
       .from(messages)
       .leftJoin(users, eq(messages.senderId, users.id))
       .where(eq(messages.conversationId, conversationId))
-      .orderBy(asc(messages.createdAt))
+      .orderBy(desc(messages.createdAt))
       .limit(limit)
       .offset(offset);
+
+    const items = newestFirst.reverse();
 
     return {
       items,
@@ -110,11 +113,18 @@ export class MessageService {
 
     // Send via Meta API
     if (messageType === 'template' && body.templateName) {
+      // Use the template's registered language (Meta rejects a language that doesn't match)
+      const [tmpl] = await db
+        .select({ language: messageTemplates.language })
+        .from(messageTemplates)
+        .where(and(eq(messageTemplates.organizationId, conv.organizationId), eq(messageTemplates.name, body.templateName)))
+        .limit(1);
+
       const metaRes = await MetaApiService.sendTemplateMessage({
         phoneNumberId: phone.phoneNumberId,
         recipientWaId: conv.contact.waId,
         templateName: body.templateName,
-        languageCode: 'id',
+        languageCode: tmpl?.language || 'id',
         components: body.templateComponents,
       }, activeToken);
       wamId = metaRes.messages?.[0]?.id || null;

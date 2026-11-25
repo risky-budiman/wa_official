@@ -49,6 +49,11 @@ export const billingRoutes = new Elysia({ prefix: '/billing' })
         set.status = 400;
         return { success: false, error: 'User tidak terikat dengan organisasi' };
       }
+      // 🔒 Hanya Administrator organisasi yang boleh membuat pesanan / mengganti paket
+      if (user.role !== 'ADMINISTRATOR') {
+        set.status = 403;
+        return { success: false, error: 'Hanya Administrator yang dapat memesan atau mengganti paket langganan.' };
+      }
 
       try {
         const result = await BillingService.createOrder(

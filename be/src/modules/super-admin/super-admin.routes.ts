@@ -12,12 +12,13 @@ import { messages } from '../../db/schema/messages';
 import { contacts } from '../../db/schema/contacts';
 import { phoneNumbers } from '../../db/schema/phone-numbers';
 import { platformSettings } from '../../db/schema/settings';
-import { authPlugin } from '../../middleware/auth';
+import { authPlugin, jwtConfig } from '../../middleware/auth';
 import { eq, desc, sql, and, lt, gt, isNull } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { jwt } from '@elysiajs/jwt';
 import { env } from '../../config/env';
 import { BillingService } from '../billing/billing.service';
+import { autoMigrateSchema } from '../../db/auto-migrate';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import fs from 'node:fs';
@@ -56,6 +57,17 @@ function getRepoDir(): string {
 async function checkIsPrimaryAdmin(userId?: string): Promise<boolean> {
   if (!userId) return false;
   try {
+    // Platform staff now live in `super_admins` — check the explicit primary-admin flag there first
+    const [platformUser] = await db
+      .select({ isPrimaryAdmin: superAdmins.isPrimaryAdmin, role: superAdmins.role, status: superAdmins.status })
+      .from(superAdmins)
+      .where(eq(superAdmins.id, userId))
+      .limit(1);
+    if (platformUser) {
+      return platformUser.role === 'SUPER_ADMIN' && platformUser.status === 'ACTIVE' && Boolean(platformUser.isPrimaryAdmin);
+    }
+
+    // Legacy: platform admins still stored in the `users` table
     const [dbUser] = await db
       .select({ isPrimaryAdmin: users.isPrimaryAdmin, role: users.role, email: users.email })
       .from(users)
@@ -66,23 +78,45 @@ async function checkIsPrimaryAdmin(userId?: string): Promise<boolean> {
     // MUST be SUPER_ADMIN role to qualify as primary admin
     if (dbUser.role !== 'SUPER_ADMIN') return false;
     if (dbUser.isPrimaryAdmin) return true;
-    if (dbUser.email === 'admin@perusahaan.com' || dbUser.email === 'admin@ids.net.id' || dbUser.email === 'riskybudiman1@gmail.com') {
-      return true;
-    }
   } catch (_) {}
+  return false;
+}
+
+/**
+ * Which write actions each platform role may perform (all staff can read / GET).
+ * - SUPER_ADMIN / CO_SUPER_ADMIN : everything (system update endpoints have their own primary-admin check)
+ * - ADMIN_FINANCE : SaaS plans, payment gateway, invoices/transactions, extend & change plan
+ * - ADMIN_SUPPORT : monitor tenants (impersonate), test & configure Meta API, reset tenant admin password
+ */
+function isPlatformActionAllowed(role: string, method: string, pathname: string): boolean {
+  if (role === 'SUPER_ADMIN' || role === 'CO_SUPER_ADMIN') return true;
+  if (method === 'GET') return true;
+
+  const p = pathname.replace(/\/+$/, '');
+  const financeRules = [
+    /\/super-admin\/organizations\/[^/]+\/extend$/,
+    /\/super-admin\/organizations\/[^/]+\/change-plan$/,
+    /\/super-admin\/settings\/plans$/,
+    /\/super-admin\/settings\/payment$/,
+    /\/super-admin\/transactions\/[^/]+\/(confirm-manual|cancel)$/,
+  ];
+  const supportRules = [
+    /\/super-admin\/organizations\/[^/]+\/impersonate$/,
+    /\/super-admin\/organizations\/[^/]+\/reset-admin-password$/,
+    /\/super-admin\/organizations\/[^/]+\/test-meta$/,
+    /\/super-admin\/organizations\/[^/]+\/meta-config$/,
+  ];
+
+  if (role === 'ADMIN_FINANCE') return financeRules.some((r) => r.test(p));
+  if (role === 'ADMIN_SUPPORT') return supportRules.some((r) => r.test(p));
   return false;
 }
 
 export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
   .use(authPlugin)
-  .use(
-    jwt({
-      name: 'jwt',
-      secret: env.JWT_SECRET,
-    })
-  )
+  .use(jwt(jwtConfig))
   // Platform Authorization Guard (Super Admin & Platform Staff)
-  .onBeforeHandle(async ({ user, set }) => {
+  .onBeforeHandle(async ({ user, set, request }) => {
     if (!user) {
       set.status = 401;
       return { success: false, error: 'Autentikasi diperlukan. Silakan login kembali.' };
@@ -108,6 +142,15 @@ export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
       return {
         success: false,
         error: 'Akses ditolak. Panel Kontrol ini hanya dapat diakses oleh Administrator & Staf Platform.',
+      };
+    }
+
+    // 🔒 Per-role permissions for platform staff (Finance / Support have limited write access)
+    if (!isPlatformActionAllowed(currentRole, request.method, new URL(request.url).pathname)) {
+      set.status = 403;
+      return {
+        success: false,
+        error: `Akses ditolak. Peran ${currentRole} tidak memiliki izin untuk tindakan ini.`,
       };
     }
   })
@@ -301,7 +344,9 @@ export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
         expiryDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
       }
 
-      const passwordHash = await Bun.password.hash(body.adminPassword || 'Admin12345!', {
+      // 🔒 No well-known default password: generate a random one when left empty
+      const generatedAdminPassword = body.adminPassword && body.adminPassword.trim() ? null : nanoid(12);
+      const passwordHash = await Bun.password.hash(generatedAdminPassword || body.adminPassword.trim(), {
         algorithm: 'bcrypt',
         cost: 10,
       });
@@ -351,8 +396,11 @@ export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
 
       return {
         success: true,
-        message: `Organisasi "${body.name}" berhasil didaftarkan! Akun admin telah dibuat dengan email ${body.adminEmail}.`,
+        message: generatedAdminPassword
+          ? `Organisasi "${body.name}" berhasil didaftarkan! Akun admin: ${body.adminEmail} — password sementara: ${generatedAdminPassword} (catat sekarang, tidak ditampilkan lagi).`
+          : `Organisasi "${body.name}" berhasil didaftarkan! Akun admin telah dibuat dengan email ${body.adminEmail}.`,
         data: {
+          ...(generatedAdminPassword ? { generatedAdminPassword } : {}),
           organizationId: orgId,
           organizationName: body.name,
           adminUserId,
@@ -1614,6 +1662,7 @@ export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
     try {
       // Jalankan sinkronisasi non-destructive (CREATE TABLE IF NOT EXISTS, ADD COLUMN IF NOT EXISTS, index, dll.)
       await testConnection();
+      await autoMigrateSchema();
 
       return {
         success: true,

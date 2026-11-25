@@ -25,6 +25,24 @@ const getApiBase = (): string => {
 const API_BASE = getApiBase();
 export const getApiBaseUrl = (): string => API_BASE;
 
+let isRedirectingToLogin = false;
+
+function handleExpiredSession() {
+  if (typeof window === 'undefined' || isRedirectingToLogin) return;
+  const path = window.location.pathname;
+  const loginPath = path.startsWith('/administrator') ? '/administrator/login' : '/login';
+  if (path === loginPath) return;
+
+  isRedirectingToLogin = true;
+  try {
+    localStorage.removeItem('wa_crm_token');
+    localStorage.removeItem('wa_crm_user');
+    localStorage.removeItem('wa_crm_imp_token');
+    localStorage.removeItem('wa_crm_imp_user');
+  } catch (_) {}
+  window.location.href = loginPath;
+}
+
 export async function apiRequest<T = any>(
   endpoint: string,
   options: RequestInit = {}
@@ -51,6 +69,11 @@ export async function apiRequest<T = any>(
       } catch {
         data = { error: text };
       }
+    }
+
+    // Session expired / account deactivated → clear session and go back to the login page
+    if (res.status === 401 && token && !endpoint.includes('/auth/login')) {
+      handleExpiredSession();
     }
 
     if (!res.ok) {
