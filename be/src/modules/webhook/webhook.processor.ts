@@ -21,6 +21,7 @@ import { AiAgentService } from '../../services/ai-agent.service';
 import { MetaApiService } from '../../services/meta-api.service';
 import { env } from '../../config/env';
 import type { MetaWebhookBody } from './webhook.types';
+import { notArchived } from '../../services/phone-number.service';
 
 export class WebhookProcessor {
   /**
@@ -193,7 +194,7 @@ export class WebhookProcessor {
         const [phone] = await db
           .select()
           .from(phoneNumbers)
-          .where(and(eq(phoneNumbers.phoneNumberId, phoneNumberId), isNotNull(phoneNumbers.organizationId)))
+          .where(and(eq(phoneNumbers.phoneNumberId, phoneNumberId), isNotNull(phoneNumbers.organizationId), notArchived()))
           .limit(1);
 
         // 🔒 Only process events for phone numbers that are explicitly linked to an organization.
@@ -422,6 +423,8 @@ export class WebhookProcessor {
                   lastMessageAt: new Date(),
                   assignedUserId: targetAssignedUser,
                   status: targetStatus,
+                  // The customer wrote to this number: replies must go out from it (after a number change)
+                  phoneNumberId: phone.id,
                 })
                 .where(eq(conversations.id, activeConv.id));
             }

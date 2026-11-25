@@ -23,6 +23,7 @@ import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import fs from 'node:fs';
 import path from 'node:path';
+import { getActivePhone, activatePhoneNumber, notArchived, PhoneNumberInUseError } from '../../services/phone-number.service';
 
 const execAsync = promisify(exec);
 
@@ -256,7 +257,7 @@ export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
             qualityRating: phoneNumbers.qualityRating,
           })
           .from(phoneNumbers)
-          .where(eq(phoneNumbers.organizationId, org.id));
+          .where(and(eq(phoneNumbers.organizationId, org.id), notArchived()));
 
         const expDate = org.expiresAt ? new Date(org.expiresAt) : null;
         let isExpired = false;
@@ -456,7 +457,10 @@ export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
       .from(users)
       .where(eq(users.organizationId, org.id));
 
-    const phones = await db.select().from(phoneNumbers).where(eq(phoneNumbers.organizationId, org.id));
+    const phones = await db
+      .select()
+      .from(phoneNumbers)
+      .where(and(eq(phoneNumbers.organizationId, org.id), notArchived()));
 
     return {
       success: true,
@@ -865,14 +869,11 @@ export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
           return { success: false, error: 'Organisasi tidak ditemukan' };
         }
 
-        const [existingPhone] = await db
-          .select()
-          .from(phoneNumbers)
-          .where(eq(phoneNumbers.organizationId, params.id))
-          .limit(1);
+        const existingPhone = await getActivePhone(params.id);
 
         const targetToken = body.accessToken?.trim() || org.accessToken;
-        const targetPhoneId = body.phoneNumberId?.trim() || existingPhone?.id;
+        // Meta's phone_number_id (not our internal row id)
+        const targetPhoneId = body.phoneNumberId?.trim() || existingPhone?.phoneNumberId;
         const targetWabaId = body.wabaId?.trim() || org.wabaId;
 
         if (!targetToken) {
@@ -965,33 +966,17 @@ export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
 
         // Update / Insert into phone_numbers table
         if (body.phoneNumberId?.trim()) {
-          const [existingPhone] = await db
-            .select()
-            .from(phoneNumbers)
-            .where(eq(phoneNumbers.organizationId, params.id))
-            .limit(1);
-
-          if (existingPhone) {
-            await db
-              .update(phoneNumbers)
-              .set({
-                phoneNumberId: body.phoneNumberId.trim(),
-                displayPhoneNumber: body.displayPhoneNumber?.trim() || existingPhone.displayPhoneNumber,
-                verifiedName: body.verifiedName?.trim() || existingPhone.verifiedName,
-                qualityRating: body.qualityRating || existingPhone.qualityRating,
-                status: 'CONNECTED',
-              })
-              .where(eq(phoneNumbers.organizationId, params.id));
-          } else {
-            await db.insert(phoneNumbers).values({
-              id: nanoid(),
-              organizationId: params.id,
+          try {
+            // Switching to another number archives the old one (history is kept)
+            await activatePhoneNumber(params.id, {
               phoneNumberId: body.phoneNumberId.trim(),
               displayPhoneNumber: body.displayPhoneNumber?.trim() || 'WhatsApp Official',
               verifiedName: body.verifiedName?.trim() || org.name,
               qualityRating: body.qualityRating || 'UNKNOWN',
-              status: 'CONNECTED',
             });
+          } catch (err: any) {
+            set.status = err instanceof PhoneNumberInUseError ? 409 : 400;
+            return { success: false, error: err.message };
           }
         }
 

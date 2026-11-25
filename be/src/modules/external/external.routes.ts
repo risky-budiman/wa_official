@@ -19,6 +19,7 @@ import {
 } from '../../db/schema';
 import { apiKeyAuthPlugin } from '../../middleware/api-key-auth';
 import { MetaApiService } from '../../services/meta-api.service';
+import { getActivePhone } from '../../services/phone-number.service';
 
 /**
  * Map an external endpoint to the permission(s) it needs (any one of them is enough).
@@ -108,8 +109,7 @@ export const externalRoutes = new Elysia({ prefix: '/external' })
 
       // 3. Resolve Organization Credentials & Phone
       const [org] = await db.select().from(organizations).where(eq(organizations.id, orgId)).limit(1);
-      const phones = await db.select().from(phoneNumbers).where(eq(phoneNumbers.organizationId, orgId));
-      const phone = phones.length > 0 ? phones[0] : null;
+      const phone = await getActivePhone(orgId);
 
       const activeToken =
         org?.accessToken && !org.accessToken.startsWith('EAAGm0PX4ZCBO')
@@ -329,8 +329,7 @@ export const externalRoutes = new Elysia({ prefix: '/external' })
       }
 
       const [org] = await db.select().from(organizations).where(eq(organizations.id, orgId)).limit(1);
-      const phones = await db.select().from(phoneNumbers).where(eq(phoneNumbers.organizationId, orgId));
-      const phone = phones.length > 0 ? phones[0] : null;
+      const phone = await getActivePhone(orgId);
 
       const activeToken =
         org?.accessToken && !org.accessToken.startsWith('EAAGm0PX4ZCBO')

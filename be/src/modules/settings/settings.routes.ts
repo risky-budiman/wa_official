@@ -11,9 +11,17 @@ import { organizations, phoneNumbers, messages, conversations, broadcastCampaign
 import { authPlugin } from '../../middleware/auth';
 import { hashApiKey } from '../../middleware/api-key-auth';
 import { MetaApiService } from '../../services/meta-api.service';
+import {
+  activatePhoneNumber,
+  archiveOrgPhones,
+  getActivePhone,
+  pickMetaPhone,
+  PhoneNumberInUseError,
+} from '../../services/phone-number.service';
 
 /**
- * Safely upsert a phone number record for an organization without triggering UNIQUE index conflicts or FK delete failures
+ * Make `targetPhoneId` the organization's active number. Old numbers are archived (never deleted),
+ * so conversations that reference them keep their history. See services/phone-number.service.ts.
  */
 async function safeUpsertPhoneNumber(
   orgId: string,
@@ -23,79 +31,57 @@ async function safeUpsertPhoneNumber(
   qualityRating = 'GREEN'
 ) {
   if (!orgId || !targetPhoneId) return;
+  return activatePhoneNumber(orgId, {
+    phoneNumberId: targetPhoneId,
+    displayPhoneNumber,
+    verifiedName,
+    qualityRating,
+  });
+}
 
-  // 1. Check if targetPhoneId is already in phoneNumbers table anywhere
-  const [existingByPhoneId] = await db
-    .select()
-    .from(phoneNumbers)
-    .where(eq(phoneNumbers.phoneNumberId, targetPhoneId))
+/** Token the organization uses to talk to Meta (its own, else the platform token). */
+function resolveOrgToken(orgToken?: string | null) {
+  return orgToken && !orgToken.startsWith('EAAGm0PX4ZCBO') ? orgToken : env.META_ACCESS_TOKEN;
+}
+
+type NumberContext = { wabaId: string; token: string; number?: any };
+
+/**
+ * Admin-only context for the change-number endpoints. When `phoneId` is given, the number must
+ * belong to this organization's WABA (prevents acting on another tenant's numbers).
+ */
+async function loadNumberContext(user: any, set: any, phoneId?: string): Promise<NumberContext | { error: any }> {
+  if (!user) {
+    set.status = 401;
+    return { error: { success: false, error: 'Unauthorized' } };
+  }
+  if (user.role !== 'ADMINISTRATOR') {
+    set.status = 403;
+    return { error: { success: false, error: 'Akses dibatasi untuk Administrator' } };
+  }
+  const [org] = await db
+    .select({ wabaId: organizations.wabaId, accessToken: organizations.accessToken })
+    .from(organizations)
+    .where(eq(organizations.id, user.orgId))
     .limit(1);
-
-  if (existingByPhoneId) {
-    // Transfer & update this existing phone record to current orgId
-    await db
-      .update(phoneNumbers)
-      .set({
-        organizationId: orgId,
-        displayPhoneNumber: displayPhoneNumber || existingByPhoneId.displayPhoneNumber,
-        verifiedName: verifiedName || existingByPhoneId.verifiedName || 'Akun WhatsApp Business Resmi',
-        qualityRating: qualityRating || existingByPhoneId.qualityRating || 'GREEN',
-        status: 'CONNECTED',
-      })
-      .where(eq(phoneNumbers.id, existingByPhoneId.id));
-
-    // Remove any remaining dummy/disconnected records for this org to prevent multi-number confusion
-    await db
-      .delete(phoneNumbers)
-      .where(
-        and(
-          eq(phoneNumbers.organizationId, orgId),
-          ne(phoneNumbers.id, existingByPhoneId.id)
-        )
-      );
-    return;
+  const token = resolveOrgToken(org?.accessToken);
+  if (!org?.wabaId || org.wabaId === '1386698372551547' || !token) {
+    set.status = 400;
+    return { error: { success: false, error: 'Hubungkan WhatsApp Business Account (WABA) terlebih dahulu.' } };
   }
+  if (!phoneId) return { wabaId: org.wabaId, token };
 
-  // 2. Check if current organization already has a phone record
-  const existingPhones = await db
-    .select()
-    .from(phoneNumbers)
-    .where(eq(phoneNumbers.organizationId, orgId));
-
-  if (existingPhones.length > 0) {
-    await db
-      .update(phoneNumbers)
-      .set({
-        phoneNumberId: targetPhoneId,
-        displayPhoneNumber: displayPhoneNumber || existingPhones[0].displayPhoneNumber,
-        verifiedName: verifiedName || existingPhones[0].verifiedName || 'Akun WhatsApp Business Resmi',
-        qualityRating: qualityRating || existingPhones[0].qualityRating || 'GREEN',
-        status: 'CONNECTED',
-      })
-      .where(eq(phoneNumbers.id, existingPhones[0].id));
-
-    // Remove duplicate records for this org if any
-    if (existingPhones.length > 1) {
-      await db
-        .delete(phoneNumbers)
-        .where(
-          and(
-            eq(phoneNumbers.organizationId, orgId),
-            ne(phoneNumbers.id, existingPhones[0].id)
-          )
-        );
-    }
-  } else {
-    await db.insert(phoneNumbers).values({
-      id: nanoid(),
-      organizationId: orgId,
-      phoneNumberId: targetPhoneId,
-      displayPhoneNumber: displayPhoneNumber || 'Nomor WhatsApp Business',
-      verifiedName: verifiedName || 'Akun WhatsApp Business Resmi',
-      qualityRating: qualityRating || 'GREEN',
-      status: 'CONNECTED',
-    });
+  const list = await MetaApiService.listWabaPhoneNumbers(org.wabaId, token);
+  if (!list.ok) {
+    set.status = 502;
+    return { error: { success: false, error: list.error } };
   }
+  const number = list.numbers.find((n: any) => n.id === phoneId);
+  if (!number) {
+    set.status = 404;
+    return { error: { success: false, error: 'Nomor tidak ditemukan di WABA organisasi Anda.' } };
+  }
+  return { wabaId: org.wabaId, token, number };
 }
 
 export const settingsRoutes = new Elysia({ prefix: '/settings' })
@@ -119,12 +105,7 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
       .where(eq(organizations.id, user.orgId))
       .limit(1);
 
-    let phones = await db
-      .select()
-      .from(phoneNumbers)
-      .where(eq(phoneNumbers.organizationId, user.orgId));
-
-    let phone = phones.length > 0 ? phones[0] : null;
+    let phone = await getActivePhone(user.orgId);
 
     // Auto-heal: If organization has an active WABA ID, ensure phone status is CONNECTED
     if (org?.wabaId && org.wabaId !== '1386698372551547') {
@@ -137,8 +118,7 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
           org.name || 'Akun WhatsApp Business Resmi',
           'GREEN'
         );
-        phones = await db.select().from(phoneNumbers).where(eq(phoneNumbers.organizationId, user.orgId));
-        phone = phones.length > 0 ? phones[0] : null;
+        phone = await getActivePhone(user.orgId);
       } else if (phone.status === 'DISCONNECTED') {
         await db
           .update(phoneNumbers)
@@ -183,12 +163,7 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
       .where(eq(organizations.id, user.orgId))
       .limit(1);
 
-    const phones = await db
-      .select()
-      .from(phoneNumbers)
-      .where(eq(phoneNumbers.organizationId, user.orgId));
-
-    const phone = phones.length > 0 ? phones[0] : null;
+    const phone = await getActivePhone(user.orgId);
 
     const activeToken = org?.accessToken && !org.accessToken.startsWith('EAAGm0PX4ZCBO')
       ? org.accessToken
@@ -364,7 +339,9 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
 
         const metaPhones = await MetaApiService.fetchWabaPhoneNumbers(activeWabaId, activeAccessToken);
         if (metaPhones && metaPhones.length > 0) {
-          metaLivePhone = metaPhones[0];
+          // Keep the number the admin chose; only fall back to the first one when none is active yet
+          const currentPhone = await getActivePhone(user.orgId);
+          metaLivePhone = pickMetaPhone(metaPhones, currentPhone?.phoneNumberId);
           if (metaLivePhone?.id) {
             await safeUpsertPhoneNumber(
               user.orgId,
@@ -410,10 +387,8 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
       }
     }
 
-    const phones = await db
-      .select()
-      .from(phoneNumbers)
-      .where(eq(phoneNumbers.organizationId, user.orgId));
+    const activePhone = await getActivePhone(user.orgId);
+    const phones = activePhone ? [activePhone] : [];
 
     return {
       success: true,
@@ -476,7 +451,8 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
     const isUserToken = org.accessToken && !org.accessToken.startsWith('EAAGm0PX4ZCBO');
     if (isUserToken) {
       metaPhones = await MetaApiService.fetchWabaPhoneNumbers(org.wabaId, org.accessToken);
-      metaLivePhone = metaPhones && metaPhones.length > 0 ? metaPhones[0] : null;
+      const currentPhone = await getActivePhone(user.orgId);
+      metaLivePhone = pickMetaPhone(metaPhones, currentPhone?.phoneNumberId);
       metaLiveWaba = await MetaApiService.fetchWabaDetails(org.wabaId, org.accessToken);
     }
 
@@ -493,25 +469,20 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
       } catch (_) {}
     }
 
-    const existingPhones = await db
-      .select()
-      .from(phoneNumbers)
-      .where(eq(phoneNumbers.organizationId, user.orgId));
+    const phone = await getActivePhone(user.orgId);
 
-    const phone = existingPhones.length > 0 ? existingPhones[0] : null;
-
-    if (metaLivePhone && existingPhones.length > 0) {
-        await db
-          .update(phoneNumbers)
-          .set({
-            phoneNumberId: metaLivePhone.id || existingPhones[0].phoneNumberId,
-            displayPhoneNumber: metaLivePhone.display_phone_number || existingPhones[0].displayPhoneNumber,
-            verifiedName: metaLivePhone.verified_name || existingPhones[0].verifiedName,
-            qualityRating: metaLivePhone.quality_rating || existingPhones[0].qualityRating,
-            status: 'CONNECTED',
-          })
-          .where(eq(phoneNumbers.id, existingPhones[0].id));
+    if (metaLivePhone?.id) {
+      try {
+        await activatePhoneNumber(user.orgId, {
+          phoneNumberId: metaLivePhone.id,
+          displayPhoneNumber: metaLivePhone.display_phone_number,
+          verifiedName: metaLivePhone.verified_name,
+          qualityRating: metaLivePhone.quality_rating,
+        });
+      } catch (err: any) {
+        return { success: false, error: err.message };
       }
+    }
 
     if (metaLiveWaba?.name && org.id) {
       await db
@@ -573,7 +544,8 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
 
           const metaPhones = await MetaApiService.fetchWabaPhoneNumbers(finalWabaId, finalAccessToken);
           if (metaPhones && metaPhones.length > 0) {
-            const firstPhone = metaPhones[0];
+            const currentPhone = await getActivePhone(user.orgId);
+            const firstPhone = pickMetaPhone(metaPhones, currentPhone?.phoneNumberId)!;
             detectedPhoneId = firstPhone.id || detectedPhoneId;
             detectedPhoneNumber = firstPhone.display_phone_number || detectedPhoneNumber;
             detectedVerifiedName = firstPhone.verified_name || detectedVerifiedName;
@@ -600,13 +572,18 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
 
       // If WABA ID is provided, ensure phoneNumbers table is safely synced
       if (finalWabaId) {
-        await safeUpsertPhoneNumber(
-          user.orgId,
-          detectedPhoneId,
-          detectedPhoneNumber,
-          detectedVerifiedName,
-          detectedQuality
-        );
+        try {
+          await safeUpsertPhoneNumber(
+            user.orgId,
+            detectedPhoneId,
+            detectedPhoneNumber,
+            detectedVerifiedName,
+            detectedQuality
+          );
+        } catch (err: any) {
+          set.status = err instanceof PhoneNumberInUseError ? 409 : 400;
+          return { success: false, error: err.message };
+        }
       }
 
       return {
@@ -647,20 +624,17 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
     }
 
     try {
-      await db
-        .update(organizations)
-        .set({
-          wabaId: null,
-          accessToken: null,
-        })
-        .where(eq(organizations.id, user.orgId));
+      // Atomic: either everything is disconnected or nothing changes.
+      // Numbers are archived, not deleted: conversations reference them and keep their history.
+      await db.transaction(async (tx) => {
+        await tx
+          .update(organizations)
+          .set({ wabaId: null, accessToken: null })
+          .where(eq(organizations.id, user.orgId));
+        await archiveOrgPhones(user.orgId, tx);
+      });
 
-      // Remove phone records for this disconnecting tenant so the number is completely free and unhindered
-      await db
-        .delete(phoneNumbers)
-        .where(eq(phoneNumbers.organizationId, user.orgId));
-
-      return { success: true, message: 'Koneksi WhatsApp WABA berhasil diputuskan dan nomor berhasil dibersihkan' };
+      return { success: true, message: 'Nomor WhatsApp berhasil diputuskan. Riwayat percakapan tetap tersimpan.' };
     } catch (err: any) {
       set.status = 400;
       return { success: false, error: err.message };
@@ -684,7 +658,7 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
       try {
         const { code, redirectUri, wabaId, phoneNumberId, displayPhoneNumber, verifiedName } = body;
 
-        let finalAccessToken = env.META_ACCESS_TOKEN || ('EAAGm0PX4ZCBO' + nanoid(32));
+        let finalAccessToken = '';
         let finalWabaId = wabaId || '';
         let finalPhoneId = phoneNumberId || '';
         let finalDisplayName = verifiedName || 'Akun WhatsApp Business Resmi';
@@ -709,9 +683,6 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
             if (discoveredWabaId) {
               finalWabaId = discoveredWabaId;
               console.log(`✅ Successfully linked dynamic WABA ID: ${finalWabaId}`);
-            } else {
-              finalWabaId = `waba_${nanoid(12)}`;
-              console.log(`✅ Linked Facebook Access Token with generated ID: ${finalWabaId}`);
             }
           } else {
             set.status = 400;
@@ -722,10 +693,25 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
           }
         }
 
-        // Fallback to org's existing valid WABA ID if no new WABA ID was discovered
-        if (!finalWabaId || finalWabaId === '1386698372551547') {
-          const [orgData] = await db.select({ wabaId: organizations.wabaId }).from(organizations).where(eq(organizations.id, user.orgId)).limit(1);
-          finalWabaId = (orgData?.wabaId && orgData.wabaId !== '1386698372551547') ? orgData.wabaId : '';
+        // Fallback to the org's existing WABA ID / token when the signup did not provide new ones
+        if (!finalWabaId || finalWabaId === '1386698372551547' || !finalAccessToken) {
+          const [orgData] = await db
+            .select({ wabaId: organizations.wabaId, accessToken: organizations.accessToken })
+            .from(organizations)
+            .where(eq(organizations.id, user.orgId))
+            .limit(1);
+          if (!finalWabaId || finalWabaId === '1386698372551547') {
+            finalWabaId = (orgData?.wabaId && orgData.wabaId !== '1386698372551547') ? orgData.wabaId : '';
+          }
+          if (!finalAccessToken) finalAccessToken = resolveOrgToken(orgData?.accessToken) || '';
+        }
+
+        if (!finalAccessToken) {
+          set.status = 400;
+          return {
+            success: false,
+            error: 'Token akses Meta tidak tersedia. Ulangi login Facebook dan pastikan izin WhatsApp Business diberikan.',
+          };
         }
 
         if (!finalWabaId) {
@@ -745,10 +731,12 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
             }
 
             const metaPhones = await MetaApiService.fetchWabaPhoneNumbers(finalWabaId, finalAccessToken);
-            if (metaPhones && metaPhones.length > 0) {
-              finalPhoneId = metaPhones[0].id || finalPhoneId;
-              finalPhone = metaPhones[0].display_phone_number || finalPhone;
-              finalDisplayName = metaPhones[0].verified_name || finalDisplayName;
+            // Use the number chosen in the Facebook popup (sessionInfo), not just the first one
+            const chosen = pickMetaPhone(metaPhones, finalPhoneId);
+            if (chosen) {
+              finalPhoneId = chosen.id || finalPhoneId;
+              finalPhone = chosen.display_phone_number || finalPhone;
+              finalDisplayName = chosen.verified_name || finalDisplayName;
             }
           } catch (err: any) {
             console.warn('Auto-sync from Meta notice:', err.message);
@@ -784,6 +772,7 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
           finalDisplayName,
           'GREEN'
         );
+        await MetaApiService.subscribeAppToWaba(finalWabaId, finalAccessToken);
 
         return {
           success: true,
@@ -814,6 +803,164 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
       }),
     }
   )
+
+  // ═══════════════════════════════════════════════════════════════
+  // CHANGE NUMBER FLOW (Administrator)
+  // list numbers in the WABA → (add number → OTP → verify) → register PIN → activate
+  // Every action on a phone id first checks that the number belongs to this org's WABA.
+  // ═══════════════════════════════════════════════════════════════
+
+  // ─── GET /settings/waba/numbers ───
+  .get('/waba/numbers', async ({ user, set }) => {
+    const ctx = await loadNumberContext(user, set);
+    if ('error' in ctx) return ctx.error;
+
+    const list = await MetaApiService.listWabaPhoneNumbers(ctx.wabaId, ctx.token);
+    if (!list.ok) {
+      set.status = 502;
+      return { success: false, error: list.error };
+    }
+    const active = await getActivePhone(user!.orgId);
+    return {
+      success: true,
+      wabaId: ctx.wabaId,
+      activePhoneNumberId: active?.phoneNumberId || null,
+      numbers: list.numbers.map((n: any) => ({
+        id: n.id,
+        displayPhoneNumber: n.display_phone_number,
+        verifiedName: n.verified_name,
+        qualityRating: n.quality_rating,
+        status: n.status,
+        codeVerificationStatus: n.code_verification_status,
+        nameStatus: n.name_status,
+        newNameStatus: n.new_name_status,
+        messagingLimitTier: n.messaging_limit_tier,
+        platformType: n.platform_type,
+        isActive: n.id === active?.phoneNumberId,
+      })),
+    };
+  })
+
+  // ─── POST /settings/waba/numbers — add a new number to the WABA ───
+  .post(
+    '/waba/numbers',
+    async ({ user, body, set }) => {
+      const ctx = await loadNumberContext(user, set);
+      if ('error' in ctx) return ctx.error;
+
+      const cc = body.cc.replace(/\D/g, '');
+      let phone = body.phoneNumber.replace(/\D/g, '');
+      if (phone.startsWith('0')) phone = phone.slice(1); // 0812… → 812…
+      if (phone.startsWith(cc) && phone.length > 9) phone = phone.slice(cc.length); // 62812… → 812…
+      if (!/^\d{1,3}$/.test(cc) || !/^\d{6,14}$/.test(phone)) {
+        set.status = 400;
+        return { success: false, error: 'Format nomor tidak valid. Contoh: kode negara 62, nomor 81234567890.' };
+      }
+
+      const res = await MetaApiService.addPhoneNumber(ctx.wabaId, ctx.token, cc, phone, body.verifiedName.trim());
+      if (!res.ok) {
+        set.status = 400;
+        return { success: false, error: res.error };
+      }
+      return { success: true, phoneNumberId: res.data?.id, message: 'Nomor ditambahkan ke WABA. Lanjutkan dengan verifikasi kode OTP.' };
+    },
+    {
+      body: t.Object({
+        cc: t.String({ minLength: 1, maxLength: 4 }),
+        phoneNumber: t.String({ minLength: 6, maxLength: 20 }),
+        verifiedName: t.String({ minLength: 3, maxLength: 120 }),
+      }),
+    }
+  )
+
+  // ─── POST /settings/waba/numbers/:phoneId/request-code ───
+  .post(
+    '/waba/numbers/:phoneId/request-code',
+    async ({ user, params, body, set }) => {
+      const ctx = await loadNumberContext(user, set, params.phoneId);
+      if ('error' in ctx) return ctx.error;
+      const res = await MetaApiService.requestVerificationCode(params.phoneId, ctx.token, body.method, 'id');
+      if (!res.ok) {
+        set.status = 400;
+        return { success: false, error: res.error };
+      }
+      return {
+        success: true,
+        message: body.method === 'VOICE' ? 'Kode OTP akan dibacakan lewat panggilan telepon.' : 'Kode OTP dikirim lewat SMS.',
+      };
+    },
+    { body: t.Object({ method: t.Union([t.Literal('SMS'), t.Literal('VOICE')]) }) }
+  )
+
+  // ─── POST /settings/waba/numbers/:phoneId/verify-code ───
+  .post(
+    '/waba/numbers/:phoneId/verify-code',
+    async ({ user, params, body, set }) => {
+      const ctx = await loadNumberContext(user, set, params.phoneId);
+      if ('error' in ctx) return ctx.error;
+      const code = body.code.replace(/\D/g, '');
+      if (!/^\d{4,8}$/.test(code)) {
+        set.status = 400;
+        return { success: false, error: 'Kode OTP harus berupa angka.' };
+      }
+      const res = await MetaApiService.verifyCode(params.phoneId, ctx.token, code);
+      if (!res.ok) {
+        set.status = 400;
+        return { success: false, error: res.error };
+      }
+      return { success: true, message: 'Nomor berhasil diverifikasi.' };
+    },
+    { body: t.Object({ code: t.String({ minLength: 4, maxLength: 12 }) }) }
+  )
+
+  // ─── POST /settings/waba/numbers/:phoneId/register — enable Cloud API with a 6-digit PIN ───
+  .post(
+    '/waba/numbers/:phoneId/register',
+    async ({ user, params, body, set }) => {
+      const ctx = await loadNumberContext(user, set, params.phoneId);
+      if ('error' in ctx) return ctx.error;
+      if (!/^\d{6}$/.test(body.pin)) {
+        set.status = 400;
+        return { success: false, error: 'PIN harus 6 digit angka.' };
+      }
+      const res = await MetaApiService.registerPhoneNumber(params.phoneId, ctx.token, body.pin);
+      if (!res.ok) {
+        set.status = 400;
+        return { success: false, error: res.error };
+      }
+      return { success: true, message: 'Nomor terdaftar di WhatsApp Cloud API.' };
+    },
+    { body: t.Object({ pin: t.String({ minLength: 6, maxLength: 6 }) }) }
+  )
+
+  // ─── POST /settings/waba/numbers/:phoneId/activate — switch the org's active number ───
+  .post('/waba/numbers/:phoneId/activate', async ({ user, params, set }) => {
+    const ctx = await loadNumberContext(user, set, params.phoneId);
+    if ('error' in ctx) return ctx.error;
+    const n = ctx.number!;
+    if (n.code_verification_status && n.code_verification_status !== 'VERIFIED') {
+      set.status = 400;
+      return { success: false, error: 'Nomor ini belum diverifikasi (OTP). Selesaikan verifikasi dulu.' };
+    }
+    try {
+      const previous = await getActivePhone(user!.orgId);
+      await activatePhoneNumber(user!.orgId, {
+        phoneNumberId: n.id,
+        displayPhoneNumber: n.display_phone_number,
+        verifiedName: n.verified_name,
+        qualityRating: n.quality_rating,
+      });
+      await MetaApiService.subscribeAppToWaba(ctx.wabaId, ctx.token);
+      return {
+        success: true,
+        message: `Nomor aktif sekarang ${n.display_phone_number}.`,
+        previousNumber: previous && previous.phoneNumberId !== n.id ? previous.displayPhoneNumber : null,
+      };
+    } catch (err: any) {
+      set.status = err instanceof PhoneNumberInUseError ? 409 : 400;
+      return { success: false, error: err.message };
+    }
+  })
 
   // ─── GET /settings/operations — Workload & SLA Settings ──
   .get('/operations', async ({ user, set }) => {

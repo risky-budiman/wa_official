@@ -18,6 +18,7 @@ import {
 } from '../../db/schema';
 import { authPlugin } from '../../middleware/auth';
 import { MetaApiService } from '../../services/meta-api.service';
+import { getActivePhone } from '../../services/phone-number.service';
 
 export class BroadcastService {
   static async list(orgId: string) {
@@ -73,8 +74,7 @@ export class BroadcastService {
 
     // 2. Get Organization & Phone
     const [org] = await db.select().from(organizations).where(eq(organizations.id, orgId)).limit(1);
-    const phones = await db.select().from(phoneNumbers).where(eq(phoneNumbers.organizationId, orgId));
-    const phone = phones.length > 0 ? phones[0] : null;
+    const phone = await getActivePhone(orgId);
 
     const activeToken =
       org?.accessToken && !org.accessToken.startsWith('EAAGm0PX4ZCBO')

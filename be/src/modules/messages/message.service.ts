@@ -11,6 +11,7 @@ import { MetaApiService } from '../../services/meta-api.service';
 import { env } from '../../config/env';
 import type { JwtPayload } from '../../middleware/auth';
 import type { SendMessageBody, InternalNoteBody, GetMessagesQuery } from './message.types';
+import { getActivePhone, PHONE_STATUS_ARCHIVED } from '../../services/phone-number.service';
 
 export class MessageService {
   /**
@@ -80,11 +81,20 @@ export class MessageService {
     }
 
     // Get phone channel details
-    const [phone] = await db
+    let [phone] = await db
       .select()
       .from(phoneNumbers)
       .where(eq(phoneNumbers.id, conv.phoneNumberId))
       .limit(1);
+
+    // The organization switched numbers: continue this conversation on the active number
+    if (!phone || phone.status === PHONE_STATUS_ARCHIVED) {
+      const active = await getActivePhone(conv.organizationId);
+      if (active) {
+        phone = active;
+        await db.update(conversations).set({ phoneNumberId: active.id }).where(eq(conversations.id, conv.id));
+      }
+    }
 
     if (!phone) {
       throw new Error('Nomor telepon channel tidak ditemukan');

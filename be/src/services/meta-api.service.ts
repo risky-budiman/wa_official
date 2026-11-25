@@ -358,6 +358,62 @@ export class MetaApiService {
     }
   }
 
+  // ───────── Phone number management (change-number flow) ─────────
+
+  private static async graphPost(path: string, accessToken: string, body: Record<string, any>) {
+    try {
+      const res = await fetch(`${this.baseUrl}/${path}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data: any = await res.json().catch(() => ({}));
+      if (!res.ok || data?.error) {
+        const e = data?.error || {};
+        return { ok: false as const, data, error: e.error_user_msg || e.message || `Meta API error (${res.status})`, code: e.code };
+      }
+      return { ok: true as const, data };
+    } catch (err: any) {
+      return { ok: false as const, data: null, error: err?.message || 'Gagal menghubungi Meta API' };
+    }
+  }
+
+  /** All numbers in a WABA, including verification & display-name review status. */
+  static async listWabaPhoneNumbers(wabaId: string, accessToken: string) {
+    if (!accessToken || !wabaId) return { ok: false as const, numbers: [] as any[], error: 'WABA ID / token belum tersedia' };
+    try {
+      const fields = 'id,verified_name,display_phone_number,quality_rating,status,code_verification_status,name_status,new_name_status,messaging_limit_tier,platform_type';
+      const res = await fetch(`${this.baseUrl}/${wabaId}/phone_numbers?fields=${fields}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const data: any = await res.json();
+      if (!res.ok) return { ok: false as const, numbers: [] as any[], error: data?.error?.message || 'Gagal memuat nomor dari Meta' };
+      return { ok: true as const, numbers: (data?.data || []) as any[] };
+    } catch (err: any) {
+      return { ok: false as const, numbers: [] as any[], error: err?.message || 'Gagal menghubungi Meta API' };
+    }
+  }
+
+  /** Add a new number to a WABA. Returns the new phone_number_id. */
+  static addPhoneNumber(wabaId: string, accessToken: string, cc: string, phoneNumber: string, verifiedName: string) {
+    return this.graphPost(`${wabaId}/phone_numbers`, accessToken, { cc, phone_number: phoneNumber, verified_name: verifiedName });
+  }
+
+  /** Send the ownership OTP to the number by SMS or voice call. */
+  static requestVerificationCode(phoneNumberId: string, accessToken: string, method: 'SMS' | 'VOICE', language = 'id') {
+    return this.graphPost(`${phoneNumberId}/request_code`, accessToken, { code_method: method, language });
+  }
+
+  /** Confirm the OTP received on the number. */
+  static verifyCode(phoneNumberId: string, accessToken: string, code: string) {
+    return this.graphPost(`${phoneNumberId}/verify_code`, accessToken, { code });
+  }
+
+  /** Register the number on Cloud API with its 6-digit two-step verification PIN. */
+  static registerPhoneNumber(phoneNumberId: string, accessToken: string, pin: string) {
+    return this.graphPost(`${phoneNumberId}/register`, accessToken, { messaging_product: 'whatsapp', pin });
+  }
+
   /**
    * Exchange OAuth Code from Facebook Login Embedded Signup for Permanent / User Access Token
    */
