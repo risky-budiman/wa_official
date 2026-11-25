@@ -3,16 +3,24 @@
 // ===========================================
 
 import { Elysia, t } from 'elysia';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, inArray, isNull } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { env } from '../../config/env';
 import { db } from '../../config/database';
-import { messageTemplates, organizations, contacts, conversations, messages, phoneNumbers } from '../../db/schema';
+import { messageTemplates, organizations, contacts, conversations, messages, phoneNumbers, broadcastCampaigns } from '../../db/schema';
 import { authPlugin } from '../../middleware/auth';
 import { rbacPlugin } from '../../middleware/rbac';
 import { MetaApiService } from '../../services/meta-api.service';
 import type { TemplateCategory, TemplateStatus } from '../../db/schema/message-templates';
 import { getActivePhone } from '../../services/phone-number.service';
+
+/** Thrown when a template cannot be deleted because an active broadcast still uses it. */
+export class TemplateInUseError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'TemplateInUseError';
+  }
+}
 
 export class TemplateService {
   static async list(orgId: string) {
@@ -132,14 +140,22 @@ export class TemplateService {
         for (const localTpl of currentLocal) {
           if (!activeMetaNames.has(localTpl.name)) {
             console.log(`🗑️ Menghapus template lokal "${localTpl.name}" karena sudah dihapus di Meta.`);
-            await db
-              .delete(messageTemplates)
-              .where(
-                and(
-                  eq(messageTemplates.id, localTpl.id),
-                  eq(messageTemplates.organizationId, orgId)
-                )
-              );
+            try {
+              await db
+                .update(broadcastCampaigns)
+                .set({ templateName: localTpl.name })
+                .where(and(eq(broadcastCampaigns.templateId, localTpl.id), isNull(broadcastCampaigns.templateName)));
+              await db
+                .delete(messageTemplates)
+                .where(
+                  and(
+                    eq(messageTemplates.id, localTpl.id),
+                    eq(messageTemplates.organizationId, orgId)
+                  )
+                );
+            } catch (err: any) {
+              console.warn(`⚠️ Template lokal "${localTpl.name}" tidak bisa dihapus:`, err?.message || err);
+            }
           }
         }
       }
@@ -482,6 +498,29 @@ export class TemplateService {
       .limit(1);
 
     if (existing) {
+      // A running / scheduled broadcast still needs this template → refuse (before touching Meta)
+      const [activeCampaign] = await db
+        .select({ name: broadcastCampaigns.name, status: broadcastCampaigns.status })
+        .from(broadcastCampaigns)
+        .where(
+          and(
+            eq(broadcastCampaigns.templateId, id),
+            inArray(broadcastCampaigns.status, ['SCHEDULED', 'PROCESSING'])
+          )
+        )
+        .limit(1);
+      if (activeCampaign) {
+        throw new TemplateInUseError(
+          `Template "${existing.name}" sedang dipakai broadcast "${activeCampaign.name}" yang masih ${activeCampaign.status === 'SCHEDULED' ? 'terjadwal' : 'berjalan'}. Tunggu sampai selesai, lalu hapus lagi.`
+        );
+      }
+
+      // Keep the template name on past campaigns (history stays readable after deletion)
+      await db
+        .update(broadcastCampaigns)
+        .set({ templateName: existing.name })
+        .where(and(eq(broadcastCampaigns.templateId, id), isNull(broadcastCampaigns.templateName)));
+
       const [org] = await db
         .select({
           wabaId: organizations.wabaId,
@@ -800,6 +839,8 @@ export const templateRoutes = new Elysia({ prefix: '/templates' })
 
         // 4b. Body parameter sanitization
         const bodyComp = rawComponents.find((c: any) => (c.type || '').toUpperCase() === 'BODY');
+        // Used below to render the sent template text for the Inbox (was never defined → crash after sending)
+        const footerComp: any = rawComponents.find((c: any) => (c.type || '').toUpperCase() === 'FOOTER');
         if (bodyComp) {
           const bodyMatches = (bodyComp.text || '').match(/\{\{\d+\}\}/g) || [];
           if (bodyMatches.length > 0) {
@@ -949,6 +990,16 @@ export const templateRoutes = new Elysia({ prefix: '/templates' })
       return { success: false, error: 'Akses ditolak' };
     }
 
-    await TemplateService.delete(user.orgId, params.id);
-    return { success: true };
+    try {
+      await TemplateService.delete(user.orgId, params.id);
+      return { success: true };
+    } catch (err: any) {
+      if (err instanceof TemplateInUseError) {
+        set.status = 409;
+        return { success: false, error: err.message };
+      }
+      console.error('❌ Gagal menghapus template:', err?.message || err);
+      set.status = 500;
+      return { success: false, error: 'Template gagal dihapus. Coba lagi beberapa saat.' };
+    }
   });
