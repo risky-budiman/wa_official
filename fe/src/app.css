@@ -149,6 +149,11 @@ body {
     @apply w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-900 placeholder:text-slate-400 transition focus:border-emerald-500 focus:outline-none focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:placeholder:text-slate-500;
   }
 
+  /* Standard page container (all app pages) */
+  .ui-page {
+    @apply mx-auto w-full max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8;
+  }
+
   /* Status pill */
   .ui-pill {
     @apply inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold;
@@ -163,4 +168,53 @@ body {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* ===========================================
+   Data tables — add class="ui-table" to a <table>.
+   Intentionally NOT inside a cascade layer so it normalises
+   existing tables without rewriting every cell's utility classes.
+   =========================================== */
+.ui-table {
+  font-size: 0.8125rem;
+}
+.ui-table thead tr {
+  background: rgb(248 250 252);
+  border-bottom: 1px solid rgb(226 232 240);
+}
+.ui-table thead th {
+  padding: 0.75rem 1rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgb(100 116 139);
+  white-space: nowrap;
+}
+.ui-table tbody td {
+  padding: 0.875rem 1rem;
+  vertical-align: middle;
+}
+.ui-table tbody tr {
+  border-top: 1px solid rgb(241 245 249);
+  transition: background-color 0.15s ease;
+}
+.ui-table tbody tr:first-child {
+  border-top: 0;
+}
+.ui-table tbody tr:hover {
+  background: rgb(248 250 252 / 0.8);
+}
+.dark .ui-table thead tr {
+  background: rgb(2 6 23 / 0.4);
+  border-bottom-color: rgb(30 41 59);
+}
+.dark .ui-table thead th {
+  color: rgb(148 163 184);
+}
+.dark .ui-table tbody tr {
+  border-top-color: rgb(30 41 59 / 0.7);
+}
+.dark .ui-table tbody tr:hover {
+  background: rgb(30 41 59 / 0.35);
 }

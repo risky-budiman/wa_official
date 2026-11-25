@@ -84,14 +84,14 @@
     </button>
 
     <div class="min-w-0">
-      {#if current}
-        <nav aria-label="Breadcrumb" class="hidden items-center gap-1 text-xs text-slate-400 sm:flex dark:text-slate-500">
-          <span>{current.section.label}</span>
-          <ChevronRight class="h-3 w-3" />
-          <span class="text-slate-500 dark:text-slate-400">{current.item.name}</span>
-        </nav>
-      {/if}
-      <h1 class="truncate text-base font-bold tracking-tight text-slate-900 dark:text-white">{pageTitle}</h1>
+      <!-- Breadcrumb only: the page itself renders its own H1 via <PageHeader> -->
+      <nav aria-label="Breadcrumb" class="flex min-w-0 items-center gap-1.5 text-sm">
+        {#if current}
+          <span class="hidden shrink-0 text-slate-500 sm:inline dark:text-slate-400">{current.section.label}</span>
+          <ChevronRight class="hidden h-3.5 w-3.5 shrink-0 text-slate-300 sm:inline dark:text-slate-600" />
+        {/if}
+        <span class="truncate font-semibold text-slate-900 dark:text-white" aria-current="page">{pageTitle}</span>
+      </nav>
       {#if pageSubtitle && !current}
         <p class="truncate text-xs text-slate-500 dark:text-slate-400">{pageSubtitle}</p>
       {/if}

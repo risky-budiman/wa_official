@@ -1,4 +1,6 @@
 <script lang="ts">
+  import Alert from '$lib/components/ui/Alert.svelte';
+  import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import { authStore } from '$lib/stores/auth.svelte';
   import { onMount } from 'svelte';
   import {
@@ -182,78 +184,48 @@
   });
 </script>
 
-<div class="p-6 max-w-7xl mx-auto space-y-6">
-  <!-- Page Header -->
-  <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
-    <div>
-      <div class="flex items-center gap-2.5">
-        <div class="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center border border-amber-500/20 shadow-sm">
-          <Zap class="w-5 h-5" />
-        </div>
-        <div>
-          <h1 class="text-xl font-extrabold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
-            Balas Cepat CS (Quick Replies)
-          </h1>
-          <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Kelola template balasan pesan cepat internal. Agen CS dapat mengetik <code class="font-mono bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-emerald-600 dark:text-emerald-400">/shortcut</code> di Inbox Chat untuk menempelkan balasan instan.
-          </p>
-        </div>
-      </div>
-    </div>
-
-    {#if canManage}
-      <div class="flex items-center gap-2 shrink-0">
-        <button
-          type="button"
-          onclick={resetDefaultQr}
-          class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
-        >
-          <RotateCcw class="w-3.5 h-3.5" />
-          <span>Reset Bawaan</span>
+<div class="ui-page">
+  <PageHeader title="Balas Cepat" icon={Zap}>
+    {#snippet meta()}
+      <p class="max-w-2xl text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+        Template jawaban singkat untuk tim CS. Ketik <code class="rounded bg-slate-100 px-1 py-0.5 font-mono text-emerald-600 dark:bg-slate-800 dark:text-emerald-400">/shortcut</code> di kolom pesan Inbox untuk memakainya.
+      </p>
+    {/snippet}
+    {#snippet actions()}
+      {#if canManage}
+        <button type="button" onclick={resetDefaultQr} class="ui-btn-secondary">
+          <RotateCcw class="h-4 w-4" />
+          Reset Bawaan
         </button>
-
         <button
           type="button"
           onclick={() => { editingQrId = null; newQrShortcut = ''; newQrTitle = ''; newQrBody = ''; showFormModal = true; }}
-          class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-xs flex items-center gap-2 shadow-lg shadow-emerald-500/20 transition cursor-pointer"
+          class="ui-btn-primary"
         >
-          <Plus class="w-4 h-4 stroke-[3]" />
-          <span>Tambah Balas Cepat</span>
+          <Plus class="h-4 w-4" />
+          Tambah Balas Cepat
         </button>
-      </div>
-    {/if}
-  </div>
+      {/if}
+    {/snippet}
+  </PageHeader>
 
-  <!-- Role Access Banner -->
   {#if !canManage}
-    <div class="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center gap-3 text-amber-900 dark:text-amber-300 text-xs">
-      <Lock class="w-5 h-5 text-amber-500 shrink-0" />
-      <div>
-        <p class="font-bold">Akses Terbatas Agen CS</p>
-        <p class="text-[11px] text-amber-700/90 dark:text-amber-300/90 mt-0.5">
-          Penambahan dan pengubahan template Balas Cepat khusus dikelola oleh <strong>Supervisor & Admin</strong>. Anda dapat melihat daftar shortcut di bawah ini dan menggunakannya saat mengetik pesan di Inbox Chat dengan diawali simbol <code class="font-mono bg-amber-500/20 px-1 rounded font-bold">/</code>.
-        </p>
-      </div>
-    </div>
-  {:else}
-    <div class="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-between gap-3 text-emerald-900 dark:text-emerald-300 text-xs">
-      <div class="flex items-center gap-2.5">
-        <ShieldCheck class="w-5 h-5 text-emerald-500 shrink-0" />
-        <span>Anda memiliki hak akses <strong>Supervisor / Admin</strong> untuk menambah, mengedit, dan menghapus template Balas Cepat.</span>
-      </div>
-      <span class="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/15 px-2.5 py-1 rounded-lg">Akses Penuh</span>
-    </div>
+    <Alert
+      tone="info"
+      title="Akses baca saja"
+      message="Balas Cepat dikelola oleh Supervisor & Administrator. Anda tetap bisa memakai semua shortcut saat membalas pesan."
+    />
   {/if}
 
   <!-- Search & Filter Bar -->
-  <div class="flex items-center justify-between gap-4 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+  <div class="ui-card flex items-center justify-between gap-4 p-4">
     <div class="relative flex-1 max-w-md">
       <Search class="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
       <input
         type="text"
         bind:value={searchQuery}
         placeholder="Cari shortcut / nama / isi balasan cepat..."
-        class="w-full pl-9 pr-4 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500 transition"
+        class="ui-input pl-9"
       />
     </div>
 

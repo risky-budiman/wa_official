@@ -1,4 +1,6 @@
 <script lang="ts">
+  import Alert from '$lib/components/ui/Alert.svelte';
+  import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import { apiRequest } from '$lib/api/client';
   import { authStore } from '$lib/stores/auth.svelte';
   import { onMount } from 'svelte';
@@ -490,89 +492,57 @@
   });
 </script>
 
-<div class="p-6 md:p-8 max-w-7xl mx-auto space-y-6">
-  <!-- Header Bar -->
-  <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-    <div>
-      <div class="flex items-center gap-2.5">
-        <div class="p-2 rounded-xl bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400">
-          <FileText class="w-5 h-5" />
-        </div>
-        <div>
-          <h2 class="text-xl font-extrabold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
-            Template WhatsApp Meta (WABA Broadcast)
-          </h2>
-          <div class="flex items-center gap-2 mt-0.5">
-            <span class="px-2 py-0.5 rounded-full bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 text-[10px] font-bold border border-purple-200 dark:border-purple-800 flex items-center gap-1 font-mono">
-              <Sparkles class="w-3 h-3 text-purple-500" /> Meta WABA Approved
-            </span>
-            <span class="text-xs text-slate-500 dark:text-slate-400">
-              Khusus Broadcast Massal ({templateList.length} Terdaftar)
-            </span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    {#if authStore.role !== 'AGENT'}
-      <div class="flex flex-wrap items-center gap-2.5">
-        <!-- Button Seed Sample Templates -->
+<div class="ui-page">
+  <PageHeader
+    title="Template WhatsApp"
+    description="Template pesan resmi yang disetujui Meta, dipakai untuk broadcast dan memulai percakapan di luar jendela 24 jam."
+    icon={FileText}
+  >
+    {#snippet meta()}
+      <span class="ui-pill border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-500/30 dark:bg-violet-500/10 dark:text-violet-300">
+        <Sparkles class="h-3 w-3" /> Meta WABA
+      </span>
+      <span class="text-xs text-slate-500 dark:text-slate-400">{templateList.length} template terdaftar</span>
+    {/snippet}
+    {#snippet actions()}
+      {#if authStore.role !== 'AGENT'}
         <button
           onclick={seedSampleTemplates}
           disabled={isSeeding}
-          class="py-2 px-3.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs flex items-center gap-2 border border-slate-300 dark:border-slate-700 transition cursor-pointer disabled:opacity-60"
-          title="Tambahkan koleksi template contoh standar WhatsApp (Konfirmasi, Tagihan, Jadwal, Promo, OTP)"
+          class="ui-btn-ghost"
+          title="Tambahkan koleksi template contoh (konfirmasi, tagihan, jadwal, promo, OTP)"
         >
-          <BookOpen class="w-3.5 h-3.5 text-indigo-500 {isSeeding ? 'animate-spin' : ''}" />
-          <span>{isSeeding ? 'Memuat Sample...' : 'Muat Sample Otomatis'}</span>
+          <BookOpen class="h-4 w-4 {isSeeding ? 'animate-spin' : ''}" />
+          {isSeeding ? 'Memuat contoh...' : 'Muat Contoh'}
         </button>
-
-        <!-- Button Sync Meta -->
         <button
           onclick={syncFromMeta}
           disabled={isSyncing}
-          class="py-2 px-3.5 rounded-xl bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs flex items-center gap-2 shadow-sm transition cursor-pointer disabled:opacity-60"
+          class="ui-btn-secondary"
           title="Sinkronkan template langsung dari Meta WhatsApp Business Account"
         >
-          <RefreshCw class="w-3.5 h-3.5 {isSyncing ? 'animate-spin text-emerald-500' : ''}" />
-          <span>{isSyncing ? 'Menyinkronkan...' : 'Sinkronkan dari Meta'}</span>
+          <RefreshCw class="h-4 w-4 {isSyncing ? 'animate-spin' : ''}" />
+          {isSyncing ? 'Menyinkronkan...' : 'Sinkronkan dari Meta'}
         </button>
-
-        <!-- Button Create Template -->
-        <button
-          onclick={openCreateModal}
-          class="py-2 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-2 shadow-sm shadow-emerald-500/20 transition cursor-pointer"
-        >
-          <Plus class="w-4 h-4" />
-          <span>Buat Template Baru</span>
+        <button onclick={openCreateModal} class="ui-btn-primary">
+          <Plus class="h-4 w-4" />
+          Buat Template
         </button>
-      </div>
-    {/if}
-  </div>
+      {/if}
+    {/snippet}
+  </PageHeader>
 
   <!-- Notification Banner -->
   {#if feedbackMessage}
-    <div
-      class="p-3.5 rounded-xl text-xs font-semibold flex items-center justify-between gap-3 animate-fadeIn {feedbackMessage.type === 'success'
-        ? 'bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300'
-        : 'bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300'}"
-    >
-      <div class="flex items-center gap-2.5">
-        {#if feedbackMessage.type === 'success'}
-          <CheckCircle class="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-        {:else}
-          <XCircle class="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
-        {/if}
-        <span>{feedbackMessage.text}</span>
-      </div>
-      <button onclick={() => (feedbackMessage = null)} class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer">
-        <X class="w-4 h-4" />
-      </button>
-    </div>
+    <Alert
+      tone={feedbackMessage.type === 'success' ? 'success' : 'error'}
+      message={feedbackMessage.text}
+      ondismiss={() => (feedbackMessage = null)}
+    />
   {/if}
 
   <!-- Filters & Search Toolbar -->
-  <div class="bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800/80 rounded-2xl p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+  <div class="ui-card p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
     <!-- Search Box -->
     <div class="relative flex-1 max-w-md">
       <Search class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -580,7 +550,7 @@
         type="text"
         bind:value={searchQuery}
         placeholder="Cari nama template atau isi pesan..."
-        class="w-full pl-9 pr-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500 transition"
+        class="ui-input pl-9 pr-9"
       />
       {#if searchQuery}
         <button onclick={() => (searchQuery = '')} class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer">
