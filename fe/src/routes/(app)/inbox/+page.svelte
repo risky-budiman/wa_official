@@ -75,7 +75,16 @@
 
   // Attachment State
   let showAttachmentMenu = $state(false);
-  let attachmentAccept = $state("image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.csv");
+  // Must match the server whitelist in be/src/modules/media/media.routes.ts (WhatsApp-supported types)
+  const ACCEPT_IMAGE = ".jpg,.jpeg,.png,.webp,.gif";
+  const ACCEPT_VIDEO = ".mp4,.3gp";
+  const ACCEPT_AUDIO = ".mp3,.ogg,.opus,.aac,.amr,.m4a";
+  const ACCEPT_DOCUMENT = ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.csv";
+  const ALLOWED_UPLOAD_EXT = new Set(
+    [ACCEPT_IMAGE, ACCEPT_VIDEO, ACCEPT_AUDIO, ACCEPT_DOCUMENT].join(",").split(",").map((e) => e.slice(1)),
+  );
+  const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+  let attachmentAccept = $state([ACCEPT_IMAGE, ACCEPT_VIDEO, ACCEPT_AUDIO, ACCEPT_DOCUMENT].join(","));
   let fileInputRef = $state<HTMLInputElement | null>(null);
   let pendingAttachment = $state<{
     file: File;
@@ -100,6 +109,20 @@
     if (!input.files || input.files.length === 0) return;
 
     const file = input.files[0];
+
+    // Validate before uploading so the user gets a clear message immediately
+    const ext = (file.name.split(".").pop() || "").toLowerCase();
+    if (!file.name.includes(".") || !ALLOWED_UPLOAD_EXT.has(ext)) {
+      alert(`Tipe file .${ext || "?"} tidak didukung WhatsApp. Gunakan gambar (JPG/PNG), video (MP4), audio (MP3/OGG/AAC/M4A), PDF, atau dokumen Office.`);
+      input.value = "";
+      return;
+    }
+    if (file.size > MAX_UPLOAD_BYTES) {
+      alert(`Ukuran file ${formatFileSize(file.size)} melebihi batas 50 MB.`);
+      input.value = "";
+      return;
+    }
+
     const mimeType = file.type || "application/octet-stream";
     let category: "IMAGE" | "DOCUMENT" | "VIDEO" | "AUDIO" = "DOCUMENT";
 
@@ -414,6 +437,8 @@
     id: string;
     name: string;
     category: string;
+    language: string;
+    status: string;
     components: any[];
   }
 
@@ -2198,7 +2223,7 @@
                     >
                       <button
                         type="button"
-                        onclick={() => openFilePicker('image/*')}
+                        onclick={() => openFilePicker(ACCEPT_IMAGE)}
                         class="w-full px-3 py-2 flex items-center gap-3 rounded-xl hover:bg-purple-50 dark:hover:bg-purple-950/40 text-slate-700 dark:text-slate-200 font-semibold text-xs transition cursor-pointer"
                       >
                         <Image class="w-4.5 h-4.5 text-purple-600 dark:text-purple-400" />
@@ -2207,7 +2232,7 @@
 
                       <button
                         type="button"
-                        onclick={() => openFilePicker('video/*')}
+                        onclick={() => openFilePicker(ACCEPT_VIDEO)}
                         class="w-full px-3 py-2 flex items-center gap-3 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950/40 text-slate-700 dark:text-slate-200 font-semibold text-xs transition cursor-pointer"
                       >
                         <Video class="w-4.5 h-4.5 text-rose-500 dark:text-rose-400" />
@@ -2216,7 +2241,7 @@
 
                       <button
                         type="button"
-                        onclick={() => openFilePicker('.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.csv')}
+                        onclick={() => openFilePicker(ACCEPT_DOCUMENT)}
                         class="w-full px-3 py-2 flex items-center gap-3 rounded-xl hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-slate-700 dark:text-slate-200 font-semibold text-xs transition cursor-pointer"
                       >
                         <FileText class="w-4.5 h-4.5 text-indigo-600 dark:text-indigo-400" />
@@ -2225,7 +2250,7 @@
 
                       <button
                         type="button"
-                        onclick={() => openFilePicker('audio/*')}
+                        onclick={() => openFilePicker(ACCEPT_AUDIO)}
                         class="w-full px-3 py-2 flex items-center gap-3 rounded-xl hover:bg-amber-50 dark:hover:bg-amber-950/40 text-slate-700 dark:text-slate-200 font-semibold text-xs transition cursor-pointer"
                       >
                         <Music class="w-4.5 h-4.5 text-amber-500 dark:text-amber-400" />

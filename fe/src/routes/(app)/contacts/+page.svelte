@@ -71,7 +71,7 @@
   async function loadApprovedTemplates() {
     const res = await apiRequest<{ items: any[] }>('/templates');
     if (res.success && res.items) {
-      approvedTemplates = res.items.filter((t) => t.status === 'APPROVED');
+      approvedTemplates = res.items.filter((t: any) => t.status === 'APPROVED');
     }
   }
 
