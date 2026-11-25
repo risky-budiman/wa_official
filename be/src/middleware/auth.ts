@@ -52,14 +52,19 @@ async function loadAccount(userId: string): Promise<AccountInfo> {
     .where(eq(users.id, userId))
     .limit(1);
 
-  if (tenantUser) {
+  // 🔒 Legacy platform-staff rows in `users` are not valid logins anymore
+  // (platform staff authenticate against `super_admins`). Fall through to super_admins lookup.
+  const isLegacyPlatformRow =
+    !!tenantUser && ['SUPER_ADMIN', 'CO_SUPER_ADMIN', 'ADMIN_FINANCE', 'ADMIN_SUPPORT'].includes(tenantUser.role as string);
+
+  if (tenantUser && !isLegacyPlatformRow) {
     value = {
       active: tenantUser.status === 'ACTIVE',
       role: tenantUser.role,
       orgId: tenantUser.organizationId || '',
       email: tenantUser.email,
     };
-  } else {
+  } else if (!tenantUser || isLegacyPlatformRow) {
     const [platformUser] = await db
       .select({ role: superAdmins.role, status: superAdmins.status, email: superAdmins.email })
       .from(superAdmins)

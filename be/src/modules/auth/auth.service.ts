@@ -209,6 +209,12 @@ export class AuthService {
       throw new Error('Email atau password salah');
     }
 
+    // 🔒 Platform staff accounts must use the platform portal (/administrator).
+    // Legacy platform rows in `users` would otherwise yield a SUPER_ADMIN token via the tenant portal.
+    if (['SUPER_ADMIN', 'CO_SUPER_ADMIN', 'ADMIN_FINANCE', 'ADMIN_SUPPORT'].includes(user.role as string) || !user.organizationId) {
+      throw new Error('Akun staf platform harus login melalui portal Administrator (/administrator/login).');
+    }
+
     // Get org name
     let orgName = '';
     if (user.organizationId) {

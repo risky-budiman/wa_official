@@ -137,7 +137,10 @@ export async function testConnection(): Promise<void> {
       // 🔒 Warn loudly if any active platform account still uses the old well-known default password
       try {
         const [staffRows]: any = await connection.query(
-          `SELECT email, password_hash FROM super_admins WHERE status = 'ACTIVE';`
+          `SELECT email, password_hash FROM super_admins WHERE status = 'ACTIVE'
+           UNION ALL
+           SELECT CONCAT(email, ' (baris lama di tabel users)'), password_hash FROM users
+           WHERE status = 'ACTIVE' AND role IN ('SUPER_ADMIN', 'CO_SUPER_ADMIN', 'ADMIN_FINANCE', 'ADMIN_SUPPORT');`
         );
         const { verify } = await import('argon2');
         const weak: string[] = [];

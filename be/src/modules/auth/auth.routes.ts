@@ -10,6 +10,7 @@ import { users } from '../../db/schema/users';
 import { organizations } from '../../db/schema/organizations';
 import { superAdmins } from '../../db/schema/super-admins';
 import { eq, and, ne } from 'drizzle-orm';
+import { RULES, getClientIp, hit, reset, retryAfterSeconds, tooManyRequests } from '../../middleware/rate-limit';
 
 export const authRoutes = new Elysia({ prefix: '/auth' })
   .use(authPlugin)
@@ -17,7 +18,13 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
   // ─── POST /auth/register ───────────────────
   .post(
     '/register',
-    async ({ body, jwt, set }) => {
+    async ({ body, jwt, set, request, server }) => {
+      // 🔒 Rate limit registrations per IP
+      const ipKey = `register:ip:${getClientIp(request, server)}`;
+      const wait = retryAfterSeconds(ipKey, RULES.registerPerIp);
+      if (wait > 0) return tooManyRequests(set, wait);
+      hit(ipKey, RULES.registerPerIp);
+
       try {
         const user = await AuthService.register(body);
 
@@ -64,9 +71,20 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
   // ─── POST /auth/login ─────────────────────
   .post(
     '/login',
-    async ({ body, jwt, set }) => {
+    async ({ body, jwt, set, request, server }) => {
+      // 🔒 Brute-force protection: limit FAILED attempts per account and per IP
+      const portal = body.portalType || 'TENANT';
+      const accountKey = `login:acct:${portal}:${String(body.email || '').trim().toLowerCase()}`;
+      const ipKey = `login:ip:${getClientIp(request, server)}`;
+      const wait = Math.max(
+        retryAfterSeconds(accountKey, RULES.loginPerAccount),
+        retryAfterSeconds(ipKey, RULES.loginPerIp)
+      );
+      if (wait > 0) return tooManyRequests(set, wait);
+
       try {
         const user = await AuthService.login(body);
+        reset(accountKey);
 
         // Generate JWT token
         const token = await jwt.sign({
@@ -82,6 +100,8 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
           user,
         };
       } catch (error: any) {
+        hit(accountKey, RULES.loginPerAccount);
+        hit(ipKey, RULES.loginPerIp);
         set.status = 401;
         return {
           success: false,
@@ -209,6 +229,11 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
       }
 
       if (body.newPassword && body.newPassword.trim()) {
+        // 🔒 Limit wrong current-password guesses (stolen-token scenario)
+        const pwdKey = `pwdchange:user:${user.id}`;
+        const pwdWait = retryAfterSeconds(pwdKey, RULES.passwordChangePerUser);
+        if (pwdWait > 0) return tooManyRequests(set, pwdWait);
+
         // 🔒 Changing the password always requires the current password
         if (!body.currentPassword || !body.currentPassword.trim()) {
           set.status = 400;
@@ -220,6 +245,7 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
           const { verify } = await import('argon2');
           const isArgonValid = await verify(dbUser.passwordHash, body.currentPassword).catch(() => false);
           if (!isArgonValid) {
+            hit(pwdKey, RULES.passwordChangePerUser);
             set.status = 400;
             return { success: false, error: 'Password saat ini salah.' };
           }
@@ -271,7 +297,13 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
   // ─── GET /auth/org/:id — Validate Organization ID (for Join Org Registration) ──
   .get(
     '/org/:id',
-    async ({ params, set }) => {
+    async ({ params, set, request, server }) => {
+      // 🔒 Prevent organization ID enumeration
+      const ipKey = `orglookup:ip:${getClientIp(request, server)}`;
+      const wait = retryAfterSeconds(ipKey, RULES.orgLookupPerIp);
+      if (wait > 0) return tooManyRequests(set, wait);
+      hit(ipKey, RULES.orgLookupPerIp);
+
       try {
         const org = await AuthService.lookupOrganization(params.id);
         if (!org) {
