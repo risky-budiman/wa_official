@@ -1607,7 +1607,8 @@ export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
       // Using detached child process with 3s delay ensures HTTP response closes cleanly before systemctl restart
       try {
         const { spawn } = await import('child_process');
-        const bgCmd = 'sleep 3 && (cd fe && (bun run build || npm run build || true)) && (sudo systemctl restart wa-crm-backend wa-crm-frontend || sudo systemctl restart wa-backend wa-frontend || true)';
+        // Install dependencies first (package.json / bun.lock may have changed), then build & restart
+        const bgCmd = 'sleep 3 && (cd be && (bun install || true)) && (cd fe && (bun install || true) && (bun run build || npm run build || true)) &&(sudo systemctl restart wa-crm-backend wa-crm-frontend || sudo systemctl restart wa-backend wa-frontend || true)';
         const child = spawn('sh', ['-c', bgCmd], {
           cwd: repoDir,
           detached: true,
