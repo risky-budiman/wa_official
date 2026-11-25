@@ -8,7 +8,6 @@
   import {
     Building2,
     Shield,
-    CheckCircle2,
     AlertTriangle,
     Lock,
     X,
@@ -20,18 +19,18 @@
     Mail,
     Eye,
     EyeOff,
-    User,
     UserCog,
-    Settings,
     Package,
     Wallet,
     ShieldCheck,
     Receipt,
     Menu,
     GitBranch,
+    ChevronRight,
   } from "lucide-svelte";
 
-  import { portal } from "$lib/admin/portal.svelte";
+  import { portal, type AdminTab } from "$lib/admin/portal.svelte";
+  import Alert from "$lib/components/ui/Alert.svelte";
   import TenantsTab from "$lib/components/admin/TenantsTab.svelte";
   import PlansTab from "$lib/components/admin/PlansTab.svelte";
   import TransactionsTab from "$lib/components/admin/TransactionsTab.svelte";
@@ -169,7 +168,7 @@
         </div>
         <div>
           <h1
-            class="text-sm font-black tracking-tight text-slate-900 dark:text-white uppercase"
+            class="text-sm font-bold tracking-tight text-slate-900 dark:text-white uppercase"
           >
             Portal Kontrol Master SaaS
           </h1>
@@ -220,7 +219,7 @@
             <Shield class="w-7 h-7 stroke-[2.5]" />
           </div>
           <h2
-            class="text-xl font-extrabold tracking-tight text-slate-900 dark:text-white"
+            class="text-xl font-bold tracking-tight text-slate-900 dark:text-white"
           >
             Autentikasi Master Super Admin
           </h2>
@@ -258,7 +257,7 @@
                   type="email"
                   bind:value={loginEmail}
                   placeholder="admin@perusahaan.com"
-                  class="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 font-mono transition"
+                  class="ui-input pl-10 pr-4 font-mono"
                   required
                 />
               </div>
@@ -279,7 +278,7 @@
                   type={showPassword ? "text" : "password"}
                   bind:value={loginPassword}
                   placeholder="Masukkan password admin..."
-                  class="w-full pl-10 pr-10 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 font-mono transition"
+                  class="ui-input pl-10 pr-10 font-mono"
                   required
                 />
                 <button
@@ -330,477 +329,179 @@
     </div>
   {:else}
     <!-- ========================================================= -->
-    <!-- MASTER SUPER ADMIN DASHBOARD: SIDEBAR + CONTENT           -->
+    <!-- PLATFORM ADMIN: SIDEBAR + CONTENT                         -->
     <!-- ========================================================= -->
-    <div class="flex-1 flex flex-col md:flex-row min-h-screen w-full relative">
-      <!-- Backdrop overlay on Mobile when sidebar is open -->
+    {@const navSections = [
+      {
+        label: "Manajemen SaaS",
+        items: [
+          { id: "tenants", label: "Organisasi klien", icon: Building2, count: portal.organizationsList.length },
+          { id: "plans", label: "Paket & promo", icon: Package, count: portal.saasPlans.length },
+        ],
+      },
+      {
+        label: "Billing & keuangan",
+        items: [
+          { id: "transactions", label: "Transaksi & omzet", icon: Receipt, count: portal.transactionsList.length, pending: portal.transactionSummary.pendingCount },
+          { id: "midtrans", label: "Gateway Midtrans", icon: Wallet, dot: portal.midtrans.isEnabled },
+        ],
+      },
+      {
+        label: "Administrasi",
+        items: [
+          { id: "staff", label: "Tim & staf admin", icon: ShieldCheck, count: portal.staffList.length },
+          ...(authStore.isPrimaryAdmin ? [{ id: "system_update", label: "Update sistem", icon: GitBranch, rootOnly: true }] : []),
+        ],
+      },
+    ] as { label: string; items: { id: AdminTab; label: string; icon: any; count?: number; pending?: number; dot?: boolean; rootOnly?: boolean }[] }[]}
+    {@const activeItem = navSections.flatMap((s) => s.items).find((i) => i.id === portal.activeTab)}
+
+    <div class="relative flex min-h-screen w-full flex-1 flex-col md:flex-row">
       {#if mobileSidebarOpen}
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div
-          class="md:hidden fixed inset-0 bg-slate-950/60 backdrop-blur-xs z-40"
-          onclick={() => (mobileSidebarOpen = false)}
-        ></div>
+        <div class="fixed inset-0 z-40 bg-slate-950/50 backdrop-blur-[2px] md:hidden" onclick={() => (mobileSidebarOpen = false)}></div>
       {/if}
 
-      <!-- Enterprise Left Sidebar -->
+      <!-- Sidebar -->
       <aside
-        class="fixed md:sticky top-0 bottom-0 left-0 z-50 md:z-30 w-72 shrink-0 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 flex flex-col justify-between transition-transform duration-200 ease-in-out md:translate-x-0 h-screen {mobileSidebarOpen
+        class="fixed top-0 bottom-0 left-0 z-50 flex h-screen w-64 shrink-0 flex-col border-r border-slate-200 bg-white transition-transform duration-200 ease-in-out md:sticky md:z-30 md:translate-x-0 dark:border-slate-800 dark:bg-slate-900 {mobileSidebarOpen
           ? 'translate-x-0 shadow-2xl'
           : '-translate-x-full md:translate-x-0'}"
+        aria-label="Navigasi portal admin"
       >
-        <!-- Top Section: Brand & User Info -->
-        <div
-          class="p-5 border-b border-slate-100 dark:border-slate-800/80 shrink-0"
-        >
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-3">
-              <div
-                class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-emerald-500 flex items-center justify-center text-white shadow-md shadow-indigo-500/20"
-              >
-                <Shield class="w-5 h-5 stroke-[2.5]" />
-              </div>
-              <div class="min-w-0">
-                <h1
-                  class="font-extrabold text-sm tracking-tight text-slate-900 dark:text-white truncate"
-                >
-                  WA CRM Master
-                </h1>
-                <div class="flex items-center gap-1.5 mt-0.5">
-                  <span
-                    class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"
-                  ></span>
-                  <span
-                    class="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider"
-                    >Super Administrator</span
-                  >
-                </div>
-              </div>
+        <!-- Brand -->
+        <div class="flex h-16 shrink-0 items-center justify-between gap-2 border-b border-slate-200 px-5 dark:border-slate-800">
+          <div class="flex min-w-0 items-center gap-3">
+            <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-sm shadow-indigo-600/30 dark:bg-indigo-500">
+              <Shield class="h-5 w-5" />
             </div>
-
-            <!-- Close button for mobile -->
-            <button
-              onclick={() => (mobileSidebarOpen = false)}
-              class="md:hidden p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-white"
-            >
-              <X class="w-5 h-5" />
-            </button>
-          </div>
-
-          <!-- Staff User Status Card -->
-          <div
-            class="mt-4 p-3 rounded-xl bg-slate-50 dark:bg-slate-950/70 border border-slate-200/80 dark:border-slate-800/80 space-y-1"
-          >
-            <div class="flex items-center justify-between gap-2">
-              <span
-                class="text-xs font-bold text-slate-800 dark:text-slate-200 truncate"
-                >{authStore.user?.fullName || "Super Admin"}</span
-              >
-              <span
-                class="text-[9px] font-extrabold px-1.5 py-0.5 rounded-full bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/25 shrink-0"
-              >
-                {authStore.user?.role || "SUPER_ADMIN"}
-              </span>
-            </div>
-            <div class="text-[10px] text-slate-400 font-mono truncate">
-              {authStore.user?.email || "admin@perusahaan.com"}
+            <div class="min-w-0 leading-tight">
+              <p class="truncate text-[15px] font-semibold tracking-tight text-slate-900 dark:text-white">WhatsApp CRM</p>
+              <p class="truncate text-xs text-slate-500 dark:text-slate-400">Portal admin platform</p>
             </div>
           </div>
+          <button onclick={() => (mobileSidebarOpen = false)} class="ui-icon-btn md:hidden" aria-label="Tutup menu">
+            <X class="h-5 w-5" />
+          </button>
         </div>
 
-        <!-- Middle Section: Navigation Menu Items -->
-        <div class="flex-1 px-3 py-4 space-y-6 overflow-y-auto">
-          <!-- Group 1: MANAJEMEN SAAS -->
-          <div class="space-y-1">
-            <div
-              class="px-3 text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2"
-            >
-              Manajemen SaaS
+        <!-- Navigation -->
+        <nav class="flex-1 space-y-6 overflow-y-auto px-3 py-5">
+          {#each navSections as section}
+            <div>
+              <p class="mb-1.5 px-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">{section.label}</p>
+              <ul class="space-y-0.5">
+                {#each section.items as item}
+                  {@const active = portal.activeTab === item.id}
+                  <li>
+                    <button
+                      onclick={() => {
+                        portal.activeTab = item.id;
+                        if (item.id === "transactions") portal.loadTransactions();
+                        mobileSidebarOpen = false;
+                      }}
+                      aria-current={active ? "page" : undefined}
+                      class="relative flex w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors {active
+                        ? 'bg-indigo-50 font-semibold text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300'
+                        : 'font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white'}"
+                    >
+                      {#if active}<span class="absolute inset-y-1.5 -left-3 w-1 rounded-r-full bg-indigo-600 dark:bg-indigo-400" aria-hidden="true"></span>{/if}
+                      <item.icon class="h-[18px] w-[18px] shrink-0 {active ? '' : 'text-slate-400 dark:text-slate-500'}" />
+                      <span class="flex-1 truncate text-left">{item.label}</span>
+                      {#if item.pending}
+                        <span class="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">{item.pending} menunggu</span>
+                      {:else if item.rootOnly}
+                        <span class="rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-400">Root</span>
+                      {:else if item.dot}
+                        <span class="h-2 w-2 rounded-full bg-emerald-500" title="Aktif"></span>
+                      {:else if item.count !== undefined}
+                        <span class="min-w-6 rounded-full px-1.5 py-0.5 text-center text-[11px] font-semibold tabular-nums {active ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-300' : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'}">{item.count}</span>
+                      {/if}
+                    </button>
+                  </li>
+                {/each}
+              </ul>
             </div>
-            <button
-              onclick={() => {
-                portal.activeTab = "tenants";
-                mobileSidebarOpen = false;
-              }}
-              class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer {portal.activeTab ===
-              'tenants'
-                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/25'
-                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'}"
-            >
-              <div class="flex items-center gap-2.5">
-                <Building2
-                  class="w-4 h-4 {portal.activeTab === 'tenants'
-                    ? 'text-white'
-                    : 'text-slate-400'}"
-                />
-                <span>Organisasi Klien</span>
-              </div>
-              <span
-                class="text-[10px] px-2 py-0.5 rounded-full font-bold {portal.activeTab ===
-                'tenants'
-                  ? 'bg-white/20 text-white'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}"
-              >
-                {portal.organizationsList.length}
-              </span>
-            </button>
+          {/each}
+        </nav>
 
-            <button
-              onclick={() => {
-                portal.activeTab = "plans";
-                mobileSidebarOpen = false;
-              }}
-              class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer {portal.activeTab ===
-              'plans'
-                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/25'
-                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'}"
-            >
-              <div class="flex items-center gap-2.5">
-                <Package
-                  class="w-4 h-4 {portal.activeTab === 'plans'
-                    ? 'text-white'
-                    : 'text-slate-400'}"
-                />
-                <span>Paket & Promo SaaS</span>
-              </div>
-              <span
-                class="text-[10px] px-2 py-0.5 rounded-full font-bold {portal.activeTab ===
-                'plans'
-                  ? 'bg-white/20 text-white'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}"
-              >
-                {portal.saasPlans.length}
-              </span>
-            </button>
-          </div>
-
-          <!-- Group 2: BILLING & KEUANGAN -->
-          <div class="space-y-1">
-            <div
-              class="px-3 text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2"
-            >
-              Billing & Keuangan
-            </div>
-            <button
-              onclick={() => {
-                portal.activeTab = "transactions";
-                portal.loadTransactions();
-                mobileSidebarOpen = false;
-              }}
-              class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer {portal.activeTab ===
-              'transactions'
-                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/25'
-                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'}"
-            >
-              <div class="flex items-center gap-2.5">
-                <Receipt
-                  class="w-4 h-4 {portal.activeTab === 'transactions'
-                    ? 'text-white'
-                    : 'text-slate-400'}"
-                />
-                <span>Transaksi & Omset</span>
-              </div>
-              {#if portal.transactionSummary.pendingCount > 0}
-                <span
-                  class="text-[9px] px-1.5 py-0.5 rounded-full font-extrabold bg-amber-500 text-slate-950 animate-pulse"
-                >
-                  {portal.transactionSummary.pendingCount} Pending
-                </span>
-              {:else}
-                <span
-                  class="text-[10px] px-2 py-0.5 rounded-full font-bold {portal.activeTab ===
-                  'transactions'
-                    ? 'bg-white/20 text-white'
-                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}"
-                >
-                  {portal.transactionsList.length}
-                </span>
-              {/if}
-            </button>
-
-            <button
-              onclick={() => {
-                portal.activeTab = "midtrans";
-                mobileSidebarOpen = false;
-              }}
-              class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer {portal.activeTab ===
-              'midtrans'
-                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/25'
-                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'}"
-            >
-              <div class="flex items-center gap-2.5">
-                <Wallet
-                  class="w-4 h-4 {portal.activeTab === 'midtrans'
-                    ? 'text-white'
-                    : 'text-slate-400'}"
-                />
-                <span>Gateway Midtrans</span>
-              </div>
-              {#if portal.midtrans.isEnabled}
-                <span
-                  class="w-2 h-2 rounded-full bg-emerald-400 shadow-sm animate-pulse"
-                ></span>
-              {/if}
-            </button>
-          </div>
-
-          <!-- Group 3: ADMINISTRASI & STAF -->
-          <div class="space-y-1">
-            <div
-              class="px-3 text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2"
-            >
-              Administrasi & Tim
-            </div>
-            <button
-              onclick={() => {
-                portal.activeTab = "staff";
-                mobileSidebarOpen = false;
-              }}
-              class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer {portal.activeTab ===
-              'staff'
-                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/25'
-                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'}"
-            >
-              <div class="flex items-center gap-2.5">
-                <ShieldCheck
-                  class="w-4 h-4 {portal.activeTab === 'staff'
-                    ? 'text-white'
-                    : 'text-slate-400'}"
-                />
-                <span>Tim & Staf Admin</span>
-              </div>
-              <span
-                class="text-[10px] px-2 py-0.5 rounded-full font-bold {portal.activeTab ===
-                'staff'
-                  ? 'bg-white/20 text-white'
-                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}"
-              >
-                {portal.staffList.length}
-              </span>
-            </button>
-
-            <!-- Menu Update Sistem (GitHub) — HANYA Administrator Utama -->
-            {#if authStore.isPrimaryAdmin}
-            <button
-              onclick={() => {
-                portal.activeTab = "system_update";
-                mobileSidebarOpen = false;
-              }}
-              class="w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-bold transition cursor-pointer {portal.activeTab ===
-              'system_update'
-                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/25'
-                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'}"
-            >
-              <div class="flex items-center gap-2.5">
-                <GitBranch
-                  class="w-4 h-4 {portal.activeTab === 'system_update'
-                    ? 'text-white'
-                    : 'text-slate-400'}"
-                />
-                <span>Update Sistem (GitHub)</span>
-              </div>
-              <span
-                class="text-[9px] px-1.5 py-0.5 rounded font-extrabold uppercase tracking-wider {portal.activeTab ===
-                'system_update'
-                  ? 'bg-white/20 text-white'
-                  : 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/20'}"
-              >
-                Root Only
-              </span>
-            </button>
-            {/if}
-          </div>
-        </div>
-
-        <!-- Bottom Section: System Status Indicator -->
-        <div class="p-4 border-t border-slate-100 dark:border-slate-800/80 shrink-0">
-          <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 space-y-1">
-            <div class="flex items-center justify-between text-[11px]">
-              <span class="font-bold text-slate-700 dark:text-slate-300">Engine Platform</span>
-              <span class="inline-flex items-center gap-1.5 font-bold text-emerald-600 dark:text-emerald-400 text-[10px]">
-                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                v2.4 Online
-              </span>
-            </div>
-            <div class="text-[10px] text-slate-400">
-              Administrator Platform Independen
-            </div>
-          </div>
-        </div>
-      </aside>
-
-      <!-- Main Content Container with Top Executive Navbar -->
-      <div class="flex-1 flex flex-col min-w-0 min-h-screen">
-        <!-- Top Executive Navbar -->
-        <header
-          class="sticky top-0 z-30 h-16 px-4 sm:px-8 bg-white/85 dark:bg-slate-900/85 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800/80 flex items-center justify-between gap-4 shrink-0"
-        >
-          <!-- Left: Mobile Menu Toggle & Breadcrumb -->
-          <div class="flex items-center gap-3">
-            <button
-              onclick={() => (mobileSidebarOpen = !mobileSidebarOpen)}
-              class="md:hidden p-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 cursor-pointer"
-              title="Menu Navigasi"
-            >
-              <Menu class="w-4 h-4" />
-            </button>
-
-            <!-- Breadcrumb / Section Badge -->
-            <div class="flex items-center gap-2 text-xs">
-              <span class="font-bold text-slate-400 dark:text-slate-500 hidden sm:inline">
-                Portal Master
-              </span>
-              <span class="text-slate-300 dark:text-slate-600 hidden sm:inline">/</span>
-              <span class="font-extrabold text-slate-900 dark:text-white flex items-center gap-1.5">
-                {#if portal.activeTab === "tenants"}
-                  <Building2 class="w-4 h-4 text-indigo-500" />
-                  <span>Manajemen Organisasi Klien</span>
-                {:else if portal.activeTab === "plans"}
-                  <Package class="w-4 h-4 text-indigo-500" />
-                  <span>Pengaturan Paket & Promo SaaS</span>
-                {:else if portal.activeTab === "transactions"}
-                  <Receipt class="w-4 h-4 text-indigo-500" />
-                  <span>Pusat Transaksi & Omset</span>
-                {:else if portal.activeTab === "midtrans"}
-                  <Wallet class="w-4 h-4 text-indigo-500" />
-                  <span>Channel Pembayaran Midtrans</span>
-                {:else if portal.activeTab === "staff"}
-                  <ShieldCheck class="w-3.5 h-3.5 text-indigo-500" />
-                  <span>Tim & Staf Administrator</span>
-                {:else if portal.activeTab === "system_update"}
-                  <GitBranch class="w-3.5 h-3.5 text-indigo-500" />
-                  <span>Pusat Update Sistem (GitHub)</span>
-                {/if}
-              </span>
-            </div>
-          </div>
-
-          <!-- Right: Theme Switcher, Account Profile Pill, Logout -->
-          <div class="flex items-center gap-2 sm:gap-3">
-            <!-- Theme Switcher -->
-            <button
-              onclick={() => themeStore.toggle()}
-              class="p-2 sm:p-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700/80 transition cursor-pointer"
-              title="Ubah Tema Mode Terang / Gelap"
-            >
-              {#if themeStore.current === "dark"}
-                <Sun class="w-4 h-4 text-amber-400" />
-              {:else}
-                <Moon class="w-4 h-4 text-indigo-600" />
-              {/if}
-            </button>
-
-            <!-- Separator -->
-            <div class="h-6 w-px bg-slate-200 dark:bg-slate-800 hidden sm:block"></div>
-
-            <!-- Profile & Account Settings Action Pill -->
-            <button
-              onclick={openSuperAdminProfile}
-              class="flex items-center gap-2.5 py-1.5 pl-1.5 pr-3 rounded-xl bg-slate-100/80 hover:bg-slate-200/80 dark:bg-slate-800/80 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-200/80 dark:border-slate-700/80 transition cursor-pointer"
-              title="Ubah Profil Akun, Email & Password Saya"
-            >
-              <div
-                class="w-7 h-7 rounded-lg bg-gradient-to-tr from-indigo-600 to-purple-600 text-white font-black text-xs flex items-center justify-center shadow-xs"
-              >
+        <!-- Account -->
+        <div class="shrink-0 border-t border-slate-200 p-3 dark:border-slate-800">
+          <div class="flex items-center gap-3 rounded-xl px-2 py-2">
+            <button onclick={openSuperAdminProfile} class="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-lg text-left" title="Ubah profil, email & kata sandi">
+              <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-sm font-semibold text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300">
                 {(authStore.user?.fullName || "A")[0].toUpperCase()}
               </div>
-              <div class="text-left hidden md:block">
-                <div class="text-xs font-bold leading-tight truncate max-w-[120px]">
-                  {authStore.user?.fullName || "Super Admin"}
-                </div>
-                <div class="text-[9px] text-slate-400 font-semibold leading-tight">
-                  {authStore.user?.role || "SUPER_ADMIN"}
-                </div>
+              <div class="min-w-0">
+                <p class="truncate text-sm font-semibold text-slate-900 dark:text-white">{authStore.user?.fullName || "Super Admin"}</p>
+                <p class="truncate text-xs text-slate-500 dark:text-slate-400">{(authStore.user?.role || "SUPER_ADMIN").replace(/_/g, " ").toLowerCase()}</p>
               </div>
-              <UserCog class="w-3.5 h-3.5 text-slate-400 hidden sm:inline" />
             </button>
-
-            <!-- Logout Button -->
             <button
               onclick={() => {
                 authStore.logout();
                 goto("/administrator/login");
               }}
-              class="p-2 sm:p-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/20 transition cursor-pointer"
-              title="Keluar / Logout"
+              class="ui-icon-btn h-8 w-8 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/10 dark:hover:text-rose-400"
+              title="Keluar"
+              aria-label="Keluar"
             >
-              <LogOut class="w-4 h-4" />
+              <LogOut class="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Content -->
+      <div class="flex min-h-screen min-w-0 flex-1 flex-col">
+        <header class="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between gap-4 border-b border-slate-200 bg-white/90 px-4 backdrop-blur sm:px-6 lg:px-8 dark:border-slate-800 dark:bg-slate-900/90">
+          <div class="flex min-w-0 items-center gap-2">
+            <button onclick={() => (mobileSidebarOpen = !mobileSidebarOpen)} class="ui-icon-btn -ml-2 md:hidden" aria-label="Buka menu">
+              <Menu class="h-5 w-5" />
+            </button>
+            <nav class="flex min-w-0 items-center gap-1.5 text-sm" aria-label="Breadcrumb">
+              <span class="hidden text-slate-500 sm:inline dark:text-slate-400">Portal admin</span>
+              <ChevronRight class="hidden h-4 w-4 text-slate-300 sm:inline dark:text-slate-600" />
+              <span class="truncate font-semibold text-slate-900 dark:text-white">{activeItem?.label ?? ""}</span>
+            </nav>
+          </div>
+
+          <div class="flex items-center gap-1">
+            <button onclick={() => themeStore.toggle()} class="ui-icon-btn" title="Ubah tema" aria-label="Ubah tema">
+              {#if themeStore.current === "dark"}<Sun class="h-5 w-5" />{:else}<Moon class="h-5 w-5" />{/if}
+            </button>
+            <button onclick={openSuperAdminProfile} class="ui-icon-btn" title="Profil akun saya" aria-label="Profil akun saya">
+              <UserCog class="h-5 w-5" />
             </button>
           </div>
         </header>
 
-        <!-- Main Content Area -->
-        <main
-          class="flex-1 flex flex-col min-w-0 bg-slate-50/50 dark:bg-slate-950 p-4 sm:p-8 space-y-6 overflow-y-auto"
-        >
-
-      <!-- Feedback Banner -->
-      {#if portal.feedbackMessage}
-        <div
-          class="p-4 rounded-2xl flex items-center gap-3 border text-xs font-semibold shadow-xs animate-in fade-in slide-in-from-top-2 {portal.feedbackMessage.type ===
-          'success'
-            ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-800 dark:text-emerald-300'
-            : 'bg-rose-500/10 border-rose-500/20 text-rose-800 dark:text-rose-300'}"
-        >
-          {#if portal.feedbackMessage.type === "success"}
-            <CheckCircle2 class="w-4 h-4 text-emerald-500 shrink-0" />
-          {:else}
-            <AlertTriangle class="w-4 h-4 text-rose-500 shrink-0" />
+        <main class="mx-auto flex w-full max-w-7xl min-w-0 flex-1 flex-col space-y-6 p-4 sm:p-6 lg:p-8">
+          {#if portal.feedbackMessage}
+            <Alert
+              tone={portal.feedbackMessage.type === "success" ? "success" : "error"}
+              message={portal.feedbackMessage.text}
+              ondismiss={() => (portal.feedbackMessage = null)}
+            />
           {/if}
-          <span class="flex-1">{portal.feedbackMessage.text}</span>
-          <button
-            onclick={() => (portal.feedbackMessage = null)}
-            class="text-slate-400 hover:text-slate-600 dark:hover:text-white cursor-pointer"
-          >
-            <X class="w-4 h-4" />
-          </button>
-        </div>
-      {/if}
 
-      <!-- ========================================================= -->
-      <!-- TAB 1: MANAJEMEN TENANT & ORGANISASI                      -->
-      <!-- ========================================================= -->
-      {#if portal.activeTab === "tenants"}
-        <TenantsTab />
-      {/if}
-
-      <!-- ========================================================= -->
-      <!-- TAB 2: PENGATURAN PAKET & HARGA SEWA SAAS                 -->
-      <!-- ========================================================= -->
-      {#if portal.activeTab === "plans"}
-        <PlansTab />
-      {/if}
-
-      <!-- ========================================================= -->
-      <!-- TAB 3: RIWAYAT TRANSAKSI & OMSET PEMBAYARAN SAAS          -->
-      <!-- ========================================================= -->
-      {#if portal.activeTab === "transactions"}
-        <TransactionsTab />
-      {/if}
-
-      <!-- ========================================================= -->
-      <!-- TAB 4: CHANNEL PEMBAYARAN MIDTRANS                        -->
-      <!-- ========================================================= -->
-      {#if portal.activeTab === "midtrans"}
-        <PaymentGatewayTab />
-      {/if}
-
-      <!-- ========================================================= -->
-      <!-- TAB 4: TIM & STAF ADMINISTRATOR (BERDIRI SENDIRI)         -->
-      <!-- ========================================================= -->
-      {#if portal.activeTab === "staff"}
-        <StaffTab />
-      {/if}
-
-      <!-- ========================================================= -->
-      <!-- TAB 6: PUSAT PEMBARUAN SISTEM (GIT / GITHUB UPDATE)       -->
-      <!-- ========================================================= -->
-      {#if portal.activeTab === "system_update"}
-        <SystemUpdateTab />
-      {/if}
-      </main>
+          {#if portal.activeTab === "tenants"}
+            <TenantsTab />
+          {:else if portal.activeTab === "plans"}
+            <PlansTab />
+          {:else if portal.activeTab === "transactions"}
+            <TransactionsTab />
+          {:else if portal.activeTab === "midtrans"}
+            <PaymentGatewayTab />
+          {:else if portal.activeTab === "staff"}
+            <StaffTab />
+          {:else if portal.activeTab === "system_update"}
+            <SystemUpdateTab />
+          {/if}
+        </main>
+      </div>
     </div>
-  </div>
   {/if}
 </div>
 
@@ -860,7 +561,7 @@
             type="text"
             bind:value={profileFullName}
             placeholder="e.g. Master Administrator"
-            class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+            class="ui-input"
             required
           />
         </div>
@@ -877,10 +578,10 @@
             type="email"
             bind:value={profileEmail}
             placeholder="admin@perusahaan.com"
-            class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+            class="ui-input font-mono"
             required
           />
-          <span class="text-[10px] text-slate-400 mt-1 block"
+          <span class="text-[11px] text-slate-400 mt-1 block"
             >Email ini digunakan untuk login ke portal /administrator</span
           >
         </div>
@@ -907,7 +608,7 @@
               type="password"
               bind:value={profileCurrentPassword}
               placeholder="Masukkan password saat ini..."
-              class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+              class="ui-input font-mono"
             />
           </div>
 
@@ -924,7 +625,7 @@
               bind:value={profileNewPassword}
               placeholder="Kosongkan jika tidak ingin mengganti password..."
               minlength="6"
-              class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+              class="ui-input font-mono"
             />
           </div>
         </div>

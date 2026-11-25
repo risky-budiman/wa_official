@@ -214,7 +214,7 @@
     <!-- Role Guard Check: Role must be Administrator Utama (Primary Super Admin) -->
     {#if !authStore.isPrimaryAdmin}
       <div
-        class="bg-white dark:bg-slate-900 p-8 rounded-2xl border border-slate-200 dark:border-slate-800 text-center space-y-4 shadow-sm"
+        class="ui-card p-8 text-center space-y-4"
       >
         <div
           class="w-16 h-16 rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto"
@@ -245,7 +245,7 @@
     {:else}
       <!-- Top Action Banner -->
       <div
-        class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs"
+        class="flex flex-col justify-between gap-4 sm:flex-row sm:items-start"
       >
         <div class="space-y-1">
           <div class="flex items-center gap-2.5 flex-wrap">
@@ -260,7 +260,7 @@
               Pusat Pembaruan Sistem (GitHub Sync)
             </h2>
             <span
-              class="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/25 uppercase tracking-wider"
+              class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/25 uppercase tracking-wider"
             >
               Role SUPER_ADMIN
             </span>
@@ -311,7 +311,7 @@
             type="button"
             onclick={() => (showConfirmGitPullModal = true)}
             disabled={gitPulling || gitChecking}
-            class="py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center gap-2 shadow-md shadow-indigo-600/20 transition cursor-pointer disabled:opacity-50"
+            class="py-2 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold flex items-center gap-2 shadow-sm transition cursor-pointer disabled:opacity-50"
           >
             <ArrowUpCircle
               class="w-4 h-4 {gitPulling ? 'animate-bounce' : ''}"
@@ -329,7 +329,7 @@
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <!-- Branch -->
         <div
-          class="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-1.5"
+          class="ui-card p-4 space-y-1.5"
         >
           <div
             class="flex items-center justify-between text-slate-400 text-xs"
@@ -338,21 +338,21 @@
             <GitBranch class="w-4 h-4 text-indigo-500" />
           </div>
           <div
-            class="text-base font-extrabold text-slate-900 dark:text-white font-mono flex items-center gap-1.5"
+            class="text-base font-bold text-slate-900 dark:text-white font-mono flex items-center gap-1.5"
           >
             <span>{gitStatus?.currentBranch || "main"}</span>
             <span
               class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"
             ></span>
           </div>
-          <div class="text-[10px] text-slate-400 truncate font-mono">
+          <div class="text-[11px] text-slate-400 truncate font-mono">
             origin/{gitStatus?.currentBranch || "main"}
           </div>
         </div>
 
         <!-- Commit Hash -->
         <div
-          class="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-1.5"
+          class="ui-card p-4 space-y-1.5"
         >
           <div
             class="flex items-center justify-between text-slate-400 text-xs"
@@ -361,18 +361,18 @@
             <GitPullRequest class="w-4 h-4 text-purple-500" />
           </div>
           <div
-            class="text-base font-extrabold text-slate-900 dark:text-white font-mono"
+            class="text-base font-bold text-slate-900 dark:text-white font-mono"
           >
             #{gitStatus?.shortHash || "Loading..."}
           </div>
-          <div class="text-[10px] text-slate-400 truncate">
+          <div class="text-[11px] text-slate-400 truncate">
             Oleh: {gitStatus?.author || "Author"}
           </div>
         </div>
 
         <!-- Remote Sync Status -->
         <div
-          class="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-1.5"
+          class="ui-card p-4 space-y-1.5"
         >
           <div
             class="flex items-center justify-between text-slate-400 text-xs"
@@ -380,7 +380,7 @@
             <span class="font-semibold">Status Update</span>
             <Activity class="w-4 h-4 text-emerald-500" />
           </div>
-          <div class="text-base font-extrabold">
+          <div class="text-base font-bold">
             {#if gitUpdateResult}
               {#if gitUpdateResult.behindCount > 0}
                 <span class="text-amber-500 font-mono"
@@ -396,7 +396,7 @@
               >
             {/if}
           </div>
-          <div class="text-[10px] text-slate-400">
+          <div class="text-[11px] text-slate-400">
             {#if gitUpdateResult?.behindCount}
               Pembaruan siap ditarik dari GitHub
             {:else}
@@ -407,7 +407,7 @@
 
         <!-- Remote Repository -->
         <div
-          class="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-1.5"
+          class="ui-card p-4 space-y-1.5"
         >
           <div
             class="flex items-center justify-between text-slate-400 text-xs"
@@ -426,7 +426,7 @@
                   .replace(".git", "")
               : "wa_official"}
           </div>
-          <div class="text-[10px] text-slate-400 truncate">
+          <div class="text-[11px] text-slate-400 truncate">
             {gitStatus?.remoteUrl || "https://github.com/..."}
           </div>
         </div>
@@ -435,7 +435,7 @@
       <!-- Current Commit Message Details Card -->
       {#if gitStatus}
         <div
-          class="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3"
+          class="ui-card p-5 space-y-3"
         >
           <div class="flex items-center justify-between text-xs">
             <span
@@ -467,7 +467,7 @@
                 class="w-2.5 h-2.5 rounded-full bg-indigo-500 animate-ping"
               ></span>
               <h3
-                class="text-sm font-extrabold text-slate-900 dark:text-white"
+                class="text-sm font-bold text-slate-900 dark:text-white"
               >
                 Pembaruan Tersedia ({gitUpdateResult.behindCount} Komit di
                 Belakang)
@@ -475,7 +475,7 @@
             </div>
             <button
               onclick={() => (showConfirmGitPullModal = true)}
-              class="py-1.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-sm transition cursor-pointer"
+              class="py-1.5 px-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm shadow-sm transition cursor-pointer"
             >
               Terapkan Sekarang
             </button>
@@ -490,12 +490,12 @@
                   <div class="font-bold text-slate-900 dark:text-white">
                     {commit.message}
                   </div>
-                  <div class="text-[10px] text-slate-400">
+                  <div class="text-[11px] text-slate-400">
                     Oleh: {commit.author} • {commit.date}
                   </div>
                 </div>
                 <span
-                  class="px-2 py-0.5 rounded font-mono font-bold text-[10px] bg-slate-100 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shrink-0"
+                  class="px-2 py-0.5 rounded font-mono font-bold text-[11px] bg-slate-100 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shrink-0"
                 >
                   {commit.hash}
                 </span>
@@ -603,7 +603,7 @@
         <button
           type="button"
           onclick={handleGitPull}
-          class="px-5 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/20 cursor-pointer flex items-center gap-2"
+          class="px-5 py-2 rounded-xl text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm cursor-pointer flex items-center gap-2"
         >
           <ArrowUpCircle class="w-4 h-4" />
           <span>Ya, Jalankan Git Pull Sekarang</span>

@@ -221,11 +221,11 @@
 
   <div class="space-y-6">
     <div
-      class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm"
+      class="flex flex-col justify-between gap-4 sm:flex-row sm:items-start"
     >
       <div>
         <h2
-          class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2"
+          class="flex items-center gap-2 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl dark:text-white"
         >
           <Package class="w-5 h-5 text-indigo-500" />
           <span>Katalog Paket Sewa & Paket Promosi SaaS</span>
@@ -240,20 +240,20 @@
         {#if portal.canFinance}
         <button
           onclick={() => openCreatePlan(true)}
-          class="py-2.5 px-3.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold flex items-center gap-1.5 shadow-md shadow-amber-500/20 transition cursor-pointer"
+          class="py-2 px-3.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 text-sm font-semibold flex items-center gap-1.5 shadow-sm transition cursor-pointer"
         >
           <Gift class="w-4 h-4" />
-          <span>+ Buat Paket Promo (Gratis)</span>
+          <span>Buat Paket Promo (Gratis)</span>
         </button>
         {/if}
 
         {#if portal.canFinance}
         <button
           onclick={() => openCreatePlan(false)}
-          class="py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-indigo-600/25 transition cursor-pointer"
+          class="py-2 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold flex items-center gap-2 shadow-sm transition cursor-pointer"
         >
           <Plus class="w-4 h-4 stroke-[3]" />
-          <span>+ Buat Paket Sewa Baru</span>
+          <span>Buat Paket Sewa Baru</span>
         </button>
         {/if}
       </div>
@@ -269,7 +269,7 @@
         >
           {#if plan.isPopular}
             <span
-              class="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-600 text-white shadow-md"
+              class="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-indigo-600 text-white shadow-md"
             >
               Paling Populer
             </span>
@@ -277,7 +277,7 @@
 
           {#if plan.price === 0}
             <span
-              class="absolute -top-3 right-4 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-500 text-slate-950 shadow-md flex items-center gap-1"
+              class="absolute -top-3 right-4 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-amber-500 text-slate-950 shadow-md flex items-center gap-1"
             >
               <Gift class="w-3 h-3" />
               Promo / Gratis
@@ -292,7 +292,7 @@
               class="flex items-center justify-between gap-2 flex-wrap"
             >
               <span
-                class="px-2.5 py-1 rounded-md text-[10px] font-extrabold uppercase tracking-wider border {portal.getPlanBadgeClass(
+                class="px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider border {portal.getPlanBadgeClass(
                   plan.code,
                 )}"
               >
@@ -301,7 +301,7 @@
               <div class="flex items-center gap-1.5">
                 {#if plan.isPublic === false}
                   <span
-                    class="text-[10px] font-bold text-amber-700 dark:text-amber-300 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded flex items-center gap-1"
+                    class="text-[11px] font-bold text-amber-700 dark:text-amber-300 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded flex items-center gap-1"
                     title="Hanya tampil untuk Super Admin (Tidak muncul di katalog tenant)"
                   >
                     <Lock class="w-3 h-3 text-amber-500" />
@@ -309,7 +309,7 @@
                   </span>
                 {:else}
                   <span
-                    class="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded flex items-center gap-1"
+                    class="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded flex items-center gap-1"
                     title="Tampil di menu langganan seluruh tenant"
                   >
                     <Globe class="w-3 h-3 text-emerald-500" />
@@ -319,13 +319,13 @@
 
                 {#if !plan.isActive}
                   <span
-                    class="text-[10px] font-bold text-rose-500 bg-rose-500/10 px-2 py-0.5 rounded"
+                    class="text-[11px] font-bold text-rose-500 bg-rose-500/10 px-2 py-0.5 rounded"
                     >Nonaktif</span
                   >
                 {/if}
               </div>
             </div>
-            <h3 class="text-lg font-black text-slate-900 dark:text-white">
+            <h3 class="text-lg font-bold text-slate-900 dark:text-white">
               {plan.name}
             </h3>
             <p
@@ -339,7 +339,7 @@
           <div class="mb-5">
             <div class="flex items-baseline gap-1">
               <span
-                class="text-2xl font-black text-slate-900 dark:text-white"
+                class="text-2xl font-bold text-slate-900 dark:text-white"
                 >{portal.formatRupiah(plan.price)}</span
               >
               <span class="text-xs text-slate-400"
@@ -469,7 +469,7 @@
                 type="text"
                 bind:value={planName}
                 placeholder="e.g. Starter Bisnis / Promo Launching"
-                class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                class="ui-input"
                 required
               />
             </div>
@@ -488,7 +488,7 @@
                 type="text"
                 bind:value={planCode}
                 placeholder="e.g. PROMO14 / UMKM / GOLD"
-                class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-mono font-bold uppercase text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                class="ui-input font-mono uppercase"
               />
             </div>
 
@@ -631,7 +631,7 @@
                 min="0"
                 step="1000"
                 bind:value={planPrice}
-                class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-mono font-bold text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                class="ui-input font-mono"
                 required
               />
             </div>
@@ -647,7 +647,7 @@
                 type="text"
                 bind:value={planPeriod}
                 placeholder="e.g. bulan / 14 hari / selamanya"
-                class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                class="ui-input"
               />
             </div>
 
@@ -663,7 +663,7 @@
                 min="1"
                 max="500"
                 bind:value={planMaxAgents}
-                class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                class="ui-input font-mono"
               />
             </div>
 
@@ -679,7 +679,7 @@
                 min="0"
                 step="500"
                 bind:value={planMaxBroadcast}
-                class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                class="ui-input font-mono"
               />
             </div>
 
@@ -694,7 +694,7 @@
                 type="text"
                 bind:value={planDescription}
                 placeholder="e.g. Solusi ideal untuk UMKM dan tim kecil"
-                class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                class="ui-input"
               />
             </div>
 
@@ -710,7 +710,7 @@
                 rows="4"
                 bind:value={planFeaturesText}
                 placeholder="5 Kursi Agen CS&#10;5.000 Broadcast / Bulan&#10;Live Chat Terpadu"
-                class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                class="ui-input"
               ></textarea>
             </div>
 
@@ -821,7 +821,7 @@
           <button
             type="submit"
             disabled={portal.isSubmitting}
-            class="py-2 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-2 shadow-sm shadow-indigo-500/20 transition cursor-pointer disabled:opacity-60"
+            class="py-2 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm flex items-center gap-2 shadow-sm transition cursor-pointer disabled:opacity-60"
           >
             <Check class="w-4 h-4 stroke-[3]" />
             <span>{portal.isSubmitting ? "Menyimpan..." : "Simpan Paket"}</span>

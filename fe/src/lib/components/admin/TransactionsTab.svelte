@@ -1,4 +1,5 @@
 <script lang="ts">
+  import StatCard from "$lib/components/ui/StatCard.svelte";
   import { apiRequest } from "$lib/api/client";
 
   import {
@@ -104,18 +105,16 @@
 
   <!-- Top Action Banner -->
   <div
-    class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs"
+    class="flex flex-col justify-between gap-4 sm:flex-row sm:items-start"
   >
     <div class="space-y-1">
       <div class="flex items-center gap-2 flex-wrap">
         <h2
-          class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2"
+          class="flex items-center gap-2 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl dark:text-white"
         >
           <Receipt class="w-5 h-5 text-indigo-500" />
           <span>Pusat Transaksi & Pembayaran Langganan SaaS</span>
-          <span class="text-xs font-normal text-slate-500"
-            >({portal.transactionsList.length} Transaksi)</span
-          >
+          <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">{portal.transactionsList.length} Transaksi</span>
         </h2>
       </div>
       <p class="text-xs text-slate-500 dark:text-slate-400">
@@ -128,7 +127,7 @@
       <button
         onclick={portal.loadTransactions}
         disabled={portal.transactionsLoading}
-        class="py-2.5 px-3.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center gap-2 border border-slate-200 dark:border-slate-700 transition cursor-pointer disabled:opacity-60"
+        class="ui-btn-secondary"
       >
         <RefreshCw
           class="w-4 h-4 {portal.transactionsLoading ? 'animate-spin' : ''}"
@@ -138,100 +137,24 @@
     </div>
   </div>
 
-  <!-- Financial Summary KPI Cards -->
-  <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
-    <div
-      class="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex items-center gap-3.5"
-    >
-      <div
-        class="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0"
-      >
-        <Wallet class="w-5 h-5" />
-      </div>
-      <div>
-        <div
-          class="text-[11px] font-semibold text-slate-500 dark:text-slate-400"
-        >
-          Total Omset (Lunas)
-        </div>
-        <div
-          class="text-base font-extrabold text-slate-900 dark:text-white font-mono"
-        >
-          {portal.formatRupiah(portal.transactionSummary.totalRevenue)}
-        </div>
-      </div>
-    </div>
-
-    <div
-      class="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex items-center gap-3.5"
-    >
-      <div
-        class="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0"
-      >
-        <CheckCircle class="w-5 h-5" />
-      </div>
-      <div>
-        <div
-          class="text-[11px] font-semibold text-slate-500 dark:text-slate-400"
-        >
-          Transaksi Lunas (PAID)
-        </div>
-        <div
-          class="text-lg font-extrabold text-slate-900 dark:text-white font-mono"
-        >
-          {portal.transactionSummary.paidCount}
-        </div>
-      </div>
-    </div>
-
-    <div
-      class="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex items-center gap-3.5"
-    >
-      <div
-        class="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0"
-      >
-        <Clock class="w-5 h-5" />
-      </div>
-      <div>
-        <div
-          class="text-[11px] font-semibold text-slate-500 dark:text-slate-400"
-        >
-          Menunggu Bayar (PENDING)
-        </div>
-        <div
-          class="text-lg font-extrabold text-amber-600 dark:text-amber-400 font-mono"
-        >
-          {portal.transactionSummary.pendingCount}
-        </div>
-      </div>
-    </div>
-
-    <div
-      class="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex items-center gap-3.5"
-    >
-      <div
-        class="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0"
-      >
-        <XCircle class="w-5 h-5" />
-      </div>
-      <div>
-        <div
-          class="text-[11px] font-semibold text-slate-500 dark:text-slate-400"
-        >
-          Gagal / Kadaluarsa
-        </div>
-        <div
-          class="text-lg font-extrabold text-slate-900 dark:text-white font-mono"
-        >
-          {portal.transactionSummary.failedCount}
-        </div>
-      </div>
-    </div>
+  <!-- Financial summary -->
+  <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+    <StatCard label="Omzet (lunas)" icon={Wallet} tone="emerald" value={portal.formatRupiah(portal.transactionSummary.totalRevenue)} />
+    <StatCard label="Transaksi lunas" icon={CheckCircle} tone="violet" value={portal.transactionSummary.paidCount} />
+    <StatCard
+      label="Menunggu bayar"
+      icon={Clock}
+      tone="amber"
+      value={portal.transactionSummary.pendingCount}
+      hint={portal.transactionSummary.pendingCount > 0 ? "Perlu dicek / dikonfirmasi" : undefined}
+      hintTone="amber"
+    />
+    <StatCard label="Gagal / kedaluwarsa" icon={XCircle} tone="rose" value={portal.transactionSummary.failedCount} />
   </div>
 
   <!-- Filter & Search Bar -->
   <div
-    class="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white dark:bg-slate-900 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs"
+    class="ui-card flex flex-col sm:flex-row items-center justify-between gap-3 p-3.5"
   >
     <div class="relative w-full sm:w-80">
       <Search
@@ -241,7 +164,7 @@
         type="text"
         bind:value={transactionSearchQuery}
         placeholder="Cari no invoice, tenant, atau paket..."
-        class="w-full pl-10 pr-4 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 transition"
+        class="ui-input pl-10 pr-4"
       />
     </div>
 
@@ -270,7 +193,7 @@
 
   <!-- Transaction Table -->
   <div
-    class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden"
+    class="ui-card overflow-hidden"
   >
     {#if portal.transactionsLoading && portal.transactionsList.length === 0}
       <div class="p-12 text-center space-y-3">
@@ -301,9 +224,9 @@
       </div>
     {:else}
       <div class="overflow-x-auto">
-        <table class="w-full text-left text-xs">
+        <table class="ui-table w-full text-left text-xs">
           <thead
-            class="bg-slate-50 dark:bg-slate-950/70 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]"
+            class="bg-slate-50 dark:bg-slate-950/70 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-bold uppercase tracking-wider text-[11px]"
           >
             <tr>
               <th class="px-5 py-3.5">No. Invoice & Waktu</th>
@@ -353,7 +276,7 @@
                     {tx.planName}
                   </div>
                   <span
-                    class="inline-block px-1.5 py-0.2 rounded text-[10px] font-extrabold uppercase tracking-wider border {portal.getPlanBadgeClass(
+                    class="inline-block px-1.5 py-0.2 rounded text-[11px] font-bold uppercase tracking-wider border {portal.getPlanBadgeClass(
                       tx.planCode,
                     )}"
                   >
@@ -536,7 +459,7 @@
           type="button"
           onclick={() => handleConfirmManualPayment(orderToConfirmManual!)}
           disabled={portal.isSubmitting}
-          class="py-2 px-5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-2 shadow-sm shadow-emerald-500/20 transition cursor-pointer disabled:opacity-60"
+          class="py-2 px-5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm flex items-center gap-2 shadow-sm transition cursor-pointer disabled:opacity-60"
         >
           <Check class="w-4 h-4 stroke-[3]" />
           <span

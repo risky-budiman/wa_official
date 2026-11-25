@@ -47,14 +47,14 @@
 
   <div class="space-y-6 max-w-4xl">
     <div
-      class="bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-6"
+      class="ui-card p-6 space-y-6"
     >
       <div
         class="flex items-start justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-5"
       >
         <div>
           <h2
-            class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2"
+            class="flex items-center gap-2 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl dark:text-white"
           >
             <Wallet class="w-5 h-5 text-indigo-500" />
             <span>Integrasi Payment Gateway Midtrans</span>
@@ -160,7 +160,7 @@
               placeholder={portal.midtrans.environment === "sandbox"
                 ? "SB-Mid-server-..."
                 : "Mid-server-..."}
-              class="w-full pl-10 pr-10 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 transition"
+              class="ui-input pl-10 pr-10 font-mono"
             />
             <button
               type="button"
@@ -200,7 +200,7 @@
               placeholder={portal.midtrans.environment === "sandbox"
                 ? "SB-Mid-client-..."
                 : "Mid-client-..."}
-              class="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 transition"
+              class="ui-input pl-10 pr-4 font-mono"
             />
           </div>
         </div>
@@ -218,7 +218,7 @@
             type="text"
             bind:value={portal.midtrans.merchantId}
             placeholder="G123456789"
-            class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 transition"
+            class="ui-input font-mono"
           />
         </div>
 
@@ -240,7 +240,7 @@
                   `${window.location.origin}/api/v1/billing/midtrans-webhook`,
                   "webhook_url",
                 )}
-              class="py-1 px-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold flex items-center gap-1 cursor-pointer shadow-xs"
+              class="py-1 px-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold flex items-center gap-1 cursor-pointer shadow-xs"
             >
               {#if portal.copiedText === "webhook_url"}
                 <Check class="w-3 h-3" />
@@ -274,7 +274,7 @@
           <button
             type="submit"
             disabled={portal.isSubmitting}
-            class="py-2.5 px-6 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-2 shadow-lg shadow-emerald-600/25 transition cursor-pointer disabled:opacity-60"
+            class="py-2 px-6 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm flex items-center gap-2 shadow-sm transition cursor-pointer disabled:opacity-60"
           >
             <Check class="w-4 h-4 stroke-[3]" />
             <span

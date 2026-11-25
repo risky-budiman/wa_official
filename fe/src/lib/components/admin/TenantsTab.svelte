@@ -1,4 +1,5 @@
 <script lang="ts">
+  import StatCard from "$lib/components/ui/StatCard.svelte";
   import { apiRequest } from "$lib/api/client";
   import { authStore } from "$lib/stores/auth.svelte";
 
@@ -739,17 +740,15 @@
 
   <!-- Top Action Banner -->
   <div
-    class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm"
+    class="flex flex-col justify-between gap-4 sm:flex-row sm:items-start"
   >
     <div class="space-y-1">
       <h2
-        class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2"
+        class="flex items-center gap-2 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl dark:text-white"
       >
         <span>Manajemen Organisasi Klien</span>
         <span
-          class="text-xs font-normal text-slate-500 dark:text-slate-400"
-          >({filteredOrganizations.length} Terdaftar)</span
-        >
+          class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">{filteredOrganizations.length} Terdaftar</span>
       </h2>
       <p class="text-xs text-slate-500 dark:text-slate-400">
         Kelola aktivasi sewa, integrasi Meta WhatsApp API, akun admin
@@ -761,7 +760,7 @@
       <button
         onclick={portal.loadData}
         disabled={portal.isLoading}
-        class="py-2.5 px-3.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center gap-2 border border-slate-200 dark:border-slate-700 transition cursor-pointer disabled:opacity-60"
+        class="ui-btn-secondary"
       >
         <RefreshCw class="w-4 h-4 {portal.isLoading ? 'animate-spin' : ''}" />
         <span>Refresh</span>
@@ -770,10 +769,10 @@
       {#if portal.isFullAdmin}
       <button
         onclick={openCreate}
-        class="py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-emerald-600/25 transition cursor-pointer"
+        class="py-2 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold flex items-center gap-2 shadow-sm transition cursor-pointer"
       >
         <Plus class="w-4 h-4 stroke-[3]" />
-        <span>+ Daftarkan Organisasi Baru</span>
+        <span>Daftarkan Organisasi Baru</span>
       </button>
       {/if}
     </div>
@@ -781,142 +780,28 @@
 
   <!-- Platform Overview KPI Cards -->
   {#if portal.overview}
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-      <!-- Card 1: Total Tenants -->
-      <div
-        class="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-2"
-      >
-        <div
-          class="flex items-center justify-between text-slate-500 dark:text-slate-400"
-        >
-          <span class="text-xs font-bold uppercase tracking-wider"
-            >Total Klien / Tenant</span
-          >
-          <div
-            class="p-2 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400"
-          >
-            <Building2 class="w-4 h-4" />
-          </div>
-        </div>
-        <div class="flex items-baseline gap-2">
-          <span class="text-2xl font-black text-slate-900 dark:text-white"
-            >{portal.overview.totalOrganizations}</span
-          >
-          <span
-            class="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400"
-          >
-            {portal.overview.activeOrganizations} Aktif
-          </span>
-        </div>
-        <div
-          class="text-[10px] text-slate-400 flex items-center gap-2 pt-1 border-t border-slate-100 dark:border-slate-800/80"
-        >
-          <span>{portal.overview.trialOrganizations} Trial</span>
-          <span>•</span>
-          <span class="text-rose-500 dark:text-rose-400 font-medium"
-            >{portal.overview.suspendedOrganizations} Suspend</span
-          >
-          <span>•</span>
-          <span class="text-amber-500 dark:text-amber-400 font-medium"
-            >{portal.overview.expiredOrganizations} Expired</span
-          >
-        </div>
-      </div>
-
-      <!-- Card 2: Platform Agents -->
-      <div
-        class="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-2"
-      >
-        <div
-          class="flex items-center justify-between text-slate-500 dark:text-slate-400"
-        >
-          <span class="text-xs font-bold uppercase tracking-wider"
-            >Total Kursi Agen CS</span
-          >
-          <div
-            class="p-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-          >
-            <Users class="w-4 h-4" />
-          </div>
-        </div>
-        <div class="flex items-baseline gap-2">
-          <span class="text-2xl font-black text-slate-900 dark:text-white"
-            >{portal.overview.totalAgents}</span
-          >
-          <span class="text-[11px] text-slate-500 dark:text-slate-400"
-            >dari {portal.overview.totalUsers} akun</span
-          >
-        </div>
-        <div
-          class="text-[10px] text-slate-400 pt-1 border-t border-slate-100 dark:border-slate-800/80"
-        >
-          Agen aktif menangani chat di seluruh tenant
-        </div>
-      </div>
-
-      <!-- Card 3: Platform Chats -->
-      <div
-        class="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-2"
-      >
-        <div
-          class="flex items-center justify-between text-slate-500 dark:text-slate-400"
-        >
-          <span class="text-xs font-bold uppercase tracking-wider"
-            >Total Pesan Platform</span
-          >
-          <div
-            class="p-2 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400"
-          >
-            <MessageSquare class="w-4 h-4" />
-          </div>
-        </div>
-        <div class="flex items-baseline gap-2">
-          <span class="text-2xl font-black text-slate-900 dark:text-white"
-            >{portal.overview.totalMessages.toLocaleString("id-ID")}</span
-          >
-          <span class="text-[11px] text-slate-500 dark:text-slate-400"
-            >pesan</span
-          >
-        </div>
-        <div
-          class="text-[10px] text-slate-400 pt-1 border-t border-slate-100 dark:border-slate-800/80"
-        >
-          Dari {portal.overview.totalConversations.toLocaleString("id-ID")} sesi chat
-        </div>
-      </div>
-
-      <!-- Card 4: Expiring Alert -->
-      <div
-        class="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-slate-900 to-indigo-950 text-white border border-indigo-500/30 shadow-md space-y-2"
-      >
-        <div class="flex items-center justify-between text-slate-300">
-          <span class="text-xs font-bold uppercase tracking-wider"
-            >Segera Habis (&le; 7 Hari)</span
-          >
-          <div class="p-2 rounded-xl bg-amber-500/20 text-amber-400">
-            <Clock class="w-4 h-4" />
-          </div>
-        </div>
-        <div class="flex items-baseline gap-2">
-          <span class="text-2xl font-black text-amber-400"
-            >{portal.overview.expiringSoonCount}</span
-          >
-          <span class="text-[11px] text-slate-300">organisasi</span>
-        </div>
-        <div
-          class="text-[10px] text-slate-400 pt-1 border-t border-slate-800"
-        >
-          {portal.overview.expiringSoonCount > 0
-            ? "Perlu follow-up pembayaran sewa"
-            : "Semua sewa tenant aman"}
-        </div>
-      </div>
+    <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <StatCard label="Total klien" icon={Building2} tone="violet" hint="{portal.overview.trialOrganizations} trial · {portal.overview.suspendedOrganizations} suspend · {portal.overview.expiredOrganizations} kedaluwarsa">
+        {portal.overview.totalOrganizations}<span class="ml-1.5 text-sm font-medium text-emerald-600 dark:text-emerald-400">{portal.overview.activeOrganizations} aktif</span>
+      </StatCard>
+      <StatCard label="Kursi agen CS" icon={Users} tone="emerald" hint="Agen di seluruh tenant">
+        {portal.overview.totalAgents}<span class="ml-1.5 text-sm font-medium text-slate-400">dari {portal.overview.totalUsers} akun</span>
+      </StatCard>
+      <StatCard label="Total pesan" icon={MessageSquare} tone="blue" hint="Dari {portal.overview.totalConversations.toLocaleString('id-ID')} sesi chat" value={portal.overview.totalMessages.toLocaleString("id-ID")} />
+      <StatCard
+        label="Habis ≤ 7 hari"
+        icon={Clock}
+        tone={portal.overview.expiringSoonCount > 0 ? "amber" : "slate"}
+        value={portal.overview.expiringSoonCount}
+        hint={portal.overview.expiringSoonCount > 0 ? "Perlu follow-up pembayaran" : "Semua sewa aman"}
+        hintTone={portal.overview.expiringSoonCount > 0 ? "amber" : "muted"}
+      />
     </div>
   {/if}
 
   <!-- Search & Filter Controls -->
   <div
-    class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-sm flex flex-col sm:flex-row items-center gap-3"
+    class="ui-card p-4 flex flex-col sm:flex-row items-center gap-3"
   >
     <!-- Search Bar -->
     <div class="relative flex-1 w-full">
@@ -927,7 +812,7 @@
         type="text"
         bind:value={searchQuery}
         placeholder="Cari organisasi, email admin login, nama PIC, no WhatsApp, atau WABA ID..."
-        class="w-full pl-9 pr-4 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 transition"
+        class="ui-input pl-9 pr-4"
       />
     </div>
 
@@ -935,7 +820,7 @@
     <div class="flex items-center gap-2 w-full sm:w-auto">
       <select
         bind:value={selectedStatus}
-        class="px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 w-full sm:w-auto"
+        class="ui-input sm:w-auto"
       >
         <option value="ALL">Semua Status</option>
         <option value="ACTIVE">Aktif (Active)</option>
@@ -946,7 +831,7 @@
 
       <select
         bind:value={selectedPlan}
-        class="px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 w-full sm:w-auto font-semibold"
+        class="ui-input sm:w-auto"
       >
         <option value="ALL"
           >Semua Paket ({allDistinctPlans.length})</option
@@ -960,22 +845,20 @@
 
   <!-- Organizations Table -->
   <div
-    class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden"
+    class="ui-card overflow-hidden"
   >
     <div class="overflow-x-auto">
-      <table
-        class="w-full text-left text-xs text-slate-700 dark:text-slate-300"
-      >
+      <table class="ui-table w-full text-left text-slate-700 dark:text-slate-300">
         <thead
           class="bg-slate-50 dark:bg-slate-950/90 font-bold text-[11px] text-slate-600 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800 uppercase tracking-wider"
         >
           <tr>
-            <th class="py-3.5 px-4">Organisasi & Akun Admin Login</th>
-            <th class="py-3.5 px-4">Integrasi Meta WABA</th>
-            <th class="py-3.5 px-4">Paket & Tim</th>
-            <th class="py-3.5 px-4">Masa Sewa</th>
+            <th class="py-3.5 px-4">Organisasi & admin</th>
+            <th class="py-3.5 px-4">Integrasi Meta</th>
+            <th class="py-3.5 px-4">Paket & tim</th>
+            <th class="py-3.5 px-4">Masa sewa</th>
             <th class="py-3.5 px-4">Status</th>
-            <th class="py-3.5 px-4 text-right">Tindakan Super Admin</th>
+            <th class="py-3.5 px-4 text-right">Tindakan</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-slate-100 dark:divide-slate-800/60">
@@ -1014,7 +897,7 @@
                 <td class="py-3.5 px-4">
                   <div class="flex items-start gap-3">
                     <div
-                      class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-indigo-700 text-white flex items-center justify-center font-black text-sm shrink-0 shadow-xs mt-0.5"
+                      class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-indigo-700 text-white flex items-center justify-center font-bold text-sm shrink-0 shadow-xs mt-0.5"
                     >
                       {org.name.substring(0, 2).toUpperCase()}
                     </div>
@@ -1039,7 +922,7 @@
                           class="flex items-center justify-between gap-2"
                         >
                           <span
-                            class="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider flex items-center gap-1"
+                            class="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider flex items-center gap-1"
                           >
                             <Shield class="w-3 h-3" />
                             Admin Login:
@@ -1052,7 +935,7 @@
                                   primaryAdmin.email,
                                   `email_${primaryAdmin.id}`,
                                 )}
-                              class="text-[10px] text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-300 flex items-center gap-0.5 cursor-pointer font-medium"
+                              class="text-[11px] text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-300 flex items-center gap-0.5 cursor-pointer font-medium"
                               title="Salin Email Admin"
                             >
                               {#if portal.copiedText === `email_${primaryAdmin.id}`}
@@ -1080,7 +963,7 @@
                           >
                         </div>
                         <div
-                          class="text-[10px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5"
+                          class="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5"
                         >
                           <span
                             >PIC: <strong
@@ -1132,7 +1015,7 @@
 
                     {#if org.wabaId}
                       <div
-                        class="text-[10px] font-mono text-slate-400 truncate max-w-[160px]"
+                        class="text-[11px] font-mono text-slate-400 truncate max-w-[160px]"
                         title="Meta WABA Account ID: {org.wabaId}"
                       >
                         WABA ID: {org.wabaId}
@@ -1141,7 +1024,7 @@
 
                     {#if phoneItem?.phoneNumberId}
                       <div
-                        class="text-[10px] font-mono text-slate-400 truncate max-w-[160px]"
+                        class="text-[11px] font-mono text-slate-400 truncate max-w-[160px]"
                         title="Phone Number ID: {phoneItem.phoneNumberId}"
                       >
                         Phone ID: {phoneItem.phoneNumberId}
@@ -1154,7 +1037,7 @@
                 <td class="py-3.5 px-4">
                   <div class="space-y-1.5">
                     <span
-                      class="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider border {portal.getPlanBadgeClass(
+                      class="px-2 py-0.5 rounded-md text-[11px] font-bold uppercase tracking-wider border {portal.getPlanBadgeClass(
                         org.plan,
                       )}"
                     >
@@ -1193,19 +1076,19 @@
                       <div>
                         {#if org.isExpired || (org.daysRemaining !== null && org.daysRemaining < 0)}
                           <span
-                            class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"
+                            class="px-1.5 py-0.5 rounded text-[11px] font-bold bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"
                           >
                             Kadaluarsa
                           </span>
                         {:else if org.daysRemaining !== null && org.daysRemaining <= 7}
                           <span
-                            class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 animate-pulse"
+                            class="px-1.5 py-0.5 rounded text-[11px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 animate-pulse"
                           >
                             Sisa {org.daysRemaining} Hari
                           </span>
                         {:else if org.daysRemaining !== null}
                           <span
-                            class="text-[10px] text-slate-400 font-mono"
+                            class="text-[11px] text-slate-400 font-mono"
                           >
                             Sisa {org.daysRemaining} hari
                           </span>
@@ -1222,7 +1105,7 @@
                 <!-- Status -->
                 <td class="py-3.5 px-4">
                   <span
-                    class="px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider border {portal.getStatusBadgeClass(
+                    class="px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider border {portal.getStatusBadgeClass(
                       org.status,
                     )}"
                   >
@@ -1232,7 +1115,7 @@
 
                 <!-- Actions -->
                 <td class="py-3.5 px-4 text-right">
-                  <div class="flex items-center justify-end gap-1.5">
+                  <div class="ml-auto flex max-w-[7.75rem] flex-wrap items-center justify-end gap-1.5">
                     <!-- Impersonate Button -->
                     {#if portal.canSupport}
                     <button
@@ -1399,10 +1282,10 @@
                 type="text"
                 bind:value={metaWabaId}
                 placeholder="cth: 1461623865804185"
-                class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+                class="ui-input font-mono"
                 required
               />
-              <p class="text-[10px] text-slate-400 mt-1">ID Akun WhatsApp Business dari Meta Business Suite.</p>
+              <p class="text-[11px] text-slate-400 mt-1">ID Akun WhatsApp Business dari Meta Business Suite.</p>
             </div>
 
             <div>
@@ -1417,10 +1300,10 @@
                 type="text"
                 bind:value={metaPhoneId}
                 placeholder="cth: 109283749283749"
-                class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+                class="ui-input font-mono"
                 required
               />
-              <p class="text-[10px] text-slate-400 mt-1">ID Nomor Telepon spesifik dari WhatsApp Manager.</p>
+              <p class="text-[11px] text-slate-400 mt-1">ID Nomor Telepon spesifik dari WhatsApp Manager.</p>
             </div>
 
             <div class="sm:col-span-2">
@@ -1432,11 +1315,11 @@
                   Permanent System User Access Token *
                 </label>
                 {#if metaOrg?.hasAccessToken}
-                  <span class="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                  <span class="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
                     🟢 Token Terpasang ({metaOrg.maskedToken || 'Aktif'})
                   </span>
                 {:else}
-                  <span class="text-[10px] font-bold text-rose-600 dark:text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded-full border border-rose-500/20">
+                  <span class="text-[11px] font-bold text-rose-600 dark:text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded-full border border-rose-500/20">
                     🔴 Token Belum Diisi
                   </span>
                 {/if}
@@ -1446,9 +1329,9 @@
                 type="password"
                 bind:value={metaAccessToken}
                 placeholder={metaOrg?.hasAccessToken ? "Token sudah tersimpan. Biarkan kosong jika tidak ingin mengganti token." : "Tempelkan System User Access Token (EAAGm...)"}
-                class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+                class="ui-input font-mono"
               />
-              <p class="text-[10px] text-slate-400 mt-1">
+              <p class="text-[11px] text-slate-400 mt-1">
                 Token permanen dari Meta Business Manager System User dengan izin <code class="bg-slate-200 dark:bg-slate-800 px-1 rounded">whatsapp_business_messaging</code>.
               </p>
             </div>
@@ -1465,7 +1348,7 @@
                 type="text"
                 bind:value={metaDisplayPhone}
                 placeholder="e.g. +62 812-3456-7890"
-                class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+                class="ui-input font-mono"
               />
             </div>
 
@@ -1481,7 +1364,7 @@
                 type="text"
                 bind:value={metaVerifiedName}
                 placeholder="e.g. Toko Resmi Official"
-                class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+                class="ui-input"
               />
             </div>
           </div>
@@ -1566,7 +1449,7 @@
                         <Gauge class="w-4 h-4 text-emerald-500 shrink-0" />
                         Batas Quota Meta (Messaging Limit Tier):
                       </span>
-                      <strong class="font-mono text-xs font-black text-emerald-700 dark:text-emerald-300">
+                      <strong class="font-mono text-xs font-bold text-emerald-700 dark:text-emerald-300">
                         {formatMessagingTier(metaTestResult.data.phoneNumber.messaging_limit_tier)}
                       </strong>
                     </div>
@@ -1591,7 +1474,7 @@
           <button
             type="submit"
             disabled={portal.isSubmitting}
-            class="py-2 px-5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-2 shadow-sm shadow-emerald-500/20 transition cursor-pointer disabled:opacity-60"
+            class="py-2 px-5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm flex items-center gap-2 shadow-sm transition cursor-pointer disabled:opacity-60"
           >
             <Check class="w-4 h-4 stroke-[3]" />
             <span
@@ -1668,7 +1551,7 @@
                     >{u.fullName}</span
                   >
                   <span
-                    class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider {u.role ===
+                    class="px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider {u.role ===
                     'ADMINISTRATOR'
                       ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20'
                       : u.role === 'SUPERVISOR'
@@ -1692,7 +1575,7 @@
                   <button
                     type="button"
                     onclick={() => portal.copyToClipboard(u.email, `u_email_${u.id}`)}
-                    class="text-[10px] text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-300 flex items-center gap-0.5 cursor-pointer"
+                    class="text-[11px] text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-300 flex items-center gap-0.5 cursor-pointer"
                     title="Salin Email Login"
                   >
                     {#if portal.copiedText === `u_email_${u.id}`}
@@ -1819,7 +1702,7 @@
                   type="text"
                   bind:value={newOrgName}
                   placeholder="e.g. Toko Fashion Cantik / PT Maju Jaya"
-                  class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                  class="ui-input"
                   required
                 />
               </div>
@@ -1835,7 +1718,7 @@
                   type="text"
                   bind:value={newOrgOwnerName}
                   placeholder="e.g. Budi Santoso"
-                  class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                  class="ui-input"
                 />
               </div>
 
@@ -1850,7 +1733,7 @@
                   type="email"
                   bind:value={newOrgAdminEmail}
                   placeholder="e.g. admin@tokofashion.com"
-                  class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                  class="ui-input font-mono"
                   required
                 />
               </div>
@@ -1866,7 +1749,7 @@
                   type="text"
                   bind:value={newOrgAdminPassword}
                   placeholder="e.g. Rahasia123!"
-                  class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                  class="ui-input font-mono"
                   required
                 />
               </div>
@@ -1882,7 +1765,7 @@
                   type="text"
                   bind:value={newOrgOwnerPhone}
                   placeholder="e.g. 081234567890"
-                  class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                  class="ui-input font-mono"
                 />
               </div>
 
@@ -1897,7 +1780,7 @@
                   type="text"
                   bind:value={newOrgNotes}
                   placeholder="e.g. Pembayaran transfer BCA bulanan"
-                  class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                  class="ui-input"
                 />
               </div>
             </div>
@@ -1958,7 +1841,7 @@
                   min="1"
                   max="100"
                   bind:value={newOrgMaxAgents}
-                  class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                  class="ui-input font-mono"
                 />
               </div>
 
@@ -1971,7 +1854,7 @@
                 <select
                   id="new_duration"
                   bind:value={newOrgDurationDays}
-                  class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 font-semibold"
+                  class="ui-input"
                 >
                   <option value={0}
                     >♾️ Gratis Selamanya (Tanpa Batas Waktu / No Expiry)</option
@@ -1999,7 +1882,7 @@
                 <Shield class="w-4 h-4 text-slate-400" />
                 3. Kredensial Meta WhatsApp Klien (Opsional)
               </h4>
-              <span class="text-[10px] text-slate-400"
+              <span class="text-[11px] text-slate-400"
                 >Bisa diisi sekarang atau diatur kemudian oleh klien</span
               >
             </div>
@@ -2016,7 +1899,7 @@
                   type="text"
                   bind:value={newOrgWabaId}
                   placeholder="e.g. 109823912039123"
-                  class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                  class="ui-input font-mono"
                 />
               </div>
 
@@ -2031,7 +1914,7 @@
                   type="text"
                   bind:value={newOrgPhoneNumberId}
                   placeholder="e.g. 192830192830192"
-                  class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                  class="ui-input font-mono"
                 />
               </div>
 
@@ -2046,7 +1929,7 @@
                   type="password"
                   bind:value={newOrgAccessToken}
                   placeholder="EAAGm..."
-                  class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                  class="ui-input font-mono"
                 />
               </div>
             </div>
@@ -2067,7 +1950,7 @@
           <button
             type="submit"
             disabled={portal.isSubmitting}
-            class="py-2 px-5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-2 shadow-sm shadow-emerald-500/20 transition cursor-pointer disabled:opacity-60"
+            class="py-2 px-5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm flex items-center gap-2 shadow-sm transition cursor-pointer disabled:opacity-60"
           >
             <Check class="w-4 h-4 stroke-[3]" />
             <span
@@ -2144,7 +2027,7 @@
                 id="edit_name"
                 type="text"
                 bind:value={editName}
-                class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                class="ui-input"
                 required
               />
             </div>
@@ -2158,7 +2041,7 @@
               <select
                 id="edit_status"
                 bind:value={editStatus}
-                class="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                class="ui-input"
               >
                 <option value="ACTIVE">ACTIVE (Aktif)</option>
                 <option value="TRIAL">TRIAL (Uji Coba)</option>
@@ -2212,7 +2095,7 @@
                 min="1"
                 max="500"
                 bind:value={editMaxAgents}
-                class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                class="ui-input font-mono"
               />
             </div>
 
@@ -2226,7 +2109,7 @@
                 id="edit_expires"
                 type="date"
                 bind:value={editExpiresAt}
-                class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                class="ui-input font-mono"
               />
             </div>
 
@@ -2240,7 +2123,7 @@
                 id="edit_owner_name"
                 type="text"
                 bind:value={editOwnerName}
-                class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                class="ui-input"
               />
             </div>
 
@@ -2254,7 +2137,7 @@
                 id="edit_owner_phone"
                 type="text"
                 bind:value={editOwnerPhone}
-                class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                class="ui-input font-mono"
               />
             </div>
 
@@ -2268,7 +2151,7 @@
                 id="edit_owner_email"
                 type="email"
                 bind:value={editOwnerEmail}
-                class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                class="ui-input font-mono"
               />
             </div>
 
@@ -2283,7 +2166,7 @@
                 type="text"
                 bind:value={editWabaId}
                 placeholder="1092830192830"
-                class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                class="ui-input font-mono"
               />
             </div>
 
@@ -2300,7 +2183,7 @@
                 type="password"
                 bind:value={editAccessToken}
                 placeholder="Masukkan token baru..."
-                class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                class="ui-input font-mono"
               />
             </div>
 
@@ -2314,7 +2197,7 @@
                 id="edit_notes"
                 rows="2"
                 bind:value={editNotes}
-                class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+                class="ui-input"
               ></textarea>
             </div>
           </div>
@@ -2334,7 +2217,7 @@
           <button
             type="submit"
             disabled={portal.isSubmitting}
-            class="py-2 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-2 shadow-sm shadow-indigo-500/20 transition cursor-pointer disabled:opacity-60"
+            class="py-2 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm flex items-center gap-2 shadow-sm transition cursor-pointer disabled:opacity-60"
           >
             <Check class="w-4 h-4 stroke-[3]" />
             <span>{portal.isSubmitting ? "Menyimpan..." : "Simpan Perubahan"}</span>
@@ -2397,7 +2280,7 @@
           <select
             id="ext_days"
             bind:value={extendDays}
-            class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+            class="ui-input"
           >
             <option value={30}>+ 1 Bulan (30 Hari)</option>
             <option value={60}>+ 2 Bulan (60 Hari)</option>
@@ -2438,7 +2321,7 @@
           <button
             type="submit"
             disabled={portal.isSubmitting}
-            class="py-2 px-5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-2 shadow-sm shadow-emerald-500/20 transition cursor-pointer disabled:opacity-60"
+            class="py-2 px-5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm flex items-center gap-2 shadow-sm transition cursor-pointer disabled:opacity-60"
           >
             <Check class="w-4 h-4 stroke-[3]" />
             <span>{portal.isSubmitting ? "Memproses..." : "Perpanjang Sekarang"}</span>
@@ -2502,7 +2385,7 @@
           <select
             id="reset_user_select"
             bind:value={resetUserId}
-            class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-amber-500"
+            class="ui-input"
           >
             {#if activeTenant.users && activeTenant.users.length > 0}
               {#each activeTenant.users as u}
@@ -2544,7 +2427,7 @@
               bind:value={resetPasswordNew}
               placeholder="Minimal 6 karakter..."
               minlength="6"
-              class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-mono font-bold text-slate-900 dark:text-white focus:outline-none focus:border-amber-500"
+              class="ui-input font-mono"
               required
             />
           </div>
@@ -2569,7 +2452,7 @@
                     `Halo ${activeTenant?.name},\n\nBerikut data login akun WhatsApp CRM Anda:\n- URL Login: ${window.location.origin}/login\n- Email: ${resetSuccessInfo?.email}\n- Password Baru: ${resetSuccessInfo?.pass}\n\nSilakan login dan ganti password Anda kembali. Terima kasih!`,
                     "wa_template",
                   )}
-                class="py-1 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold flex items-center gap-1 cursor-pointer shadow-xs"
+                class="py-1 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold flex items-center gap-1 cursor-pointer shadow-xs"
               >
                 {#if portal.copiedText === "wa_template"}
                   <Check class="w-3 h-3" />
@@ -2615,7 +2498,7 @@
           <button
             type="submit"
             disabled={portal.isSubmitting}
-            class="py-2 px-5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs flex items-center gap-2 shadow-sm shadow-amber-500/20 transition cursor-pointer disabled:opacity-60"
+            class="py-2 px-5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold text-sm flex items-center gap-2 shadow-sm transition cursor-pointer disabled:opacity-60"
           >
             <Key class="w-4 h-4 stroke-[3]" />
             <span
@@ -2677,22 +2560,22 @@
         >
           <div>
             <div
-              class="text-[10px] text-slate-400 font-semibold uppercase tracking-wider"
+              class="text-[11px] text-slate-400 font-semibold uppercase tracking-wider"
             >
               Organisasi Klien Terpilih
             </div>
-            <div class="text-sm font-extrabold text-slate-900 dark:text-white">
+            <div class="text-sm font-bold text-slate-900 dark:text-white">
               {selectedOrgForPlanChange.name}
             </div>
           </div>
           <div class="text-right">
             <div
-              class="text-[10px] text-slate-400 font-semibold uppercase tracking-wider"
+              class="text-[11px] text-slate-400 font-semibold uppercase tracking-wider"
             >
               Paket Saat Ini
             </div>
             <span
-              class="inline-block px-2 py-0.5 rounded text-[10px] font-extrabold border {portal.getPlanBadgeClass(
+              class="inline-block px-2 py-0.5 rounded text-[11px] font-bold border {portal.getPlanBadgeClass(
                 selectedOrgForPlanChange.plan,
               )}"
             >
@@ -2750,7 +2633,7 @@
               class="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
               required
             />
-            <span class="text-[10px] text-slate-400"
+            <span class="text-[11px] text-slate-400"
               >Sesuai paket yang dipilih</span
             >
           </div>
@@ -2771,7 +2654,7 @@
               class="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
               required
             />
-            <span class="text-[10px] text-slate-400">Pesan per bulan</span>
+            <span class="text-[11px] text-slate-400">Pesan per bulan</span>
           </div>
         </div>
 
@@ -2792,7 +2675,7 @@
                 : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}"
             >
               <div>+30 Hari</div>
-              <div class="text-[10px] text-slate-400 font-normal">
+              <div class="text-[11px] text-slate-400 font-normal">
                 Sewa Bulanan
               </div>
             </button>
@@ -2806,7 +2689,7 @@
                 : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}"
             >
               <div>+90 Hari</div>
-              <div class="text-[10px] text-slate-400 font-normal">
+              <div class="text-[11px] text-slate-400 font-normal">
                 Sewa 3 Bulan
               </div>
             </button>
@@ -2820,7 +2703,7 @@
                 : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}"
             >
               <div>+365 Hari</div>
-              <div class="text-[10px] text-slate-400 font-normal">
+              <div class="text-[11px] text-slate-400 font-normal">
                 Sewa 1 Tahun
               </div>
             </button>
@@ -2834,7 +2717,7 @@
                 : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}"
             >
               <div>Permanen</div>
-              <div class="text-[10px] text-slate-400 font-normal">
+              <div class="text-[11px] text-slate-400 font-normal">
                 Tanpa Kadaluarsa
               </div>
             </button>
@@ -2854,7 +2737,7 @@
               id="custom_exp"
               type="date"
               bind:value={planChangeForm.customExpiresAt}
-              class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+              class="ui-input"
             />
           </div>
         {/if}
@@ -2872,7 +2755,7 @@
             type="text"
             bind:value={planChangeForm.notes}
             placeholder="e.g. Upgrade khusus promo akhir tahun dari admin"
-            class="w-full px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500"
+            class="ui-input"
           />
         </div>
 
@@ -2890,7 +2773,7 @@
           <button
             type="submit"
             disabled={isChangingPlan}
-            class="px-5 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/20 transition cursor-pointer disabled:opacity-50 flex items-center gap-2"
+            class="px-5 py-2 rounded-xl text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm transition cursor-pointer disabled:opacity-50 flex items-center gap-2"
           >
             {#if isChangingPlan}
               <RefreshCw class="w-3.5 h-3.5 animate-spin" />

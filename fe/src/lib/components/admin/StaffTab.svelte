@@ -286,21 +286,19 @@
 
   <!-- Top Action Banner -->
   <div
-    class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs"
+    class="flex flex-col justify-between gap-4 sm:flex-row sm:items-start"
   >
     <div class="space-y-1">
       <div class="flex items-center gap-2 flex-wrap">
         <h2
-          class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2"
+          class="flex items-center gap-2 text-xl font-bold tracking-tight text-slate-900 sm:text-2xl dark:text-white"
         >
           <span>Tim & Staf Administrator Platform</span>
           <span
-            class="text-xs font-normal text-slate-500 dark:text-slate-400"
-            >({portal.staffList.length} Akun)</span
-          >
+            class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">{portal.staffList.length} Akun</span>
         </h2>
         <span
-          class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/25"
+          class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 border border-indigo-500/25"
         >
           Berdiri Sendiri (organization_id = NULL)
         </span>
@@ -317,7 +315,7 @@
       <button
         onclick={loadStaff}
         disabled={staffLoading}
-        class="py-2.5 px-3.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center gap-2 border border-slate-200 dark:border-slate-700 transition cursor-pointer disabled:opacity-60"
+        class="ui-btn-secondary"
       >
         <RefreshCw class="w-4 h-4 {staffLoading ? 'animate-spin' : ''}" />
         <span>Refresh</span>
@@ -326,10 +324,10 @@
       {#if authStore.isSuperAdmin}
         <button
           onclick={openCreateStaff}
-          class="py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-indigo-600/25 transition cursor-pointer"
+          class="py-2 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold flex items-center gap-2 shadow-sm transition cursor-pointer"
         >
           <Plus class="w-4 h-4 stroke-[3]" />
-          <span>+ Tambah Staf Baru</span>
+          <span>Tambah Staf Baru</span>
         </button>
       {/if}
     </div>
@@ -338,7 +336,7 @@
   <!-- Info Highlights Card -->
   <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
     <div
-      class="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex items-center gap-3.5"
+      class="ui-card p-4 flex items-center gap-3.5"
     >
       <div
         class="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0"
@@ -352,7 +350,7 @@
           Total Staf Platform
         </div>
         <div
-          class="text-lg font-extrabold text-slate-900 dark:text-white font-mono"
+          class="text-lg font-bold text-slate-900 dark:text-white font-mono"
         >
           {portal.staffList.length}
         </div>
@@ -360,7 +358,7 @@
     </div>
 
     <div
-      class="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex items-center gap-3.5"
+      class="ui-card p-4 flex items-center gap-3.5"
     >
       <div
         class="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0"
@@ -374,7 +372,7 @@
           Master Super Admin
         </div>
         <div
-          class="text-lg font-extrabold text-slate-900 dark:text-white font-mono"
+          class="text-lg font-bold text-slate-900 dark:text-white font-mono"
         >
           {portal.staffList.filter((s) => s.role === "SUPER_ADMIN").length}
         </div>
@@ -382,7 +380,7 @@
     </div>
 
     <div
-      class="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex items-center gap-3.5"
+      class="ui-card p-4 flex items-center gap-3.5"
     >
       <div
         class="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0"
@@ -396,7 +394,7 @@
           Finance Staff
         </div>
         <div
-          class="text-lg font-extrabold text-slate-900 dark:text-white font-mono"
+          class="text-lg font-bold text-slate-900 dark:text-white font-mono"
         >
           {portal.staffList.filter((s) => s.role === "ADMIN_FINANCE").length}
         </div>
@@ -404,7 +402,7 @@
     </div>
 
     <div
-      class="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex items-center gap-3.5"
+      class="ui-card p-4 flex items-center gap-3.5"
     >
       <div
         class="w-10 h-10 rounded-xl bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 flex items-center justify-center shrink-0"
@@ -418,7 +416,7 @@
           Support / Teknis
         </div>
         <div
-          class="text-lg font-extrabold text-slate-900 dark:text-white font-mono"
+          class="text-lg font-bold text-slate-900 dark:text-white font-mono"
         >
           {portal.staffList.filter((s) => s.role === "ADMIN_SUPPORT").length}
         </div>
@@ -428,7 +426,7 @@
 
   <!-- Filter & Search Bar -->
   <div
-    class="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white dark:bg-slate-900 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs"
+    class="ui-card flex flex-col sm:flex-row items-center justify-between gap-3 p-3.5"
   >
     <div class="relative w-full sm:w-80">
       <Search
@@ -438,7 +436,7 @@
         type="text"
         bind:value={staffSearchQuery}
         placeholder="Cari nama atau email staf..."
-        class="w-full pl-10 pr-4 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 transition"
+        class="ui-input pl-10 pr-4"
       />
     </div>
 
@@ -463,7 +461,7 @@
 
   <!-- Staff List Table -->
   <div
-    class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden"
+    class="ui-card overflow-hidden"
   >
     {#if staffLoading && portal.staffList.length === 0}
       <div class="p-12 text-center space-y-3">
@@ -494,9 +492,9 @@
       </div>
     {:else}
       <div class="overflow-x-auto">
-        <table class="w-full text-left text-xs">
+        <table class="ui-table w-full text-left text-xs">
           <thead
-            class="bg-slate-50 dark:bg-slate-950/70 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]"
+            class="bg-slate-50 dark:bg-slate-950/70 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-bold uppercase tracking-wider text-[11px]"
           >
             <tr>
               <th class="px-5 py-3.5">Nama & Email</th>
@@ -533,7 +531,7 @@
                         <span>{staff.fullName}</span>
                         {#if staff.id === authStore.user?.id}
                           <span
-                            class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-indigo-500/15 text-indigo-600 dark:text-indigo-400"
+                            class="px-1.5 py-0.2 rounded text-[10px] font-bold bg-indigo-500/15 text-indigo-600 dark:text-indigo-400"
                           >
                             (Anda)
                           </span>
@@ -575,7 +573,7 @@
 
                 <td class="px-4 py-3.5">
                   <span
-                    class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700"
+                    class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700"
                   >
                     <ShieldCheck class="w-3 h-3 text-indigo-500" />
                     <span>Platform Independen</span>
@@ -707,7 +705,7 @@
               type="text"
               bind:value={newStaffName}
               placeholder="e.g. Dewi Sartika (Finance)"
-              class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 transition"
+              class="ui-input"
               required
             />
           </div>
@@ -724,7 +722,7 @@
               type="email"
               bind:value={newStaffEmail}
               placeholder="e.g. finance@perusahaan.com"
-              class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 transition"
+              class="ui-input font-mono"
               required
             />
           </div>
@@ -741,7 +739,7 @@
               type="password"
               bind:value={newStaffPassword}
               placeholder="Minimal 6 karakter..."
-              class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 transition"
+              class="ui-input font-mono"
               required
               minlength="6"
             />
@@ -845,7 +843,7 @@
           <button
             type="submit"
             disabled={portal.isSubmitting}
-            class="py-2 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-2 shadow-sm shadow-indigo-500/20 transition cursor-pointer disabled:opacity-60"
+            class="py-2 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm flex items-center gap-2 shadow-sm transition cursor-pointer disabled:opacity-60"
           >
             <Check class="w-4 h-4 stroke-[3]" />
             <span>{portal.isSubmitting ? "Menyimpan..." : "Simpan Staf Baru"}</span>
@@ -915,7 +913,7 @@
               id="edit_staff_name"
               type="text"
               bind:value={editStaffName}
-              class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 transition"
+              class="ui-input"
               required
             />
           </div>
@@ -931,7 +929,7 @@
               id="edit_staff_email"
               type="email"
               bind:value={editStaffEmail}
-              class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 transition"
+              class="ui-input font-mono"
               required
             />
           </div>
@@ -947,7 +945,7 @@
               <select
                 id="edit_staff_role"
                 bind:value={editStaffRole}
-                class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 font-semibold"
+                class="ui-input"
               >
                 <option value="SUPER_ADMIN">Master Super Admin (Utama)</option>
                 <option value="CO_SUPER_ADMIN">Co-Super Administrator</option>
@@ -966,7 +964,7 @@
               <select
                 id="edit_staff_status"
                 bind:value={editStaffStatus}
-                class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 font-semibold"
+                class="ui-input"
               >
                 <option value="ACTIVE">ACTIVE (Aktif)</option>
                 <option value="INACTIVE">INACTIVE (Nonaktif)</option>
@@ -987,7 +985,7 @@
               type="password"
               bind:value={editStaffPassword}
               placeholder="Masukkan password baru jika ingin mengubah..."
-              class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-indigo-500 transition"
+              class="ui-input font-mono"
               minlength="6"
             />
           </div>
@@ -1006,7 +1004,7 @@
           <button
             type="submit"
             disabled={portal.isSubmitting}
-            class="py-2 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-2 shadow-sm shadow-indigo-500/20 transition cursor-pointer disabled:opacity-60"
+            class="py-2 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm flex items-center gap-2 shadow-sm transition cursor-pointer disabled:opacity-60"
           >
             <Check class="w-4 h-4 stroke-[3]" />
             <span>{portal.isSubmitting ? "Menyimpan..." : "Simpan Perubahan"}</span>
@@ -1071,7 +1069,7 @@
             type="text"
             bind:value={resetStaffNewPassword}
             placeholder="Ketik password baru..."
-            class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-amber-500 transition"
+            class="ui-input font-mono"
             required
             minlength="6"
           />
@@ -1090,7 +1088,7 @@
           <button
             type="submit"
             disabled={portal.isSubmitting}
-            class="py-2 px-5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs flex items-center gap-2 shadow-sm shadow-amber-500/20 transition cursor-pointer disabled:opacity-60"
+            class="py-2 px-5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold text-sm flex items-center gap-2 shadow-sm transition cursor-pointer disabled:opacity-60"
           >
             <Key class="w-4 h-4 stroke-[3]" />
             <span>{portal.isSubmitting ? "Mereset..." : "Reset Password"}</span>
@@ -1153,7 +1151,7 @@
           type="button"
           onclick={handleDeleteStaff}
           disabled={portal.isSubmitting}
-          class="py-2 px-5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs flex items-center gap-2 shadow-sm shadow-rose-500/20 transition cursor-pointer disabled:opacity-60"
+          class="py-2 px-5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-semibold text-sm flex items-center gap-2 shadow-sm transition cursor-pointer disabled:opacity-60"
         >
           <Trash2 class="w-4 h-4 stroke-[3]" />
           <span>{portal.isSubmitting ? "Menghapus..." : "Hapus Sekarang"}</span>
