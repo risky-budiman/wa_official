@@ -2,152 +2,153 @@
   import { page } from '$app/stores';
   import { authStore } from '$lib/stores/auth.svelte';
   import { channelStore } from '$lib/stores/channel.svelte';
+  import { uiStore } from '$lib/stores/ui.svelte';
+  import { NAV_SECTIONS, isNavItemActive } from '$lib/navigation';
   import RoleBadge from './RoleBadge.svelte';
-  import {
-    MessageSquare,
-    Contact,
-    Radio,
-    FileText,
-    BarChart3,
-    Eye,
-    Users,
-    Settings,
-    Key,
-    LogOut,
-    Bot,
-    Building2,
-    ShieldAlert,
-    ArrowLeft,
-    CreditCard,
-    Zap
-  } from 'lucide-svelte';
+  import { LogOut, MessageCircle, ShieldAlert, ArrowLeft, X } from 'lucide-svelte';
 
-  const menuItems = $derived([
-    {
-      label: 'Main',
-      items: [
-        { name: 'Live Inbox', path: '/inbox', icon: MessageSquare, roles: ['SUPER_ADMIN', 'ADMINISTRATOR', 'SUPERVISOR', 'AGENT'] },
-        { name: 'Kontak Pelanggan', path: '/contacts', icon: Contact, roles: ['SUPER_ADMIN', 'ADMINISTRATOR', 'SUPERVISOR', 'AGENT'] },
-        { name: 'Balas Cepat CS', path: '/quick-replies', icon: Zap, roles: ['SUPER_ADMIN', 'ADMINISTRATOR', 'SUPERVISOR', 'AGENT'] },
-        { name: 'Template WA Meta', path: '/templates', icon: FileText, roles: ['SUPER_ADMIN', 'ADMINISTRATOR', 'SUPERVISOR'] },
-        { name: 'Broadcast', path: '/broadcast', icon: Radio, roles: ['SUPER_ADMIN', 'ADMINISTRATOR', 'SUPERVISOR'] },
-        { name: 'Laporan & SLA', path: '/reports', icon: BarChart3, roles: ['SUPER_ADMIN', 'ADMINISTRATOR', 'SUPERVISOR'] }
-      ]
-    },
-    {
-      label: 'Supervisor',
-      items: [
-        { name: 'Monitoring Tim', path: '/supervisor/monitoring', icon: Eye, roles: ['SUPER_ADMIN', 'ADMINISTRATOR', 'SUPERVISOR'] }
-      ]
-    },
-    {
-      label: 'Administration',
-      items: [
-        { name: 'Kelola Tim & Agen', path: '/admin/users', icon: Users, roles: ['SUPER_ADMIN', 'ADMINISTRATOR'] },
-        { name: 'Pengaturan Chatbot & AI', path: '/admin/settings/chatbot', icon: Bot, roles: ['SUPER_ADMIN', 'ADMINISTRATOR'] },
-        { name: 'Pengaturan WABA Channel', path: '/admin/settings', icon: Settings, roles: ['SUPER_ADMIN', 'ADMINISTRATOR'] },
-        { name: 'Paket & Langganan', path: '/admin/subscription', icon: CreditCard, roles: ['SUPER_ADMIN', 'ADMINISTRATOR'] },
-        { name: 'API Key & Developer', path: '/admin/api-keys', icon: Key, roles: ['SUPER_ADMIN', 'ADMINISTRATOR'] }
-      ]
-    }
-  ]);
+  const orgName = $derived(
+    channelStore.channel?.companyName || authStore.user?.organizationName || 'Organisasi Anda',
+  );
+
+  const visibleSections = $derived(
+    NAV_SECTIONS.map((section) => ({
+      ...section,
+      items: section.items.filter((item) => authStore.role && item.roles.includes(authStore.role)),
+    })).filter((section) => section.items.length > 0),
+  );
+
+  const initials = $derived(
+    (authStore.user?.fullName || 'U')
+      .replace(/\([^)]*\)/g, '') // ignore notes like "(Supervisor)"
+      .split(/\s+/)
+      .filter((w) => /^[\p{L}\p{N}]/u.test(w))
+      .slice(0, 2)
+      .map((w) => w[0])
+      .join('')
+      .toUpperCase(),
+  );
 </script>
 
-<aside class="w-64 bg-white dark:bg-slate-900/95 backdrop-blur border-r border-slate-200 dark:border-slate-800 flex flex-col h-full shrink-0">
-  <!-- Impersonation Active Banner -->
+<!-- Mobile backdrop -->
+{#if uiStore.sidebarOpen}
+  <button
+    type="button"
+    aria-label="Tutup menu"
+    class="fixed inset-0 z-40 bg-slate-950/40 backdrop-blur-[2px] lg:hidden"
+    onclick={() => uiStore.closeSidebar()}
+  ></button>
+{/if}
+
+<aside
+  class="fixed inset-y-0 left-0 z-50 flex w-64 shrink-0 flex-col border-r border-slate-200 bg-white transition-transform duration-200 dark:border-slate-800 dark:bg-slate-900 lg:static lg:translate-x-0 {uiStore.sidebarOpen
+    ? 'translate-x-0 shadow-2xl'
+    : '-translate-x-full'}"
+  aria-label="Navigasi utama"
+>
+  <!-- Brand -->
+  <div class="flex h-16 shrink-0 items-center gap-3 border-b border-slate-200 px-5 dark:border-slate-800">
+    <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm shadow-emerald-600/30 dark:bg-emerald-500 dark:text-slate-950">
+      <MessageCircle class="h-5 w-5" strokeWidth={2.4} />
+    </div>
+    <div class="min-w-0 flex-1">
+      <p class="text-sm font-bold leading-tight tracking-tight text-slate-900 dark:text-white">WhatsApp CRM</p>
+      <p class="truncate text-xs text-slate-500 dark:text-slate-400" title={orgName}>{orgName}</p>
+    </div>
+    <button
+      type="button"
+      class="ui-icon-btn -mr-2 lg:hidden"
+      aria-label="Tutup menu"
+      onclick={() => uiStore.closeSidebar()}
+    >
+      <X class="h-4 w-4" />
+    </button>
+  </div>
+
+  <!-- Impersonation banner -->
   {#if authStore.isImpersonating}
-    <div class="m-3 p-3 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-900 dark:text-amber-300 text-xs space-y-2">
+    <div class="mx-3 mt-3 space-y-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-200">
       <div class="flex items-center gap-1.5 font-bold">
-        <ShieldAlert class="w-4 h-4 text-amber-500 shrink-0" />
+        <ShieldAlert class="h-4 w-4 shrink-0 text-amber-500" />
         <span>Mode Akses Tenant</span>
       </div>
-      <p class="text-[11px] leading-tight text-slate-600 dark:text-slate-400">
-        Anda sedang masuk ke akun tenant <strong>{authStore.user?.organizationName || 'Klien'}</strong>.
+      <p class="leading-snug text-slate-600 dark:text-slate-400">
+        Anda masuk sebagai <strong class="text-slate-800 dark:text-slate-200">{authStore.user?.organizationName || 'klien'}</strong>.
       </p>
       <button
         type="button"
         onclick={() => authStore.revertImpersonation()}
-        class="w-full py-1.5 px-2 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-[11px] flex items-center justify-center gap-1 transition cursor-pointer"
+        class="flex w-full items-center justify-center gap-1.5 rounded-lg bg-amber-500 px-2 py-1.5 font-bold text-slate-950 transition hover:bg-amber-400"
       >
-        <ArrowLeft class="w-3.5 h-3.5" />
-        <span>Kembali ke Portal /administrator</span>
+        <ArrowLeft class="h-3.5 w-3.5" />
+        Kembali ke Portal Admin
       </button>
     </div>
   {/if}
 
-  <!-- Brand Logo -->
-  <div class="p-5 border-b border-slate-200 dark:border-slate-800 flex items-center gap-3">
-    <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-600 to-emerald-400 flex items-center justify-center shadow-lg shadow-emerald-500/20 text-slate-950">
-      <Bot class="w-5 h-5 stroke-[2.5]" />
-    </div>
-    <div>
-      <h1 class="text-sm font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-1.5">
-        WhatsApp CRM
-      </h1>
-      <p class="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate max-w-[130px]" title={channelStore.channel?.companyName || authStore.user?.organizationName || 'IDS Payment'}>
-        {channelStore.channel?.companyName || authStore.user?.organizationName || 'IDS Payment'}
-      </p>
-    </div>
-  </div>
-
-  <!-- Role Status Bar -->
-  <div class="px-4 py-3 bg-slate-50 dark:bg-slate-950/50 border-b border-slate-200 dark:border-slate-800/60 flex items-center justify-between">
-    <span class="text-xs text-slate-500 dark:text-slate-400">Status Akun</span>
-    <RoleBadge role={authStore.role} />
-  </div>
-
-  <!-- Navigation Links -->
-  <nav class="flex-1 overflow-y-auto p-3 space-y-6">
-    {#each menuItems as section}
-      {@const visibleItems = section.items.filter(item => authStore.role && item.roles.includes(authStore.role))}
-      {#if visibleItems.length > 0}
-        <div>
-          <div class="px-3 mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-            {section.label}
-          </div>
-          <div class="space-y-1">
-            {#each visibleItems as item}
-              {@const hasQuery = item.path.includes('?')}
-              {@const currentFullUrl = $page.url.pathname + $page.url.search}
-              {@const isActive = hasQuery
-                ? currentFullUrl === item.path
-                : ($page.url.pathname === item.path && !$page.url.search.includes('tab='))}
-              {@const Icon = item.icon}
+  <!-- Navigation -->
+  <nav class="flex-1 space-y-6 overflow-y-auto px-3 py-4">
+    {#each visibleSections as section (section.label)}
+      <div>
+        <p class="mb-1.5 px-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+          {section.label}
+        </p>
+        <ul class="space-y-0.5">
+          {#each section.items as item (item.path)}
+            {@const active = isNavItemActive(item, $page.url.pathname)}
+            {@const Icon = item.icon}
+            <li>
               <a
                 href={item.path}
-                class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-all duration-200 {isActive 
-                  ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20 font-semibold' 
-                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/70'}"
+                onclick={() => uiStore.closeSidebar()}
+                aria-current={active ? 'page' : undefined}
+                class="group relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors {active
+                  ? 'bg-emerald-50 font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300'
+                  : 'font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/70 dark:hover:text-white'}"
               >
-                <Icon class="w-4 h-4 shrink-0" />
-                <span>{item.name}</span>
+                {#if active}
+                  <span class="absolute inset-y-1.5 left-0 w-[3px] rounded-r-full bg-emerald-600 dark:bg-emerald-400"></span>
+                {/if}
+                <Icon
+                  class="h-[18px] w-[18px] shrink-0 {active
+                    ? 'text-emerald-600 dark:text-emerald-400'
+                    : 'text-slate-400 group-hover:text-slate-600 dark:text-slate-500 dark:group-hover:text-slate-300'}"
+                />
+                <span class="truncate">{item.name}</span>
               </a>
-            {/each}
-          </div>
-        </div>
-      {/if}
+            </li>
+          {/each}
+        </ul>
+      </div>
     {/each}
   </nav>
 
-  <!-- User Profile & Logout -->
-  <div class="p-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40">
-    <div class="p-2.5 rounded-xl bg-white dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800/80 flex items-center justify-between shadow-sm dark:shadow-none">
-      <div class="flex items-center gap-2.5 min-w-0">
-        <div class="w-8 h-8 rounded-lg bg-emerald-500/15 dark:bg-slate-700 flex items-center justify-center font-bold text-xs text-emerald-600 dark:text-emerald-400 uppercase shrink-0">
-          {authStore.user?.fullName?.charAt(0) || 'U'}
+  <!-- Account -->
+  <div class="shrink-0 border-t border-slate-200 p-3 dark:border-slate-800">
+    <div class="flex items-center gap-3 rounded-xl p-2 transition hover:bg-slate-50 dark:hover:bg-slate-800/50">
+      <div class="relative shrink-0">
+        <div class="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-100 text-xs font-bold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
+          {initials}
         </div>
-        <div class="min-w-0">
-          <p class="text-xs font-medium text-slate-900 dark:text-slate-200 truncate">{authStore.user?.fullName || 'User'}</p>
-          <p class="text-[10px] text-slate-500 dark:text-slate-400 truncate">{authStore.user?.email}</p>
-        </div>
+        <span
+          class="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white dark:border-slate-900 {authStore.isOnline
+            ? 'bg-emerald-500'
+            : 'bg-slate-400'}"
+          title={authStore.isOnline ? 'Online' : 'Offline'}
+        ></span>
       </div>
-
+      <div class="min-w-0 flex-1">
+        <p class="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{authStore.user?.fullName || 'Pengguna'}</p>
+        <div class="mt-0.5"><RoleBadge role={authStore.role} size="sm" /></div>
+      </div>
       <button
+        type="button"
         onclick={() => authStore.logout()}
-        title="Logout"
-        class="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-500/10 transition cursor-pointer"
+        title="Keluar"
+        aria-label="Keluar"
+        class="ui-icon-btn h-8 w-8 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/10 dark:hover:text-rose-400"
       >
-        <LogOut class="w-4 h-4" />
+        <LogOut class="h-4 w-4" />
       </button>
     </div>
   </div>

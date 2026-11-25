@@ -41,6 +41,7 @@
     Music,
     Video,
     Loader2,
+    ChevronLeft,
   } from "lucide-svelte";
   import { formatWhatsAppMarkdown } from "$lib/utils/whatsapp-formatter";
   import SendSingleTemplateModal from "$lib/components/templates/SendSingleTemplateModal.svelte";
@@ -1145,7 +1146,7 @@
 >
   <!-- 1. LEFT COLUMN: Conversation List -->
   <div
-    class="w-80 border-r border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-900/60 flex flex-col shrink-0"
+    class="w-full md:w-80 border-r border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-900/60 flex-col shrink-0 {selectedConvId ? 'hidden md:flex' : 'flex'}"
   >
     <!-- Search Bar & Filters -->
     <div
@@ -1441,7 +1442,7 @@
   </div>
 
   <!-- 2. MIDDLE COLUMN: Active Chat Thread -->
-  <div class="flex-1 flex flex-col bg-white dark:bg-slate-950 min-w-0">
+  <div class="flex-1 flex-col bg-white dark:bg-slate-950 min-w-0 {selectedConvId ? 'flex' : 'hidden md:flex'}">
     {#if selectedConv}
       {@const effectiveExpiresAtHeader = selectedConv.windowExpiresAt
         ? new Date(selectedConv.windowExpiresAt).getTime()
@@ -1456,6 +1457,18 @@
       >
         <!-- Left: Contact Details -->
         <div class="flex items-center gap-3 min-w-0 flex-1">
+          <!-- Mobile: back to conversation list -->
+          <button
+            type="button"
+            class="ui-icon-btn -ml-1 md:hidden"
+            aria-label="Kembali ke daftar percakapan"
+            onclick={() => {
+              selectedConvId = null;
+              messageList = [];
+            }}
+          >
+            <ChevronLeft class="h-5 w-5" />
+          </button>
           <div class="relative shrink-0">
             <div
               class="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center font-bold text-sm text-emerald-600 dark:text-emerald-400 border border-slate-200 dark:border-slate-700 shrink-0 shadow-sm"
