@@ -2,7 +2,7 @@
 // Conversation Service — Multi-Agent Collaboration
 // ===========================================
 
-import { eq, and, desc, sql, inArray, or, ne } from 'drizzle-orm';
+import { eq, and, desc, sql, inArray, or, ne, isNull } from 'drizzle-orm';
 import { db } from '../../config/database';
 import {
   conversations,
@@ -41,7 +41,9 @@ export class ConversationService {
             eq(conversations.organizationId, user.orgId),
             or(
               eq(conversations.assignedUserId, user.id),
-              eq(conversations.status, 'UNASSIGNED')
+              eq(conversations.status, 'UNASSIGNED'),
+              // handed off by the chatbot, waiting for any agent
+              and(eq(conversations.status, 'PENDING'), isNull(conversations.assignedUserId))
             )
           )
         );
