@@ -1,9 +1,10 @@
 <script lang="ts">
+  import MetaQuotaCard from '$lib/components/ui/MetaQuotaCard.svelte';
   import StatCard from '$lib/components/ui/StatCard.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
 import { apiRequest } from '$lib/api/client';
 import { onMount, onDestroy } from 'svelte';
-import { Radio, Plus, CheckCircle, Clock, Users, Send, X, Flame, AlertCircle, Sparkles, Trash2, RefreshCw } from 'lucide-svelte';
+import { Radio, Plus, CheckCircle, Clock, Users, Send, X, AlertCircle, Sparkles, Trash2, RefreshCw } from 'lucide-svelte';
 
 interface CampaignItem {
   id: string;
@@ -172,36 +173,7 @@ onDestroy(() => {
 
   <!-- Meta 24-Hour Messaging Quota -->
   {#if metaQuota}
-    {@const pct = metaQuota.usedPercentage}
-    <div class="ui-card space-y-3 p-5">
-      <div class="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-        <div class="flex items-center gap-3">
-          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-600 ring-1 ring-inset ring-amber-600/15 dark:bg-amber-500/10 dark:text-amber-400 dark:ring-amber-400/20">
-            <Flame class="h-5 w-5" />
-          </div>
-          <div>
-            <div class="flex flex-wrap items-center gap-2">
-              <p class="text-sm font-semibold text-slate-900 dark:text-white">Kuota Pesan Meta (24 jam)</p>
-              <span class="ui-pill border-indigo-200 bg-indigo-50 py-0.5 font-mono text-[11px] text-indigo-700 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300">
-                {metaQuota.tierDisplay}
-              </span>
-            </div>
-            <p class="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
-              Sisa kuota: <strong class="font-semibold text-emerald-600 dark:text-emerald-400">{metaQuota.remainingQuota.toLocaleString('id-ID')} penerima</strong>
-            </p>
-          </div>
-        </div>
-        <p class="font-mono text-sm font-semibold {pct >= 90 ? 'text-rose-600 dark:text-rose-400' : pct >= 70 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-700 dark:text-slate-300'}">
-          {metaQuota.totalUsed.toLocaleString('id-ID')} / {metaQuota.dailyLimit.toLocaleString('id-ID')} ({pct}%)
-        </p>
-      </div>
-      <div class="h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
-        <div
-          class="h-full rounded-full transition-all duration-700 {pct >= 90 ? 'bg-rose-500' : pct >= 70 ? 'bg-amber-500' : 'bg-emerald-500'}"
-          style="width: {Math.max(pct, 2)}%"
-        ></div>
-      </div>
-    </div>
+    <MetaQuotaCard quota={metaQuota} />
   {/if}
 
   <!-- Campaign Stats -->

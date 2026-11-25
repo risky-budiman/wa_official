@@ -1,4 +1,6 @@
 <script lang="ts">
+  import Alert from '$lib/components/ui/Alert.svelte';
+  import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import { apiRequest } from '$lib/api/client';
   import { authStore } from '$lib/stores/auth.svelte';
   import { onMount } from 'svelte';
@@ -359,66 +361,32 @@
   }
 </script>
 
-<svelte:head>
-  <title>Paket & Pembayaran Langganan — WhatsApp CRM</title>
-</svelte:head>
-
-<div class="p-4 sm:p-8 max-w-7xl mx-auto space-y-6">
-  <!-- Top Title Header -->
-  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
-    <div class="space-y-1">
-      <div class="flex items-center gap-2.5">
-        <div class="p-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-          <CreditCard class="w-6 h-6" />
-        </div>
-        <div>
-          <h1 class="text-lg font-bold text-slate-900 dark:text-white">Paket & Pembayaran Langganan CRM</h1>
-          <p class="text-xs text-slate-500 dark:text-slate-400">
-            Monitoring masa aktif akun, pembayaran langsung via Midtrans/QRIS, dan aktivasi paket instan.
-          </p>
-        </div>
-      </div>
-    </div>
-
-    <div class="flex items-center gap-2.5">
+<div class="ui-page">
+  <PageHeader
+    title="Langganan"
+    description="Pantau masa aktif paket Anda, bayar lewat Midtrans/QRIS, dan aktifkan paket secara instan."
+    icon={CreditCard}
+  >
+    {#snippet actions()}
       <button
         onclick={async () => {
           await Promise.all([loadSubscription(), loadOrders()]);
         }}
         disabled={isLoading || ordersLoading}
-        class="py-2.5 px-3.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center gap-2 border border-slate-200 dark:border-slate-700 transition cursor-pointer"
+        class="ui-btn-secondary"
       >
-        <RefreshCw class="w-4 h-4 {isLoading || ordersLoading ? 'animate-spin' : ''}" />
-        <span>Perbarui Status</span>
+        <RefreshCw class="h-4 w-4 {isLoading || ordersLoading ? 'animate-spin' : ''}" />
+        Perbarui status
       </button>
-
-      <button
-        onclick={() => openCheckout()}
-        class="py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-emerald-600/25 transition cursor-pointer"
-      >
-        <Sparkles class="w-4 h-4" />
-        <span>Pilih & Bayar Paket</span>
+      <button onclick={() => openCheckout()} class="ui-btn-primary">
+        <Sparkles class="h-4 w-4" />
+        Pilih & bayar paket
       </button>
-    </div>
-  </div>
+    {/snippet}
+  </PageHeader>
 
-  <!-- Feedback Banner -->
   {#if feedbackMessage}
-    <div
-      class="p-4 rounded-2xl flex items-center gap-3 border text-xs font-semibold shadow-xs animate-in fade-in {feedbackMessage.type === 'success'
-        ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-800 dark:text-emerald-300'
-        : 'bg-rose-500/10 border-rose-500/20 text-rose-800 dark:text-rose-300'}"
-    >
-      {#if feedbackMessage.type === 'success'}
-        <CheckCircle2 class="w-4 h-4 text-emerald-500 shrink-0" />
-      {:else}
-        <AlertTriangle class="w-4 h-4 text-rose-500 shrink-0" />
-      {/if}
-      <span class="flex-1">{feedbackMessage.text}</span>
-      <button onclick={() => (feedbackMessage = null)} class="text-slate-400 hover:text-slate-600 dark:hover:text-white cursor-pointer">
-        <X class="w-4 h-4" />
-      </button>
-    </div>
+    <Alert tone={feedbackMessage.type === 'success' ? 'success' : 'error'} message={feedbackMessage.text} ondismiss={() => (feedbackMessage = null)} />
   {/if}
 
   {#if isLoading}
@@ -430,15 +398,15 @@
     <!-- Active Subscription Status Cards -->
     <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
       <!-- Card 1: Active Plan -->
-      <div class="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+      <div class="ui-card p-6 space-y-3">
         <div class="flex items-center justify-between text-slate-500 dark:text-slate-400">
           <span class="text-xs font-bold uppercase tracking-wider">Paket Saat Ini</span>
-          <span class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider border {getPlanBadgeClass(subData.plan)}">
+          <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider border {getPlanBadgeClass(subData.plan)}">
             {subData.plan}
           </span>
         </div>
         <div>
-          <div class="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2">
+          <div class="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
             <span>{subData.organizationName}</span>
           </div>
           <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
@@ -452,7 +420,7 @@
       </div>
 
       <!-- Card 2: Expiry & Days Remaining -->
-      <div class="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+      <div class="ui-card p-6 space-y-3">
         <div class="flex items-center justify-between text-slate-500 dark:text-slate-400">
           <span class="text-xs font-bold uppercase tracking-wider">Masa Aktif Sewa</span>
           <Clock class="w-4 h-4 text-slate-400" />
@@ -489,14 +457,14 @@
       </div>
 
       <!-- Card 3: Agent Seat Quota & Usage -->
-      <div class="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+      <div class="ui-card p-6 space-y-3">
         <div class="flex items-center justify-between text-slate-500 dark:text-slate-400">
           <span class="text-xs font-bold uppercase tracking-wider">Kuota Kursi Agen CS</span>
           <Users class="w-4 h-4 text-slate-400" />
         </div>
         <div>
           <div class="flex items-baseline gap-1.5">
-            <span class="text-2xl font-black text-slate-900 dark:text-white">{subData.usage.currentUsers}</span>
+            <span class="text-2xl font-bold text-slate-900 dark:text-white">{subData.usage.currentUsers}</span>
             <span class="text-sm font-bold text-slate-400">/ {subData.maxAgents} Akun Agen</span>
           </div>
           <!-- Progress bar -->
@@ -537,29 +505,29 @@
               : 'border-slate-200 dark:border-slate-800'}"
           >
             {#if plan.isPopular}
-              <span class="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-600 text-white shadow-md">
-                Paling Populer
+              <span class="absolute -top-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-indigo-600 px-3 py-0.5 text-[11px] font-semibold text-white shadow-sm">
+                Paling populer
               </span>
             {/if}
 
             {#if plan.price === 0}
-              <span class="absolute -top-3 right-4 px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-500 text-slate-950 shadow-md flex items-center gap-1">
+              <span class="absolute -top-3 right-4 flex items-center gap-1 whitespace-nowrap rounded-full bg-amber-400 px-2.5 py-0.5 text-[11px] font-semibold text-slate-950 shadow-sm">
                 <Gift class="w-3 h-3" />
-                Promo / Gratis
+                Gratis
               </span>
             {/if}
 
             <div class="space-y-2 border-b border-slate-100 dark:border-slate-800 pb-4 mb-4">
-              <span class="px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wider border {getPlanBadgeClass(plan.code)}">
+              <span class="px-2 py-0.5 rounded-md text-[11px] font-bold uppercase tracking-wider border {getPlanBadgeClass(plan.code)}">
                 {plan.code}
               </span>
-              <h3 class="text-lg font-black text-slate-900 dark:text-white">{plan.name}</h3>
+              <h3 class="text-lg font-bold text-slate-900 dark:text-white">{plan.name}</h3>
               <p class="text-xs text-slate-500 dark:text-slate-400 min-h-[36px] line-clamp-2">{plan.description || 'Pilihan paket sewa'}</p>
             </div>
 
             <div class="mb-4">
               <div class="flex items-baseline gap-1">
-                <span class="text-2xl font-black text-slate-900 dark:text-white">{formatRupiah(plan.price)}</span>
+                <span class="text-2xl font-bold text-slate-900 dark:text-white">{formatRupiah(plan.price)}</span>
                 <span class="text-xs text-slate-400">/{plan.period}</span>
               </div>
             </div>
@@ -640,7 +608,7 @@
         </button>
       </div>
 
-      <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs overflow-hidden">
+      <div class="ui-card overflow-hidden">
         {#if ordersLoading && orders.length === 0}
           <div class="p-12 text-center space-y-3">
             <div class="w-8 h-8 rounded-full border-2 border-indigo-600 border-t-transparent animate-spin mx-auto"></div>
@@ -658,8 +626,8 @@
           </div>
         {:else}
           <div class="overflow-x-auto">
-            <table class="w-full text-left text-xs">
-              <thead class="bg-slate-50 dark:bg-slate-950/70 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+            <table class="ui-table w-full text-left text-xs">
+              <thead class="bg-slate-50 dark:bg-slate-950/70 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 font-bold uppercase tracking-wider text-[11px]">
                 <tr>
                   <th class="px-5 py-3.5">Nomor Order / Invoice</th>
                   <th class="px-4 py-3.5">Paket & Durasi</th>
@@ -806,11 +774,11 @@
           <div class="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-3">
             <div class="flex items-center justify-between">
               <span class="text-xs text-slate-500">Paket yang Dipilih</span>
-              <span class="px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider border {getPlanBadgeClass(selectedPlanForCheckout.code)}">
+              <span class="px-2.5 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider border {getPlanBadgeClass(selectedPlanForCheckout.code)}">
                 {selectedPlanForCheckout.code}
               </span>
             </div>
-            <div class="text-lg font-black text-slate-900 dark:text-white">
+            <div class="text-lg font-bold text-slate-900 dark:text-white">
               {selectedPlanForCheckout.name}
             </div>
 
@@ -834,7 +802,7 @@
             <select
               id="checkout_duration"
               bind:value={selectedDurationDays}
-              class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+              class="ui-input"
             >
               {#if selectedPlanForCheckout.durationType === 'PERMANENT'}
                 <option value={0}>Masa Aktif Permanen (Unlimited)</option>
@@ -851,7 +819,7 @@
           <div class="p-4 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/60 dark:border-emerald-900/40 flex items-center justify-between">
             <div>
               <span class="text-xs text-emerald-800 dark:text-emerald-300 font-semibold block">Total Pembayaran:</span>
-              <span class="text-xl font-black text-emerald-900 dark:text-emerald-200 font-mono">
+              <span class="text-xl font-bold text-emerald-900 dark:text-emerald-200 font-mono">
                 {formatRupiah(calcCheckoutTotal(selectedPlanForCheckout, selectedDurationDays))}
               </span>
             </div>
@@ -874,7 +842,7 @@
                       <div class="text-xs font-bold flex items-center gap-1.5">
                         <Wallet class="w-4 h-4 text-indigo-500" />
                         <span>Pembayaran Online Otomatis (Midtrans)</span>
-                        <span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-600 dark:text-emerald-400">Instan</span>
+                        <span class="px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-600 dark:text-emerald-400">Instan</span>
                       </div>
                       <div class="text-[11px] opacity-75 mt-0.5">
                         Mendukung <strong>QRIS</strong>, Virtual Account (BCA, Mandiri, BRI, BNI), GoPay, ShopeePay, dan Kartu Kredit. Paket langsung aktif seketika setelah Anda bayar.

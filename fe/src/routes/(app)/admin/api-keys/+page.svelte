@@ -1,4 +1,7 @@
 <script lang="ts">
+  import EmptyState from '$lib/components/ui/EmptyState.svelte';
+  import StatCard from '$lib/components/ui/StatCard.svelte';
+  import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import { onMount } from 'svelte';
   import { apiRequest } from '$lib/api/client';
   import {
@@ -391,113 +394,74 @@ console.log(await res.json());`;
   }
 </script>
 
-<div class="p-8 max-w-7xl mx-auto space-y-8">
-  <!-- Header Title -->
-  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-    <div>
-      <div class="flex items-center gap-2.5">
-        <div class="p-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-          <Key class="w-5 h-5" />
-        </div>
-        <h2 class="text-xl font-extrabold text-slate-900 dark:text-white">API Key & Portal Integrasi Developer</h2>
-      </div>
-      <p class="text-xs text-slate-600 dark:text-slate-400 mt-1">
-        Hubungkan Website E-Commerce, Toko Online, Backend Laravel, POS Kasir, dan Sistem ERP ke WhatsApp CRM via REST API resmi
-      </p>
-    </div>
-
-    <div class="flex items-center gap-2.5">
-      <button
-        onclick={() => loadApiKeys(false)}
-        disabled={isRefreshing}
-        class="py-2.5 px-3.5 rounded-xl bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs flex items-center gap-2 shadow-2xs transition cursor-pointer"
-      >
-        <RefreshCw class="w-3.5 h-3.5 {isRefreshing ? 'animate-spin text-emerald-500' : ''}" />
-        Segarkan
+<div class="ui-page">
+  <PageHeader
+    title="API & Developer"
+    description="Hubungkan website, toko online, aplikasi kasir, atau sistem ERP Anda ke WhatsApp CRM lewat REST API."
+    icon={Key}
+  >
+    {#snippet actions()}
+      <button onclick={() => loadApiKeys(false)} disabled={isRefreshing} class="ui-btn-secondary px-2.5" title="Muat ulang" aria-label="Muat ulang">
+        <RefreshCw class="h-4 w-4 {isRefreshing ? 'animate-spin' : ''}" />
       </button>
-      <button
-        onclick={() => (showCreateModal = true)}
-        class="py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-2 shadow-sm shadow-emerald-500/20 transition cursor-pointer"
-      >
-        <Plus class="w-4 h-4" />
-        Buat API Key Baru
+      <button onclick={() => (showCreateModal = true)} class="ui-btn-primary">
+        <Plus class="h-4 w-4" />
+        Buat API Key
       </button>
-    </div>
-  </div>
+    {/snippet}
+  </PageHeader>
 
   <!-- Navigation Tabs (Overview, Buku Panduan, Live Tester) -->
-  <div class="flex border-b border-slate-200 dark:border-slate-800 gap-6">
+  <div class="flex gap-6 overflow-x-auto overflow-y-hidden border-b border-slate-200 dark:border-slate-800">
     <button
       onclick={() => (activeTab = 'OVERVIEW')}
-      class="pb-3 text-xs font-bold transition flex items-center gap-2 cursor-pointer border-b-2 {activeTab === 'OVERVIEW'
+      class="-mb-px flex shrink-0 cursor-pointer items-center gap-2 border-b-2 pb-3 text-sm font-medium transition {activeTab === 'OVERVIEW'
         ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400'
         : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}"
     >
       <Key class="w-4 h-4" />
-      <span>Manajemen API Key</span>
-      <span class="px-2 py-0.2 rounded-full bg-slate-100 dark:bg-slate-800 text-[10px] text-slate-600 dark:text-slate-400">
+      <span>API Key</span>
+      <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-400">
         {apiKeysList.length}
       </span>
     </button>
 
     <button
       onclick={() => (activeTab = 'DOCS')}
-      class="pb-3 text-xs font-bold transition flex items-center gap-2 cursor-pointer border-b-2 {activeTab === 'DOCS'
+      class="-mb-px flex shrink-0 cursor-pointer items-center gap-2 border-b-2 pb-3 text-sm font-medium transition {activeTab === 'DOCS'
         ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400'
         : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}"
     >
       <BookOpen class="w-4 h-4" />
-      <span>Buku Panduan & Dokumentasi API</span>
-      <span class="px-2 py-0.2 rounded-full bg-emerald-100 dark:bg-emerald-950 text-[10px] text-emerald-700 dark:text-emerald-400 font-bold">
-        Lengkap
-      </span>
+      <span>Dokumentasi</span>
     </button>
 
     <button
       onclick={() => (activeTab = 'TESTER')}
-      class="pb-3 text-xs font-bold transition flex items-center gap-2 cursor-pointer border-b-2 {activeTab === 'TESTER'
+      class="-mb-px flex shrink-0 cursor-pointer items-center gap-2 border-b-2 pb-3 text-sm font-medium transition {activeTab === 'TESTER'
         ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400'
         : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}"
     >
       <Play class="w-4 h-4 text-indigo-500" />
-      <span>Live API Tester</span>
+      <span>Uji Coba API</span>
     </button>
   </div>
 
   <!-- TAB 1: OVERVIEW & KEYS LIST -->
   {#if activeTab === 'OVERVIEW'}
     <!-- Highlight Cards -->
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-5">
-      <div class="p-5 rounded-2xl bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
-        <div class="flex items-center gap-2 text-slate-500 dark:text-slate-400 text-xs font-semibold">
-          <Key class="w-4 h-4 text-emerald-500" />
-          <span>API Keys Terdaftar</span>
-        </div>
-        <div class="text-2xl font-black text-slate-900 dark:text-white">{apiKeysList.length}</div>
-        <span class="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold">Aktif untuk Organisasi Anda</span>
-      </div>
-
-      <div class="p-5 rounded-2xl bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
-        <div class="flex items-center gap-2 text-slate-500 dark:text-slate-400 text-xs font-semibold">
-          <Zap class="w-4 h-4 text-indigo-500" />
-          <span>Header Autentikasi</span>
-        </div>
-        <div class="text-xs font-black text-slate-900 dark:text-white font-mono mt-1">X-API-Key: wacrm_live_...</div>
-        <span class="text-[11px] text-slate-500 dark:text-slate-400">Atau Authorization: Bearer</span>
-      </div>
-
-      <div class="p-5 rounded-2xl bg-white dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 shadow-sm space-y-1">
-        <div class="flex items-center gap-2 text-slate-500 dark:text-slate-400 text-xs font-semibold">
-          <Globe class="w-4 h-4 text-teal-500" />
-          <span>Base REST API URL</span>
-        </div>
-        <div class="text-xs font-mono font-bold text-slate-900 dark:text-white truncate mt-1">{baseUrl}/api/v1/external</div>
-        <span class="text-[11px] text-teal-600 dark:text-teal-400 font-bold">5 Endpoints Siap Pakai</span>
-      </div>
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <StatCard label="API key aktif" value={apiKeysList.length} icon={Key} tone="emerald" hint="Untuk organisasi Anda" />
+      <StatCard label="Header autentikasi" icon={Zap} tone="violet" hint="Atau Authorization: Bearer">
+        <span class="font-mono text-sm font-semibold">X-API-Key: wacrm_live_…</span>
+      </StatCard>
+      <StatCard label="Alamat dasar API" icon={Globe} tone="cyan" hint="5 endpoint siap pakai">
+        <span class="block truncate font-mono text-sm font-semibold" title="{baseUrl}/api/v1/external">{baseUrl}/api/v1/external</span>
+      </StatCard>
     </div>
 
     <!-- API Keys Table Section -->
-    <div class="bg-white dark:bg-slate-900/70 rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 shadow-sm">
+    <div class="ui-card overflow-hidden">
       <div class="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
         <div>
           <h3 class="text-sm font-bold text-slate-900 dark:text-white">Daftar API Keys Anda</h3>
@@ -508,18 +472,12 @@ console.log(await res.json());`;
       {#if isLoading}
         <div class="p-8 text-center text-xs text-slate-500 dark:text-slate-400">Memuat data API key...</div>
       {:else if apiKeysList.length === 0}
-        <div class="p-12 text-center space-y-3">
-          <div class="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center mx-auto">
-            <Key class="w-6 h-6" />
-          </div>
-          <p class="text-sm font-bold text-slate-700 dark:text-slate-300">Belum ada API Key</p>
-          <p class="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
-            Klik tombol <strong>"Buat API Key Baru"</strong> di atas untuk menghubungkan website atau backend aplikasi Anda.
-          </p>
-        </div>
+        <EmptyState icon={Key} title="Belum ada API key" description="Buat API key untuk menghubungkan website atau aplikasi Anda.">
+          <button onclick={() => (showCreateModal = true)} class="ui-btn-primary"><Plus class="h-4 w-4" /> Buat API Key</button>
+        </EmptyState>
       {:else}
         <div class="overflow-x-auto">
-          <table class="w-full text-left text-xs text-slate-700 dark:text-slate-300">
+          <table class="ui-table w-full text-left text-slate-700 dark:text-slate-300">
             <thead class="bg-slate-50 dark:bg-slate-950 text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider border-b border-slate-200 dark:border-slate-800">
               <tr>
                 <th class="py-3 px-4">Nama Aplikasi / Service</th>
@@ -545,7 +503,7 @@ console.log(await res.json());`;
                   <td class="py-3.5 px-4">
                     <div class="flex flex-wrap gap-1">
                       {#each k.permissions as perm}
-                        <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                        <span class="px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
                           {perm}
                         </span>
                       {/each}
@@ -575,7 +533,7 @@ console.log(await res.json());`;
     </div>
 
     <!-- Quick Code Playground in Overview -->
-    <div class="bg-white dark:bg-slate-900/70 rounded-2xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-5">
+    <div class="ui-card p-6 space-y-5">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2.5">
           <div class="p-2 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
@@ -688,7 +646,7 @@ console.log(await res.json());`;
         <div>
           <div class="flex items-center gap-2">
             <Sparkles class="w-5 h-5 text-amber-400" />
-            <h3 class="text-base font-extrabold text-white">Panduan Cepat 3 Langkah Integrasi</h3>
+            <h3 class="text-base font-bold text-white">Panduan Cepat 3 Langkah Integrasi</h3>
           </div>
           <p class="text-xs text-slate-400 mt-0.5">Mulai kirim pesan WhatsApp otomatis dari aplikasi luar dalam 5 menit</p>
         </div>
@@ -696,7 +654,7 @@ console.log(await res.json());`;
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div class="p-4 rounded-xl bg-slate-800/60 border border-slate-700/60 space-y-2">
             <div class="flex items-center gap-2">
-              <span class="w-6 h-6 rounded-full bg-emerald-500 text-slate-950 font-black text-xs flex items-center justify-center">1</span>
+              <span class="w-6 h-6 rounded-full bg-emerald-500 text-slate-950 font-bold text-xs flex items-center justify-center">1</span>
               <h4 class="text-xs font-bold text-white">Dapatkan API Key</h4>
             </div>
             <p class="text-[11px] text-slate-300 leading-relaxed">
@@ -706,7 +664,7 @@ console.log(await res.json());`;
 
           <div class="p-4 rounded-xl bg-slate-800/60 border border-slate-700/60 space-y-2">
             <div class="flex items-center gap-2">
-              <span class="w-6 h-6 rounded-full bg-indigo-500 text-white font-black text-xs flex items-center justify-center">2</span>
+              <span class="w-6 h-6 rounded-full bg-indigo-500 text-white font-bold text-xs flex items-center justify-center">2</span>
               <h4 class="text-xs font-bold text-white">Pasang Header Request</h4>
             </div>
             <p class="text-[11px] text-slate-300 leading-relaxed">
@@ -716,7 +674,7 @@ console.log(await res.json());`;
 
           <div class="p-4 rounded-xl bg-slate-800/60 border border-slate-700/60 space-y-2">
             <div class="flex items-center gap-2">
-              <span class="w-6 h-6 rounded-full bg-teal-500 text-slate-950 font-black text-xs flex items-center justify-center">3</span>
+              <span class="w-6 h-6 rounded-full bg-teal-500 text-slate-950 font-bold text-xs flex items-center justify-center">3</span>
               <h4 class="text-xs font-bold text-white">Kirim Pesan Otomatis</h4>
             </div>
             <p class="text-[11px] text-slate-300 leading-relaxed">
@@ -727,9 +685,9 @@ console.log(await res.json());`;
       </div>
 
       <!-- Endpoint 1: Send Template Message -->
-      <div class="bg-white dark:bg-slate-900/70 rounded-2xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+      <div class="ui-card p-6 space-y-4">
         <div class="flex items-center gap-3">
-          <span class="px-2.5 py-1 rounded-lg text-xs font-mono font-black bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+          <span class="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
             POST
           </span>
           <span class="font-mono text-sm font-bold text-slate-900 dark:text-white">/api/v1/external/messages/send-template</span>
@@ -740,7 +698,7 @@ console.log(await res.json());`;
 
         <!-- Parameter Table -->
         <div class="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl">
-          <table class="w-full text-left text-xs text-slate-700 dark:text-slate-300">
+          <table class="ui-table w-full text-left text-slate-700 dark:text-slate-300">
             <thead class="bg-slate-50 dark:bg-slate-950 font-bold text-[11px] text-slate-600 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
               <tr>
                 <th class="py-2.5 px-3.5">Parameter JSON</th>
@@ -814,9 +772,9 @@ console.log(await res.json());`;
       </div>
 
       <!-- Endpoint 2: Send Text Message -->
-      <div class="bg-white dark:bg-slate-900/70 rounded-2xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+      <div class="ui-card p-6 space-y-3">
         <div class="flex items-center gap-3">
-          <span class="px-2.5 py-1 rounded-lg text-xs font-mono font-black bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+          <span class="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
             POST
           </span>
           <span class="font-mono text-sm font-bold text-slate-900 dark:text-white">/api/v1/external/messages/send-text</span>
@@ -832,7 +790,7 @@ console.log(await res.json());`;
       </div>
 
       <!-- HTTP Status Codes Reference -->
-      <div class="bg-white dark:bg-slate-900/70 rounded-2xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+      <div class="ui-card p-6 space-y-4">
         <h3 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
           <Shield class="w-4 h-4 text-emerald-500" />
           <span>Daftar Kode Status HTTP Respon</span>
@@ -840,28 +798,28 @@ console.log(await res.json());`;
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div class="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 space-y-1">
-            <span class="font-mono font-black text-emerald-700 dark:text-emerald-300 text-xs">200 OK — success: true</span>
+            <span class="font-mono font-bold text-emerald-700 dark:text-emerald-300 text-xs">200 OK — success: true</span>
             <p class="text-[11px] text-emerald-800 dark:text-emerald-400">
               Pesan berhasil diproses dan dikirim ke server Meta WhatsApp pelanggan secara langsung.
             </p>
           </div>
 
           <div class="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 space-y-1">
-            <span class="font-mono font-black text-amber-700 dark:text-amber-300 text-xs">400 Bad Request — success: false</span>
+            <span class="font-mono font-bold text-amber-700 dark:text-amber-300 text-xs">400 Bad Request — success: false</span>
             <p class="text-[11px] text-amber-800 dark:text-amber-400">
               Format nomor salah, template belum Approved, atau parameter tombol kurang.
             </p>
           </div>
 
           <div class="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 space-y-1">
-            <span class="font-mono font-black text-rose-700 dark:text-rose-300 text-xs">401 Unauthorized — success: false</span>
+            <span class="font-mono font-bold text-rose-700 dark:text-rose-300 text-xs">401 Unauthorized — success: false</span>
             <p class="text-[11px] text-rose-800 dark:text-rose-400">
               Header <code>X-API-Key</code> tidak disertakan, token salah, atau key sudah dihapus.
             </p>
           </div>
 
           <div class="p-3.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 space-y-1">
-            <span class="font-mono font-black text-indigo-700 dark:text-indigo-300 text-xs">404 Not Found — success: false</span>
+            <span class="font-mono font-bold text-indigo-700 dark:text-indigo-300 text-xs">404 Not Found — success: false</span>
             <p class="text-[11px] text-indigo-800 dark:text-indigo-400">
               Nama template yang diminta tidak ditemukan di database organisasi Anda.
             </p>
@@ -877,13 +835,13 @@ console.log(await res.json());`;
               <div class="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400">
                 <CreditCard class="w-4 h-4" />
               </div>
-              <h3 class="text-sm font-extrabold text-white">Transparansi Tagihan & Biaya Resmi Meta (Direct-to-Meta)</h3>
+              <h3 class="text-sm font-bold text-white">Transparansi Tagihan & Biaya Resmi Meta (Direct-to-Meta)</h3>
             </div>
             <p class="text-xs text-slate-300">
               Platform WhatsApp CRM ini <strong>TIDAK memungut komisi atau biaya per-pesan (0% Markup)</strong>. Tagihan resmi percakapan ditagihkan <strong>langsung oleh Meta</strong> ke metode pembayaran Anda.
             </p>
           </div>
-          <span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shrink-0">
+          <span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shrink-0">
             0% Markup Platform
           </span>
         </div>
@@ -954,7 +912,7 @@ console.log(await res.json());`;
 
   <!-- TAB 3: LIVE API TESTER -->
   {#if activeTab === 'TESTER'}
-    <div class="bg-white dark:bg-slate-900/70 rounded-2xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm space-y-6">
+    <div class="ui-card p-6 space-y-6">
       <div>
         <div class="flex items-center gap-2">
           <Play class="w-5 h-5 text-indigo-500" />
@@ -977,7 +935,7 @@ console.log(await res.json());`;
               type="text"
               bind:value={testKey}
               placeholder="wacrm_live_xxxxxxxxxxxxxxxxxxxxxxxx"
-              class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+              class="ui-input font-mono"
             />
           </div>
 
@@ -990,7 +948,7 @@ console.log(await res.json());`;
               type="text"
               bind:value={testToPhone}
               placeholder="e.g. 081234567890"
-              class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+              class="ui-input font-mono"
             />
           </div>
 
@@ -1003,7 +961,7 @@ console.log(await res.json());`;
               type="text"
               bind:value={testTemplateName}
               placeholder="e.g. order_confirmation"
-              class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+              class="ui-input font-mono"
             />
           </div>
 
@@ -1016,7 +974,7 @@ console.log(await res.json());`;
                 id="test_cust"
                 type="text"
                 bind:value={testCustomerName}
-                class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+                class="ui-input"
               />
             </div>
             <div>
@@ -1027,7 +985,7 @@ console.log(await res.json());`;
                 id="test_inv"
                 type="text"
                 bind:value={testInvoiceNo}
-                class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+                class="ui-input"
               />
             </div>
           </div>
@@ -1096,7 +1054,7 @@ console.log(await res.json());`;
             type="text"
             bind:value={newKeyName}
             placeholder="e.g. Website Checkout, Laravel Backend, POS Kasir"
-            class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+            class="ui-input"
             required
           />
         </div>

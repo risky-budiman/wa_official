@@ -1,4 +1,6 @@
 <script lang="ts">
+  import Alert from '$lib/components/ui/Alert.svelte';
+  import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import { apiRequest } from '$lib/api/client';
   import { authStore } from '$lib/stores/auth.svelte';
   import { onMount } from 'svelte';
@@ -333,10 +335,10 @@ SKILLS:
   });
 </script>
 
-<div class="p-8 max-w-4xl mx-auto space-y-6">
+<div class="ui-page max-w-5xl">
   {#if authStore.role && authStore.role !== 'ADMINISTRATOR' && authStore.role !== 'SUPER_ADMIN' && authStore.role !== 'SUPERVISOR'}
     <div class="p-10 max-w-md mx-auto text-center space-y-4 py-16">
-      <div class="w-16 h-16 rounded-2xl bg-rose-500/10 text-rose-600 dark:text-rose-400 mx-auto flex items-center justify-center border border-rose-500/20 shadow-lg shadow-rose-500/10">
+      <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400">
         <Shield class="w-8 h-8" />
       </div>
       <h2 class="text-lg font-bold text-slate-900 dark:text-white">Akses Dibatasi</h2>
@@ -345,43 +347,29 @@ SKILLS:
       </p>
     </div>
   {:else}
-    <!-- Header -->
-    <div class="flex items-center justify-between">
-      <div>
-        <h2 class="text-xl font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-          <Bot class="w-6 h-6 text-indigo-500" />
-          Pengaturan Chatbot & AI Agent
-        </h2>
-        <p class="text-xs text-slate-600 dark:text-slate-400">Atur menu chatbot otomatis, asisten AI (Gemini), prompt bisnis, dan jam operasional</p>
-      </div>
-
-      <button
-        type="button"
-        onclick={saveSettings}
-        disabled={isSaving}
-        class="py-2.5 px-5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-2 shadow-lg shadow-indigo-600/20 transition cursor-pointer disabled:opacity-50"
-      >
-        <Save class="w-4 h-4" />
-        <span>{isSaving ? 'Menyimpan...' : 'Simpan Pengaturan'}</span>
-      </button>
-    </div>
+    <PageHeader
+      title="Chatbot & AI"
+      description="Atur balasan otomatis, asisten AI, informasi bisnis untuk AI, dan jam operasional."
+      icon={Bot}
+    >
+      {#snippet actions()}
+        <button type="button" onclick={saveSettings} disabled={isSaving} class="ui-btn-primary">
+          <Save class="h-4 w-4" />
+          {isSaving ? 'Menyimpan…' : 'Simpan pengaturan'}
+        </button>
+      {/snippet}
+    </PageHeader>
 
     {#if successMsg}
-      <div class="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex items-center gap-2 text-xs text-emerald-800 dark:text-emerald-300 font-bold animate-in fade-in">
-        <CheckCircle2 class="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-        {successMsg}
-      </div>
+      <Alert tone="success" message={successMsg} />
     {/if}
 
     {#if errorMsg}
-      <div class="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 flex items-center gap-2 text-xs text-rose-800 dark:text-rose-300 font-bold animate-in fade-in">
-        <AlertCircle class="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
-        {errorMsg}
-      </div>
+      <Alert tone="error" message={errorMsg} />
     {/if}
 
     <!-- 1. AI Agent Activation & Mode Card -->
-    <div class="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-5">
+    <div class="ui-card p-6 space-y-5">
       <div class="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
         <div class="flex items-center gap-3">
           <div class="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-bold">
@@ -407,7 +395,7 @@ SKILLS:
             <select
               id="ai_trigger_mode"
               bind:value={aiAgentConfig.triggerMode}
-              class="w-full p-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
+              class="ui-input"
             >
               <option value="ALWAYS">⚡ 24/7 Selalu Aktif (Setiap Pesan Masuk)</option>
               <option value="OUT_OF_HOURS">🌙 Di Luar Jam Operasional Kerja Saja</option>
@@ -420,7 +408,7 @@ SKILLS:
             <select
               id="ai_mode"
               bind:value={aiAgentConfig.mode}
-              class="w-full p-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
+              class="ui-input"
             >
               <option value="AI_ASSISTANT">🤖 Hybrid Menu Chatbot + AI Agent (Gemini)</option>
               <option value="STATIC_MESSAGE">💬 Pesan Statis / Auto-Reply Teks Saja</option>
@@ -469,7 +457,7 @@ SKILLS:
                     type="text"
                     bind:value={aiAgentConfig.model}
                     placeholder="Ketikkan ID model custom (cth: mistral-large / gpt-4o-2024-08-06)..."
-                    class="w-full mt-2 p-2.5 text-xs rounded-xl bg-white dark:bg-slate-900 border border-indigo-500 text-slate-900 dark:text-white font-mono focus:ring-2 focus:ring-indigo-500 outline-none animate-in fade-in"
+                    class="ui-input mt-2 font-mono animate-in fade-in"
                   />
                 {/if}
               </div>
@@ -483,7 +471,7 @@ SKILLS:
                 type="password"
                 bind:value={aiAgentConfig.apiKey}
                 placeholder="Masukkan API Key (cth: AIzaSy... / sk-proj...)"
-                class="w-full p-2.5 text-xs rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-mono focus:ring-2 focus:ring-indigo-500 outline-none"
+                class="ui-input font-mono"
               />
             </div>
           </div>
@@ -494,7 +482,7 @@ SKILLS:
               id="ai_static_message"
               bind:value={aiAgentConfig.staticMessage}
               rows="3"
-              class="w-full p-3 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
+              class="ui-input"
             ></textarea>
           </div>
         {/if}
@@ -502,7 +490,7 @@ SKILLS:
     </div>
 
     <!-- 2. Custom Static Chatbot Rules & Greeting Menu Card -->
-    <div class="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-5">
+    <div class="ui-card p-6 space-y-5">
       <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
         <div class="flex items-center gap-3">
           <div class="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold">
@@ -531,7 +519,7 @@ SKILLS:
           bind:value={chatbotConfig.greetingText}
           rows="5"
           placeholder="Ketikkan menu ucapan selamat datang..."
-          class="w-full p-3 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-mono focus:ring-2 focus:ring-amber-500 outline-none leading-relaxed"
+          class="ui-input font-mono leading-relaxed"
         ></textarea>
         <p class="text-[11px] text-slate-400">*Gunakan <code class="bg-slate-200 dark:bg-slate-700 px-1 rounded">{"{{contactName}}"}</code> untuk menyapa nama pelanggan secara otomatis.</p>
       </div>
@@ -597,7 +585,7 @@ SKILLS:
 
     <!-- 3. System Prompt & Presets -->
     {#if aiAgentConfig.enabled && aiAgentConfig.mode === 'AI_ASSISTANT'}
-      <div class="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+      <div class="ui-card p-6 space-y-4">
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-2">
             <BookOpen class="w-5 h-5 text-indigo-500" />
@@ -620,13 +608,13 @@ SKILLS:
                 : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'}"
             >
               <div>
-                <span class="text-[10px] font-bold px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 mb-1 inline-block">
+                <span class="text-[11px] font-bold px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 mb-1 inline-block">
                   {preset.badge}
                 </span>
                 <p class="text-xs font-bold text-slate-900 dark:text-white">{preset.title}</p>
                 <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1 line-clamp-2">{preset.desc}</p>
               </div>
-              <span class="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 mt-2 flex items-center gap-1">
+              <span class="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 mt-2 flex items-center gap-1">
                 Gunakan Templat Ini →
               </span>
             </button>
@@ -641,14 +629,14 @@ SKILLS:
             bind:value={aiAgentConfig.systemPrompt}
             rows="7"
             placeholder="Ketik aturan khusus, SOP perusahaan, atau FAQ produk Anda di sini..."
-            class="w-full p-3 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-mono focus:ring-2 focus:ring-indigo-500 outline-none leading-relaxed"
+            class="ui-input font-mono leading-relaxed"
           ></textarea>
         </div>
       </div>
     {/if}
 
     <!-- 3. Operating Hours Settings -->
-    <div class="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+    <div class="ui-card p-6 space-y-4">
       <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
         <div class="flex items-center gap-3">
           <div class="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold">
@@ -694,7 +682,7 @@ SKILLS:
                 id="hours_start"
                 type="time"
                 bind:value={operatingHours.startTime}
-                class="w-full p-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-semibold focus:ring-2 focus:ring-emerald-500 outline-none"
+                class="ui-input"
               />
             </div>
             <div class="space-y-1.5">
@@ -703,7 +691,7 @@ SKILLS:
                 id="hours_end"
                 type="time"
                 bind:value={operatingHours.endTime}
-                class="w-full p-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-semibold focus:ring-2 focus:ring-emerald-500 outline-none"
+                class="ui-input"
               />
             </div>
             <div class="space-y-1.5">
@@ -711,7 +699,7 @@ SKILLS:
               <select
                 id="hours_timezone"
                 bind:value={operatingHours.timezone}
-                class="w-full p-2.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-emerald-500 outline-none"
+                class="ui-input"
               >
                 <option value="Asia/Jakarta">WIB (Asia/Jakarta)</option>
                 <option value="Asia/Makassar">WITA (Asia/Makassar)</option>

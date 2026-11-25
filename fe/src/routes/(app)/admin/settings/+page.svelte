@@ -1,4 +1,6 @@
 <script lang="ts">
+  import Alert from '$lib/components/ui/Alert.svelte';
+  import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { apiRequest } from '$lib/api/client';
@@ -670,14 +672,14 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
   });
 </script>
 
-<div class="p-8 max-w-4xl mx-auto space-y-6">
+<div class="ui-page max-w-5xl">
   {#if authStore.role && authStore.role !== 'ADMINISTRATOR' && authStore.role !== 'SUPER_ADMIN'}
     <!-- Access Denied View for Non-Admins -->
     <div class="p-10 max-w-md mx-auto text-center space-y-4 py-16">
-      <div class="w-16 h-16 rounded-2xl bg-rose-500/10 text-rose-600 dark:text-rose-400 mx-auto flex items-center justify-center border border-rose-500/20 shadow-lg shadow-rose-500/10">
+      <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400">
         <Shield class="w-8 h-8" />
       </div>
-      <h2 class="text-lg font-bold text-slate-900 dark:text-white">Akses Dibatasi (Khusus Administrator)</h2>
+      <h2 class="text-lg font-semibold text-slate-900 dark:text-white">Khusus Administrator</h2>
       <p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
         Halaman Pengaturan Saluran WABA dan Meta Cloud API hanya dapat diakses dan dikonfigurasi oleh akun dengan hak akses <strong class="text-slate-700 dark:text-slate-200">Administrator</strong>.
       </p>
@@ -689,31 +691,26 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
       </a>
     </div>
   {:else}
-    <div>
-      <h2 class="text-xl font-extrabold text-slate-900 dark:text-white">Pengaturan Meta WhatsApp Cloud API</h2>
-      <p class="text-xs text-slate-600 dark:text-slate-400">Hubungkan nomor resmi WhatsApp Business Account (WABA) melalui akun Facebook atau konfigurasi manual</p>
-    </div>
+    <PageHeader
+      title="Saluran WhatsApp"
+      description="Hubungkan nomor WhatsApp Business resmi Anda dan atur kapasitas serta SLA tim."
+      icon={Smartphone}
+    />
 
   {#if fbSuccessMsg}
-    <div class="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex items-center gap-2 text-xs text-emerald-800 dark:text-emerald-300 font-bold animate-in fade-in">
-      <CheckCircle2 class="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-      {fbSuccessMsg}
-    </div>
+    <Alert tone="success" message={fbSuccessMsg} />
   {/if}
   {#if fbErrorMsg}
-    <div class="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 flex items-center gap-2 text-xs text-rose-800 dark:text-rose-300 font-bold animate-in fade-in">
-      <AlertCircle class="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
-      {fbErrorMsg}
-    </div>
+    <Alert tone="error" message={fbErrorMsg} />
   {/if}
 
   <!-- ══════════════════════════════════════════════════════════════ -->
   <!-- MAIN SETTINGS TOP TABS                                       -->
   <!-- ══════════════════════════════════════════════════════════════ -->
-  <div class="flex items-center p-1 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl gap-1">
+  <div class="flex items-center gap-1 rounded-2xl bg-slate-100 p-1 dark:bg-slate-900">
     <button
       onclick={() => (mainSettingsTab = 'WABA')}
-      class="flex-1 py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer {mainSettingsTab === 'WABA' 
+      class="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition {mainSettingsTab === 'WABA' 
         ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-sm border border-slate-200/80 dark:border-slate-700/80' 
         : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}"
     >
@@ -724,7 +721,7 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
 
     <button
       onclick={() => (mainSettingsTab = 'OPERATIONS')}
-      class="flex-1 py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer {mainSettingsTab === 'OPERATIONS' 
+      class="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition {mainSettingsTab === 'OPERATIONS' 
         ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-sm border border-slate-200/80 dark:border-slate-700/80' 
         : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}"
     >
@@ -740,7 +737,7 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
     {#if channelStore.isConnected && channelStore.channel}
       <div class="space-y-6">
         <!-- Status Saluran Aktif Card (Ultra Precision & Modern UI) -->
-        <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+        <div class="ui-card overflow-hidden">
           <!-- Card Header with Channel Info & Action Buttons -->
           <div class="p-5 sm:p-6 bg-slate-50/50 dark:bg-slate-950/40 border-b border-slate-200/80 dark:border-slate-800/80 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div class="flex items-center gap-4">
@@ -750,14 +747,14 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
               
               <div class="space-y-1">
                 <div class="flex flex-wrap items-center gap-2">
-                  <h3 class="text-base font-extrabold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+                  <h3 class="text-base font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
                     <span>{companyName || channelStore.channel?.companyName || 'IDS Payment'}</span>
                   </h3>
                   <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 text-[11px] font-bold border border-emerald-500/20">
                     <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                     Saluran Terhubung
                   </span>
-                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 text-[10px] font-semibold border border-indigo-500/20 font-mono">
+                  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 text-[11px] font-semibold border border-indigo-500/20 font-mono">
                     <Sparkles class="w-3 h-3 text-indigo-500" />
                     Meta Live v20.0
                   </span>
@@ -806,14 +803,14 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
           <div class="p-5 sm:p-6 space-y-4">
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
               <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 flex flex-col justify-between space-y-1.5">
-                <span class="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Perusahaan Terdaftar</span>
+                <span class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Perusahaan Terdaftar</span>
                 <span class="text-xs font-bold text-slate-900 dark:text-white truncate">{companyName || 'IDS Payment'}</span>
               </div>
 
               <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 flex flex-col justify-between space-y-1.5">
                 <div class="flex items-center justify-between">
-                  <span class="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">WABA ID Resmi</span>
-                  <button onclick={() => copyToClipboard(channelStore.channel?.wabaId || wabaId || '-', 'waba')} class="text-[10px] text-slate-500 hover:text-emerald-600 transition flex items-center gap-1 cursor-pointer">
+                  <span class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">WABA ID Resmi</span>
+                  <button onclick={() => copyToClipboard(channelStore.channel?.wabaId || wabaId || '-', 'waba')} class="text-[11px] text-slate-500 hover:text-emerald-600 transition flex items-center gap-1 cursor-pointer">
                     {#if copiedWaba}<Check class="w-3 h-3 text-emerald-500" />{:else}<Copy class="w-3 h-3" />{/if}
                   </button>
                 </div>
@@ -821,7 +818,7 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
               </div>
 
               <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 flex flex-col justify-between space-y-1.5">
-                <span class="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status Nomor</span>
+                <span class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status Nomor</span>
                 <div class="flex items-center gap-1.5">
                   <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
                   <span class="text-xs font-bold text-emerald-700 dark:text-emerald-400">TERVERIFIKASI</span>
@@ -829,7 +826,7 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
               </div>
 
               <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 flex flex-col justify-between space-y-1.5">
-                <span class="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Kualitas Pesan</span>
+                <span class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Kualitas Pesan</span>
                 <div class="flex items-center gap-1.5">
                   <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
                   <span class="text-xs font-bold text-emerald-700 dark:text-emerald-400">{metaLive?.qualityRating || channelStore.channel?.qualityRating || 'GREEN'} (Tinggi)</span>
@@ -837,7 +834,7 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
               </div>
 
               <div class="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200/80 dark:border-slate-800/80 flex flex-col justify-between space-y-1.5">
-                <span class="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Limit Pesan Meta</span>
+                <span class="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Limit Pesan Meta</span>
                 <span class="text-xs font-bold text-indigo-700 dark:text-indigo-400 font-mono">{formatMessagingTier(metaLive?.messagingLimitTier)}</span>
               </div>
             </div>
@@ -845,7 +842,7 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
         </div>
 
         <!-- Webhook Configuration Box -->
-        <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 space-y-4">
+        <div class="ui-card p-6 space-y-4">
           <h3 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
             <Layers class="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
             Pengaturan Webhook Meta Developer
@@ -877,7 +874,7 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
       <div class="space-y-6">
         <div class="flex p-1.5 bg-slate-200/80 dark:bg-slate-900 rounded-2xl text-xs font-bold w-fit border border-slate-300/60 dark:border-slate-800">
           <button onclick={() => (activeTab = 'FACEBOOK_LOGIN')} class="py-2 px-4 rounded-xl transition cursor-pointer flex items-center gap-2 {activeTab === 'FACEBOOK_LOGIN' ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-sm' : 'text-slate-600 dark:text-slate-400'}">
-            <div class="w-4 h-4 rounded-full bg-[#1877F2] text-white flex items-center justify-center text-[10px] font-black font-serif">f</div>
+            <div class="w-4 h-4 rounded-full bg-[#1877F2] text-white flex items-center justify-center text-[11px] font-bold font-serif">f</div>
             Login with Facebook (Otomatis)
           </button>
           <button onclick={() => (activeTab = 'MANUAL')} class="py-2 px-4 rounded-xl transition cursor-pointer flex items-center gap-2 {activeTab === 'MANUAL' ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-sm' : 'text-slate-600 dark:text-slate-400'}">
@@ -887,9 +884,9 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
         </div>
 
         {#if activeTab === 'FACEBOOK_LOGIN'}
-          <div class="bg-white dark:bg-slate-900/70 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-5">
+          <div class="ui-card p-6 space-y-5">
             <div class="flex items-start gap-4">
-              <div class="w-12 h-12 rounded-2xl bg-[#1877F2]/10 text-[#1877F2] flex items-center justify-center font-black text-2xl font-serif shrink-0 border border-[#1877F2]/20">f</div>
+              <div class="w-12 h-12 rounded-2xl bg-[#1877F2]/10 text-[#1877F2] flex items-center justify-center font-bold text-2xl font-serif shrink-0 border border-[#1877F2]/20">f</div>
               <div>
                 <h3 class="text-sm font-bold text-slate-900 dark:text-white">Meta WhatsApp Embedded Signup</h3>
                 <p class="text-xs text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">Hubungkan akun Facebook Anda untuk mengotorisasi nomor WhatsApp Business secara instan ke sistem CRM ini.</p>
@@ -900,40 +897,40 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
               <span>Integrasi otomatis via Meta Tech Provider. Pengguna tidak perlu memasukkan App ID manual.</span>
             </div>
             <button onclick={connectWithFacebook} disabled={isConnectingFb} class="py-3 px-6 rounded-xl bg-[#1877F2] hover:bg-[#166fe5] text-white font-bold text-xs flex items-center gap-2.5 shadow-md transition cursor-pointer">
-              {#if isConnectingFb}<div class="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin"></div>{:else}<div class="w-4 h-4 rounded-full bg-white text-[#1877F2] flex items-center justify-center text-[10px] font-black font-serif">f</div>{/if}
+              {#if isConnectingFb}<div class="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin"></div>{:else}<div class="w-4 h-4 rounded-full bg-white text-[#1877F2] flex items-center justify-center text-[11px] font-bold font-serif">f</div>{/if}
               <span>Lanjutkan dengan Facebook</span>
             </button>
           </div>
         {:else}
           <form onsubmit={handleManualSave} class="space-y-6">
-            <div class="bg-white dark:bg-slate-900/70 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+            <div class="ui-card p-6 space-y-4">
               <h3 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2"><Smartphone class="w-4 h-4 text-emerald-600" /> Informasi Nomor WhatsApp</h3>
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label for="m_phone" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Nomor WhatsApp</label>
-                  <input id="m_phone" type="text" bind:value={displayPhoneNumber} placeholder="+62 812-3456-7890" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono" required />
+                  <input id="m_phone" type="text" bind:value={displayPhoneNumber} placeholder="+62 812-3456-7890" class="ui-input font-mono" required />
                 </div>
                 <div>
                   <label for="m_name" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Nama Tampilan Bisnis</label>
-                  <input id="m_name" type="text" bind:value={verifiedName} placeholder="PT WhatsApp CRM Indonesia" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs" required />
+                  <input id="m_name" type="text" bind:value={verifiedName} placeholder="PT WhatsApp CRM Indonesia" class="ui-input" required />
                 </div>
               </div>
             </div>
-            <div class="bg-white dark:bg-slate-900/70 p-6 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
+            <div class="ui-card p-6 space-y-4">
               <h3 class="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2"><Key class="w-4 h-4 text-emerald-600" /> Kredensial Meta Developer</h3>
               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label for="waba_id" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">WABA ID</label>
-                  <input id="waba_id" type="text" bind:value={wabaId} placeholder="109823471092834" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs" />
+                  <input id="waba_id" type="text" bind:value={wabaId} placeholder="109823471092834" class="ui-input" />
                 </div>
                 <div>
                   <label for="p_id" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Phone Number ID</label>
-                  <input id="p_id" type="text" bind:value={appId} placeholder="102938475610293" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs" />
+                  <input id="p_id" type="text" bind:value={appId} placeholder="102938475610293" class="ui-input" />
                 </div>
               </div>
               <div>
                 <label for="s_tok" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">System User Permanent Token</label>
-                <textarea id="s_tok" rows="3" bind:value={accessToken} placeholder="EAAGm0PX4ZCBO..." class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono"></textarea>
+                <textarea id="s_tok" rows="3" bind:value={accessToken} placeholder="EAAGm0PX4ZCBO..." class="ui-input font-mono"></textarea>
               </div>
             </div>
             <div class="flex justify-end pt-2">
@@ -952,22 +949,16 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
   <!-- ══════════════════════════════════════════════════════════════ -->
   {:else if mainSettingsTab === 'HOURS_AI'}
     {#if hoursAiSuccessMsg}
-      <div class="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex items-center gap-2 text-xs text-emerald-800 dark:text-emerald-300 font-bold animate-in fade-in">
-        <CheckCircle2 class="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-        {hoursAiSuccessMsg}
-      </div>
+      <Alert tone="success" message={hoursAiSuccessMsg} />
     {/if}
 
     {#if hoursAiErrorMsg}
-      <div class="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 flex items-center gap-2 text-xs text-rose-800 dark:text-rose-300 font-bold animate-in fade-in">
-        <AlertCircle class="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
-        {hoursAiErrorMsg}
-      </div>
+      <Alert tone="error" message={hoursAiErrorMsg} />
     {/if}
 
     <form onsubmit={saveOperatingHoursSettings} class="space-y-6">
       <!-- 1. Card Jadwal Jam Operasional -->
-      <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 space-y-5">
+      <div class="ui-card p-6 space-y-5">
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center">
@@ -1014,7 +1005,7 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
                   id="start_time"
                   type="time"
                   bind:value={operatingHours.startTime}
-                  class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white"
+                  class="ui-input"
                   required
                 />
               </div>
@@ -1025,7 +1016,7 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
                   id="end_time"
                   type="time"
                   bind:value={operatingHours.endTime}
-                  class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white"
+                  class="ui-input"
                   required
                 />
               </div>
@@ -1035,7 +1026,7 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
                 <select
                   id="tz_select"
                   bind:value={operatingHours.timezone}
-                  class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white"
+                  class="ui-input"
                 >
                   <option value="Asia/Jakarta">WIB (Asia/Jakarta - UTC+7)</option>
                   <option value="Asia/Makassar">WITA (Asia/Makassar - UTC+8)</option>
@@ -1052,7 +1043,7 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
       </div>
 
       <!-- 2. Card AI Agent Auto-Responder di Luar Jam Operasional -->
-      <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 space-y-5">
+      <div class="ui-card p-6 space-y-5">
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
@@ -1158,7 +1149,7 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
                     <select
                       id="ai_model"
                       bind:value={aiAgentConfig.model}
-                      class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white"
+                      class="ui-input"
                     >
                       <option value="gemini-2.0-flash">Google Gemini 2.0 Flash (Rekomendasi - Cepat & Cerdas)</option>
                       <option value="gemini-1.5-flash-latest">Google Gemini 1.5 Flash (Stabil)</option>
@@ -1175,7 +1166,7 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
                       type="password"
                       bind:value={aiAgentConfig.apiKey}
                       placeholder="AIzaSy... (Biarkan kosong jika sudah diatur di server)"
-                      class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-white"
+                      class="ui-input font-mono"
                     />
                   </div>
                 </div>
@@ -1187,7 +1178,7 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
                       <Wand2 class="w-4 h-4 text-indigo-500" />
                       <span>Template Prompt & Keahlian Khusus (Skills):</span>
                     </div>
-                    <span class="text-[10px] text-slate-400 font-medium hidden sm:inline">Pilih salah satu untuk menerapkan format standar</span>
+                    <span class="text-[11px] text-slate-400 font-medium hidden sm:inline">Pilih salah satu untuk menerapkan format standar</span>
                   </div>
 
                   <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
@@ -1202,14 +1193,14 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
                         <div class="flex items-center justify-between mb-1">
                           <span class="font-bold text-[11px] truncate">{preset.title}</span>
                           {#if appliedPresetKey === key}
-                            <span class="text-[9px] font-black text-emerald-600 dark:text-emerald-400 flex items-center gap-0.5">
+                            <span class="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-0.5">
                               <Check class="w-3 h-3" /> Diterapkan
                             </span>
                           {:else}
-                            <span class="px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-[9px] text-slate-500">{preset.badge}</span>
+                            <span class="px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-[10px] text-slate-500">{preset.badge}</span>
                           {/if}
                         </div>
-                        <p class="text-[10px] text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed">
+                        <p class="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed">
                           {preset.desc}
                         </p>
                       </button>
@@ -1229,7 +1220,7 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
                     rows="8"
                     bind:value={aiAgentConfig.systemPrompt}
                     placeholder="Tulis informasi perusahaan Anda di sini agar AI dapat menjawab dengan akurat..."
-                    class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white font-mono leading-relaxed placeholder-slate-400 focus:outline-none focus:border-indigo-500"
+                    class="ui-input font-mono leading-relaxed"
                   ></textarea>
                 </div>
 
@@ -1286,7 +1277,7 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
 
                       <!-- Struktur Formula Prompt -->
                       <div class="p-3 rounded-xl bg-slate-950 text-slate-100 font-mono text-[11px] space-y-1 overflow-x-auto">
-                        <div class="text-slate-400 font-sans font-bold text-[10px] uppercase tracking-wider mb-1">Formula Struktur Prompt Rekomendasi:</div>
+                        <div class="text-slate-400 font-sans font-bold text-[11px] uppercase tracking-wider mb-1">Formula Struktur Prompt Rekomendasi:</div>
                         <div class="text-emerald-400"># 1. PERAN</div>
                         <div>Anda adalah customer service AI resmi dari [Nama Bisnis].</div>
                         <div class="text-emerald-400 mt-2"># 2. INFORMASI PERUSAHAAN</div>
@@ -1313,7 +1304,7 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
                   rows="4"
                   bind:value={aiAgentConfig.staticMessage}
                   placeholder="Halo! Layanan kami saat ini sedang berada di luar jam operasional..."
-                  class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-indigo-500"
+                  class="ui-input"
                 ></textarea>
               </div>
             {/if}
@@ -1350,7 +1341,7 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
 
     <!-- 3. Card Simulasi & Uji Coba Chat AI Langsung (Live AI Simulator) -->
     {#if aiAgentConfig.enabled && aiAgentConfig.mode === 'AI_ASSISTANT'}
-      <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 space-y-4">
+      <div class="ui-card p-6 space-y-4">
         <div class="flex items-center gap-2.5">
           <Sparkles class="w-4 h-4 text-indigo-500" />
           <h3 class="text-sm font-bold text-slate-900 dark:text-white">Simulasi & Uji Coba Respon AI</h3>
@@ -1402,20 +1393,14 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
   <!-- ══════════════════════════════════════════════════════════════ -->
   {:else if mainSettingsTab === 'OPERATIONS'}
     {#if operationsSuccessMsg}
-      <div class="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex items-center gap-2 text-xs text-emerald-800 dark:text-emerald-300 font-bold animate-in fade-in">
-        <CheckCircle2 class="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-        {operationsSuccessMsg}
-      </div>
+      <Alert tone="success" message={operationsSuccessMsg} />
     {/if}
 
     {#if operationsErrorMsg}
-      <div class="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 flex items-center gap-2 text-xs text-rose-800 dark:text-rose-300 font-bold animate-in fade-in">
-        <AlertCircle class="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
-        {operationsErrorMsg}
-      </div>
+      <Alert tone="error" message={operationsErrorMsg} />
     {/if}
 
-    <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 space-y-6">
+    <div class="ui-card p-6 space-y-6">
       <div class="flex items-center gap-3">
         <div class="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
           <Sliders class="w-5 h-5" />
@@ -1430,20 +1415,20 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label for="max_c_op" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Maksimal Chat per Agen</label>
-            <input id="max_c_op" type="number" min="1" max="50" bind:value={maxChatsPerAgent} class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white" required />
-            <p class="text-[10px] text-slate-500 mt-1">Jika mencapai batas, chat masuk dialihkan ke Antrean.</p>
+            <input id="max_c_op" type="number" min="1" max="50" bind:value={maxChatsPerAgent} class="ui-input" required />
+            <p class="text-[11px] text-slate-500 mt-1">Jika mencapai batas, chat masuk dialihkan ke Antrean.</p>
           </div>
 
           <div>
             <label for="auto_r_op" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Auto-Resolve Inactivity (Jam)</label>
-            <input id="auto_r_op" type="number" min="1" max="72" bind:value={autoResolveHours} class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white" required />
-            <p class="text-[10px] text-slate-500 mt-1">Tutup tiket otomatis jika pelanggan tidak merespons.</p>
+            <input id="auto_r_op" type="number" min="1" max="72" bind:value={autoResolveHours} class="ui-input" required />
+            <p class="text-[11px] text-slate-500 mt-1">Tutup tiket otomatis jika pelanggan tidak merespons.</p>
           </div>
 
           <div>
             <label for="care_w_op" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Customer Care Window (Jam)</label>
-            <input id="care_w_op" type="number" min="1" max="72" bind:value={careWindowHours} class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white" required />
-            <p class="text-[10px] text-slate-500 mt-1">Masa aktif sesi Meta (standar 24 jam).</p>
+            <input id="care_w_op" type="number" min="1" max="72" bind:value={careWindowHours} class="ui-input" required />
+            <p class="text-[11px] text-slate-500 mt-1">Masa aktif sesi Meta (standar 24 jam).</p>
           </div>
         </div>
 
