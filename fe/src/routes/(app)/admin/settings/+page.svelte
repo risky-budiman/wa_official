@@ -1,6 +1,7 @@
 <script lang="ts">
   import Alert from '$lib/components/ui/Alert.svelte';
   import PageHeader from '$lib/components/ui/PageHeader.svelte';
+  import ChangeNumberWizard from '$lib/components/settings/ChangeNumberWizard.svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { apiRequest } from '$lib/api/client';
@@ -506,8 +507,15 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
   }
 
   // 🔴 Disconnect current WABA connection
+  let showChangeNumber = $state(false);
+
+  async function handleNumberChanged() {
+    await channelStore.checkStatus();
+    await loadSettings();
+  }
+
   async function disconnectChannel() {
-    if (!confirm('Apakah Anda yakin ingin memutuskan koneksi nomor WhatsApp ini?')) return;
+    if (!confirm('Putuskan nomor WhatsApp ini? Pesan baru tidak akan masuk sampai nomor dihubungkan lagi. Riwayat percakapan tetap tersimpan.')) return;
 
     isDisconnecting = true;
     const res = await apiRequest('/settings/waba/disconnect', { method: 'POST' });
@@ -785,6 +793,15 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
               >
                 <RefreshCw class="w-3.5 h-3.5 text-slate-500 dark:text-slate-400 {isSyncingLive ? 'animate-spin text-emerald-500' : ''}" />
                 <span>{isSyncingLive ? 'Menyinkronkan...' : 'Sinkronkan Meta'}</span>
+              </button>
+
+              <button
+                onclick={() => (showChangeNumber = true)}
+                class="h-9 px-3.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700/80 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center gap-2 transition shadow-sm cursor-pointer"
+                title="Ganti ke nomor WhatsApp lain"
+              >
+                <Smartphone class="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
+                <span>Ganti nomor</span>
               </button>
 
               <button
@@ -1443,3 +1460,10 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
   {/if}
   {/if}
 </div>
+
+<ChangeNumberWizard
+  open={showChangeNumber}
+  currentNumber={channelStore.channel?.displayPhoneNumber || ''}
+  onclose={() => (showChangeNumber = false)}
+  onchanged={handleNumberChanged}
+/>
