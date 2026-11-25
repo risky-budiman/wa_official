@@ -145,6 +145,16 @@ body {
   }
 
   /* Form controls */
+  /* Inbox composer */
+  .composer-tool {
+    @apply inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl transition-colors hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-slate-700 dark:hover:text-white;
+  }
+  .attach-item {
+    @apply flex w-full cursor-pointer items-center gap-3 rounded-lg px-2.5 py-2 text-left text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800;
+  }
+  .attach-icon {
+    @apply flex h-8 w-8 shrink-0 items-center justify-center rounded-lg;
+  }
   .ui-input {
     @apply w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-900 placeholder:text-slate-400 transition focus:border-emerald-500 focus:outline-none focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:placeholder:text-slate-500;
   }
@@ -217,4 +227,17 @@ body {
 }
 .dark .ui-table tbody tr:hover {
   background: rgb(30 41 59 / 0.35);
+}
+
+/* ───────────────────────────────────────────
+   Chat canvas — soft background behind bubbles
+   ─────────────────────────────────────────── */
+.chat-canvas {
+  background-color: rgb(241 245 249 / 0.7);
+  background-image: radial-gradient(rgb(148 163 184 / 0.18) 1px, transparent 1px);
+  background-size: 18px 18px;
+}
+.dark .chat-canvas {
+  background-color: rgb(2 6 23);
+  background-image: radial-gradient(rgb(51 65 85 / 0.35) 1px, transparent 1px);
 }
