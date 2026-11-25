@@ -2,50 +2,38 @@
   interface Props {
     role?: 'SUPER_ADMIN' | 'CO_SUPER_ADMIN' | 'ADMIN_FINANCE' | 'ADMIN_SUPPORT' | 'ADMINISTRATOR' | 'SUPERVISOR' | 'AGENT' | null;
     isPrimaryAdmin?: boolean;
+    size?: 'sm' | 'md';
   }
-  let { role = 'AGENT', isPrimaryAdmin = false }: Props = $props();
+  let { role = 'AGENT', isPrimaryAdmin = false, size = 'md' }: Props = $props();
+
+  // label + color per role (readable contrast in both light and dark mode)
+  const config = $derived.by(() => {
+    switch (role) {
+      case 'SUPER_ADMIN':
+        return isPrimaryAdmin
+          ? { label: 'Administrator Utama', cls: 'bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-400/20', dot: 'bg-amber-500' }
+          : { label: 'Super Admin', cls: 'bg-indigo-50 text-indigo-700 ring-indigo-600/20 dark:bg-indigo-500/10 dark:text-indigo-300 dark:ring-indigo-400/20', dot: 'bg-indigo-500' };
+      case 'CO_SUPER_ADMIN':
+        return { label: 'Co-Super Admin', cls: 'bg-indigo-50 text-indigo-700 ring-indigo-600/20 dark:bg-indigo-500/10 dark:text-indigo-300 dark:ring-indigo-400/20', dot: 'bg-indigo-500' };
+      case 'ADMIN_FINANCE':
+        return { label: 'Finance', cls: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-400/20', dot: 'bg-emerald-500' };
+      case 'ADMIN_SUPPORT':
+        return { label: 'Support', cls: 'bg-cyan-50 text-cyan-700 ring-cyan-600/20 dark:bg-cyan-500/10 dark:text-cyan-300 dark:ring-cyan-400/20', dot: 'bg-cyan-500' };
+      case 'ADMINISTRATOR':
+        return { label: 'Administrator', cls: 'bg-rose-50 text-rose-700 ring-rose-600/20 dark:bg-rose-500/10 dark:text-rose-300 dark:ring-rose-400/20', dot: 'bg-rose-500' };
+      case 'SUPERVISOR':
+        return { label: 'Supervisor', cls: 'bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-400/20', dot: 'bg-amber-500' };
+      default:
+        return { label: 'Agent', cls: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-400/20', dot: 'bg-emerald-500' };
+    }
+  });
 </script>
 
-{#if role === 'SUPER_ADMIN'}
-  {#if isPrimaryAdmin}
-    <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/40 shadow-xs">
-      <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
-      Administrator Utama
-    </span>
-  {:else}
-    <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-500/20 text-indigo-500 dark:text-indigo-400 border border-indigo-500/30">
-      <span class="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
-      Co-Super Admin
-    </span>
-  {/if}
-{:else if role === 'CO_SUPER_ADMIN'}
-  <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-500/20 text-indigo-500 dark:text-indigo-400 border border-indigo-500/30">
-    <span class="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
-    Co-Super Admin
-  </span>
-{:else if role === 'ADMIN_FINANCE'}
-  <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
-    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-    Finance Staff
-  </span>
-{:else if role === 'ADMIN_SUPPORT'}
-  <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-cyan-500/20 text-cyan-600 dark:text-cyan-400 border border-cyan-500/30">
-    <span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
-    Support Staff
-  </span>
-{:else if role === 'ADMINISTRATOR'}
-  <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-500/15 text-rose-400 border border-rose-500/20">
-    <span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span>
-    Admin
-  </span>
-{:else if role === 'SUPERVISOR'}
-  <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/20">
-    <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
-    Supervisor
-  </span>
-{:else}
-  <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
-    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-    Agent
-  </span>
-{/if}
+<span
+  class="inline-flex items-center gap-1.5 rounded-full font-semibold ring-1 ring-inset {config.cls} {size === 'sm'
+    ? 'px-2 py-px text-[10px]'
+    : 'px-2.5 py-0.5 text-xs'}"
+>
+  <span class="h-1.5 w-1.5 rounded-full {config.dot}"></span>
+  {config.label}
+</span>

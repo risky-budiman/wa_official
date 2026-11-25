@@ -41,6 +41,9 @@
     Music,
     Video,
     Loader2,
+    ChevronLeft,
+    PanelRightOpen,
+    PanelRightClose,
   } from "lucide-svelte";
   import { formatWhatsAppMarkdown } from "$lib/utils/whatsapp-formatter";
   import SendSingleTemplateModal from "$lib/components/templates/SendSingleTemplateModal.svelte";
@@ -70,12 +73,25 @@
   import { getApiBaseUrl } from "$lib/api/client";
 
   let showEmojiPicker = $state(false);
+  // Contact side panel: open by default only on wide screens
+  let showContactPanel = $state(
+    typeof window !== "undefined" ? window.innerWidth >= 1536 : true,
+  );
   let messagesContainer = $state<HTMLDivElement | null>(null);
   let messageInputRef = $state<HTMLTextAreaElement | null>(null);
 
   // Attachment State
   let showAttachmentMenu = $state(false);
-  let attachmentAccept = $state("image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.csv");
+  // Must match the server whitelist in be/src/modules/media/media.routes.ts (WhatsApp-supported types)
+  const ACCEPT_IMAGE = ".jpg,.jpeg,.png,.webp,.gif";
+  const ACCEPT_VIDEO = ".mp4,.3gp";
+  const ACCEPT_AUDIO = ".mp3,.ogg,.opus,.aac,.amr,.m4a";
+  const ACCEPT_DOCUMENT = ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.csv";
+  const ALLOWED_UPLOAD_EXT = new Set(
+    [ACCEPT_IMAGE, ACCEPT_VIDEO, ACCEPT_AUDIO, ACCEPT_DOCUMENT].join(",").split(",").map((e) => e.slice(1)),
+  );
+  const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+  let attachmentAccept = $state([ACCEPT_IMAGE, ACCEPT_VIDEO, ACCEPT_AUDIO, ACCEPT_DOCUMENT].join(","));
   let fileInputRef = $state<HTMLInputElement | null>(null);
   let pendingAttachment = $state<{
     file: File;
@@ -100,6 +116,20 @@
     if (!input.files || input.files.length === 0) return;
 
     const file = input.files[0];
+
+    // Validate before uploading so the user gets a clear message immediately
+    const ext = (file.name.split(".").pop() || "").toLowerCase();
+    if (!file.name.includes(".") || !ALLOWED_UPLOAD_EXT.has(ext)) {
+      alert(`Tipe file .${ext || "?"} tidak didukung WhatsApp. Gunakan gambar (JPG/PNG), video (MP4), audio (MP3/OGG/AAC/M4A), PDF, atau dokumen Office.`);
+      input.value = "";
+      return;
+    }
+    if (file.size > MAX_UPLOAD_BYTES) {
+      alert(`Ukuran file ${formatFileSize(file.size)} melebihi batas 50 MB.`);
+      input.value = "";
+      return;
+    }
+
     const mimeType = file.type || "application/octet-stream";
     let category: "IMAGE" | "DOCUMENT" | "VIDEO" | "AUDIO" = "DOCUMENT";
 
@@ -403,6 +433,73 @@
     createdAt: string;
   }
 
+  // ─── Display helpers (chat list & thread) ───
+  const AVATAR_TONES = [
+    "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300",
+    "bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300",
+    "bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300",
+    "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
+    "bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300",
+    "bg-teal-100 text-teal-700 dark:bg-teal-500/15 dark:text-teal-300",
+    "bg-indigo-100 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300",
+  ];
+  function avatarTone(name?: string | null): string {
+    const s = name || "?";
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+    return AVATAR_TONES[h % AVATAR_TONES.length];
+  }
+  function initials(name?: string | null): string {
+    const clean = (name || "").replace(/\(.*?\)/g, "").trim();
+    if (!clean) return "?";
+    const parts = clean.split(/\s+/).filter(Boolean);
+    const first = parts[0]?.[0] || "";
+    const second = parts.length > 1 ? parts[parts.length - 1][0] : "";
+    return (first + second).toUpperCase() || "?";
+  }
+  function dayKey(iso: string): string {
+    const d = new Date(iso);
+    return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+  }
+  function dayLabel(iso: string): string {
+    const d = new Date(iso);
+    const today = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(today.getDate() - 1);
+    if (dayKey(iso) === dayKey(today.toISOString())) return "Hari ini";
+    if (dayKey(iso) === dayKey(yesterday.toISOString())) return "Kemarin";
+    return d.toLocaleDateString("id-ID", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      ...(d.getFullYear() !== today.getFullYear() ? { year: "numeric" } : {}),
+    });
+  }
+  function timeLabel(iso: string): string {
+    return new Date(iso).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
+  }
+  /** Time for the conversation list: clock today, "Kemarin", weekday this week, else short date */
+  function listTimeLabel(iso?: string | null): string {
+    if (!iso) return "";
+    const d = new Date(iso);
+    const now = new Date();
+    if (dayKey(iso) === dayKey(now.toISOString())) return timeLabel(iso);
+    const diffDays = Math.floor((now.getTime() - d.getTime()) / 86400000);
+    if (diffDays < 2) return "Kemarin";
+    if (diffDays < 7) return d.toLocaleDateString("id-ID", { weekday: "short" });
+    return d.toLocaleDateString("id-ID", { day: "numeric", month: "short" });
+  }
+  const MEDIA_PLACEHOLDERS = ["[Foto/Gambar]", "[Gambar]", "[Foto]", "[Stiker]", "[Pesan Suara / Audio]", "[Video]", "[DOCUMENT]", "[IMAGE]"];
+  /** Hide placeholder bodies like "[Gambar]" when the media itself is shown */
+  function hasRenderableBody(msg: MessageItem): boolean {
+    if (!msg.body) return false;
+    if (msg.mediaUrl && MEDIA_PLACEHOLDERS.includes(msg.body)) return false;
+    if (msg.body.startsWith("[IMAGE]") || msg.body.startsWith("[Foto]") || msg.body.startsWith("[Gambar]")) return false;
+    // Documents already show their name inside the file card
+    if (msg.mediaUrl && !/^(image|audio|video)\//.test(msg.mediaMimeType || "") && !["image", "sticker", "audio", "voice", "video"].includes(msg.messageType || "") && !/\.(jpg|jpeg|png|webp|gif|mp3|ogg|wav|m4a|aac|mp4|webm|mov|avi)/i.test(msg.mediaUrl)) return false;
+    return true;
+  }
+
   interface UserOption {
     id: string;
     fullName: string;
@@ -414,6 +511,8 @@
     id: string;
     name: string;
     category: string;
+    language: string;
+    status: string;
     components: any[];
   }
 
@@ -1118,9 +1217,58 @@
 <div
   class="h-full flex overflow-hidden bg-slate-100/70 dark:bg-slate-950 text-slate-900 dark:text-slate-100"
 >
+<!-- Shared media renderer for chat bubbles (works on light, tinted and dark bubbles) -->
+{#snippet messageMedia(msg: MessageItem)}
+  {#if msg.mediaUrl}
+    {#if msg.mediaMimeType?.startsWith("image/") || msg.messageType === "image" || msg.messageType === "sticker" || msg.mediaUrl.match(/\.(jpg|jpeg|png|webp|gif)/i)}
+      <button
+        type="button"
+        onclick={() => (activeLightboxUrl = msg.mediaUrl || null)}
+        class="group -mx-1.5 mb-1 block cursor-zoom-in overflow-hidden rounded-xl text-left"
+        aria-label="Perbesar gambar"
+      >
+        <img
+          src={msg.mediaUrl}
+          alt="Lampiran gambar"
+          class="max-h-72 w-full max-w-xs rounded-xl object-cover transition duration-200 group-hover:opacity-95"
+          loading="lazy"
+        />
+      </button>
+    {:else if msg.mediaMimeType?.startsWith("audio/") || msg.messageType === "audio" || msg.messageType === "voice" || msg.mediaUrl.match(/\.(mp3|ogg|wav|m4a|aac)/i)}
+      <!-- svelte-ignore a11y_media_has_caption -->
+      <audio controls src={msg.mediaUrl} class="my-1 h-9 w-64 max-w-full"></audio>
+    {:else if msg.mediaMimeType?.startsWith("video/") || msg.messageType === "video" || msg.mediaUrl.match(/\.(mp4|webm|mov|avi)/i)}
+      <!-- svelte-ignore a11y_media_has_caption -->
+      <video controls src={msg.mediaUrl} class="-mx-1.5 mb-1 max-h-72 w-full max-w-xs rounded-xl object-cover">
+        <track kind="captions" />
+      </video>
+    {:else}
+      <a
+        href={msg.mediaUrl}
+        target="_blank"
+        rel="noopener"
+        download
+        class="my-1 flex max-w-xs items-center gap-3 rounded-xl bg-black/[0.04] p-2.5 transition hover:bg-black/[0.07] dark:bg-white/5 dark:hover:bg-white/10"
+      >
+        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white text-emerald-600 shadow-sm dark:bg-slate-900 dark:text-emerald-400">
+          <FileText class="h-4.5 w-4.5" />
+        </span>
+        <span class="min-w-0 flex-1">
+          <span class="block truncate text-sm font-medium">{msg.body || "Dokumen"}</span>
+          <span class="block text-[11px] text-slate-500 dark:text-slate-400">Klik untuk mengunduh</span>
+        </span>
+      </a>
+    {/if}
+  {:else if msg.senderType === "CONTACT" && (msg.body === "[Gambar]" || msg.body === "[Foto/Gambar]" || msg.messageType === "image")}
+    <div class="my-1 flex items-center gap-2 rounded-lg bg-black/[0.04] px-2.5 py-2 text-xs text-slate-500 dark:bg-white/5 dark:text-slate-400">
+      <Image class="h-4 w-4 shrink-0" />
+      <span>Gambar tidak tersedia (pesan lama)</span>
+    </div>
+  {/if}
+{/snippet}
   <!-- 1. LEFT COLUMN: Conversation List -->
   <div
-    class="w-80 border-r border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-900/60 flex flex-col shrink-0"
+    class="w-full md:w-80 border-r border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-900/60 flex-col shrink-0 {selectedConvId ? 'hidden md:flex' : 'flex'}"
   >
     <!-- Search Bar & Filters -->
     <div
@@ -1303,111 +1451,57 @@
               ? new Date(conv.lastMessageAt).getTime() + 24 * 60 * 60 * 1000
               : 0}
           {@const isConvExpired = convExpiresAt > 0 && Date.now() > convExpiresAt}
+          {@const isUnassigned = conv.status !== "RESOLVED" && (conv.status === "UNASSIGNED" || !conv.assignedUser)}
+          {@const isSelected = selectedConvId === conv.id}
 
           <button
             onclick={() => selectConversation(conv.id)}
-            class="w-full text-left p-3.5 flex items-start gap-3 transition cursor-pointer {selectedConvId ===
-            conv.id
-              ? 'bg-slate-100 dark:bg-slate-800/70 border-l-4 border-emerald-500'
-              : 'hover:bg-slate-50 dark:hover:bg-slate-800/30'}"
+            class="relative flex w-full cursor-pointer items-start gap-3 px-4 py-3 text-left transition-colors
+              {isSelected
+                ? 'bg-emerald-50/80 dark:bg-emerald-500/10'
+                : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'}"
+            aria-current={isSelected ? 'true' : undefined}
           >
+            {#if isSelected}
+              <span class="absolute inset-y-2 left-0 w-1 rounded-r-full bg-emerald-500" aria-hidden="true"></span>
+            {/if}
             <div class="relative shrink-0">
-              <div
-                class="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center font-bold text-sm text-emerald-700 dark:text-emerald-400 border border-slate-300 dark:border-slate-600/40"
-              >
-                {conv.contact.name.charAt(0)}
+              <div class="flex h-11 w-11 items-center justify-center rounded-full text-sm font-semibold {avatarTone(conv.contact.name)}">
+                {initials(conv.contact.name)}
               </div>
-              {#if isConvExpired}
-                <span
-                  class="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-rose-500 ring-2 ring-white dark:ring-slate-900 animate-pulse"
-                  title="Sesi 24 Jam Meta Kadaluarsa (>24 Jam)"
-                ></span>
-                <span
-                  class="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-rose-500 ring-2 ring-white dark:ring-slate-900"
-                  title="Sesi 24 Jam Meta Kadaluarsa (>24 Jam)"
-                ></span>
-              {:else if conv.status === "RESOLVED"}
-                <span
-                  class="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-purple-500 ring-2 ring-white dark:ring-slate-900"
-                  title="Selesai"
-                ></span>
-              {:else if conv.status === "UNASSIGNED" || !conv.assignedUser}
-                <span
-                  class="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-amber-500 ring-2 ring-white dark:ring-slate-900 animate-ping"
-                  title="Pesan Belum Diambil"
-                ></span>
-                <span
-                  class="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-amber-500 ring-2 ring-white dark:ring-slate-900"
-                  title="Pesan Belum Diambil"
-                ></span>
-              {:else if conv.status === "OPEN"}
-                <span
-                  class="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-900"
-                  title="Aktif"
-                ></span>
+              {#if isUnassigned}
+                <span class="absolute -right-0.5 -bottom-0.5 h-3.5 w-3.5 rounded-full bg-amber-500 ring-2 ring-white dark:ring-slate-900" title="Belum ditugaskan"></span>
+              {:else if conv.status === "OPEN" && !isConvExpired}
+                <span class="absolute -right-0.5 -bottom-0.5 h-3.5 w-3.5 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-slate-900" title="Aktif"></span>
               {/if}
             </div>
 
-            <div class="flex-1 min-w-0">
-              <div class="flex items-center justify-between mb-0.5">
-                <span
-                  class="text-xs font-bold text-slate-900 dark:text-white truncate"
-                  >{conv.contact.name}</span
-                >
-                <span class="text-[10px] text-slate-400 shrink-0 ml-1">
-                  {new Date(conv.lastMessageAt).toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
+            <div class="min-w-0 flex-1">
+              <div class="flex items-baseline justify-between gap-2">
+                <span class="truncate text-sm font-semibold text-slate-900 dark:text-white">{conv.contact.name}</span>
+                <span class="shrink-0 text-[11px] {isUnassigned ? 'font-semibold text-amber-600 dark:text-amber-400' : 'text-slate-400 dark:text-slate-500'}">
+                  {listTimeLabel(conv.lastMessageAt)}
                 </span>
               </div>
-              <p
-                class="text-[11px] text-slate-600 dark:text-slate-300 truncate mb-1.5"
-              >
+              <p class="mt-0.5 truncate text-[13px] text-slate-500 dark:text-slate-400">
                 {conv.lastMessagePreview || "Percakapan baru"}
               </p>
 
-              <div class="flex items-center gap-1.5 flex-wrap">
-                <!-- Multi-agent pill -->
-                {#if conv.participants && conv.participants.length > 0}
-                  <span
-                    class="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border border-indigo-500/20 flex items-center gap-0.5"
-                  >
-                    <Users class="w-2.5 h-2.5" />
-                    {1 + conv.participants.length} Agen
-                  </span>
-                {/if}
-
-                {#if isConvExpired}
-                  <span
-                    class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-500/15 text-rose-700 dark:text-rose-400 border border-rose-500/30 flex items-center gap-1"
-                    title="Sesi 24 Jam Meta Kadaluarsa"
-                  >
-                    <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
-                    Sesi Expired
-                  </span>
-                {/if}
-
-                {#if conv.status === "RESOLVED"}
-                  <span
-                    class="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-purple-500/10 text-purple-700 dark:text-purple-400 border border-purple-500/20 flex items-center gap-0.5"
-                  >
-                    <CheckCircle2 class="w-2.5 h-2.5" /> Selesai
-                  </span>
-                {:else if conv.status === "UNASSIGNED" || !conv.assignedUser}
-                  <span
-                    class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30 flex items-center gap-0.5"
-                  >
-                    Belum Ditugaskan
-                  </span>
-                {:else}
-                  <span
-                    class="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20"
-                  >
-                    Aktif
-                  </span>
-                {/if}
-              </div>
+              {#if isUnassigned || conv.status === "RESOLVED" || isConvExpired || (conv.participants && conv.participants.length > 0)}
+                <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
+                  {#if isUnassigned}
+                    <span class="inline-flex items-center rounded-md bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 ring-1 ring-inset ring-amber-600/20 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-400/20">Belum ditugaskan</span>
+                  {:else if conv.status === "RESOLVED"}
+                    <span class="inline-flex items-center gap-1 rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400"><CheckCircle2 class="h-3 w-3" /> Selesai</span>
+                  {/if}
+                  {#if isConvExpired && conv.status !== "RESOLVED"}
+                    <span class="inline-flex items-center gap-1 rounded-md bg-rose-50 px-1.5 py-0.5 text-[11px] font-medium text-rose-700 ring-1 ring-inset ring-rose-600/15 dark:bg-rose-500/10 dark:text-rose-300 dark:ring-rose-400/20" title="Lewat 24 jam sejak pesan terakhir pelanggan, balas dengan template"><Clock class="h-3 w-3" /> Sesi 24 jam habis</span>
+                  {/if}
+                  {#if conv.participants && conv.participants.length > 0}
+                    <span class="inline-flex items-center gap-1 rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400"><Users class="h-3 w-3" /> {1 + conv.participants.length} agen</span>
+                  {/if}
+                </div>
+              {/if}
             </div>
           </button>
         {/each}
@@ -1416,484 +1510,177 @@
   </div>
 
   <!-- 2. MIDDLE COLUMN: Active Chat Thread -->
-  <div class="flex-1 flex flex-col bg-white dark:bg-slate-950 min-w-0">
+  <div class="flex-1 flex-col bg-white dark:bg-slate-950 min-w-0 {selectedConvId ? 'flex' : 'hidden md:flex'}">
     {#if selectedConv}
-      {@const effectiveExpiresAtHeader = selectedConv.windowExpiresAt
-        ? new Date(selectedConv.windowExpiresAt).getTime()
-        : selectedConv.lastMessageAt
-          ? new Date(selectedConv.lastMessageAt).getTime() +
-            24 * 60 * 60 * 1000
-          : 0}
-      {@const isHeaderExpired = effectiveExpiresAtHeader ? effectiveExpiresAtHeader - Date.now() <= 0 : false}
-      <!-- Chat Header (Clean, Premium, Non-overlapping) -->
+      <!-- Chat header -->
       <div
-        class="h-16 px-4 border-b border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-900 flex items-center justify-between gap-3 shrink-0 shadow-sm"
+        class="flex h-16 shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-white px-3 sm:px-4 dark:border-slate-800 dark:bg-slate-900"
       >
-        <!-- Left: Contact Details -->
-        <div class="flex items-center gap-3 min-w-0 flex-1">
-          <div class="relative shrink-0">
-            <div
-              class="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center font-bold text-sm text-emerald-600 dark:text-emerald-400 border border-slate-200 dark:border-slate-700 shrink-0 shadow-sm"
-            >
-              {selectedConv.contact.name.charAt(0)}
-            </div>
-            {#if isHeaderExpired}
-              <span
-                class="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-rose-500 ring-2 ring-white dark:ring-slate-900 animate-pulse"
-                title="Sesi 24 Jam Meta Kadaluarsa"
-              ></span>
-              <span
-                class="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-rose-500 ring-2 ring-white dark:ring-slate-900"
-                title="Sesi 24 Jam Meta Kadaluarsa"
-              ></span>
-            {/if}
+        <div class="flex min-w-0 flex-1 items-center gap-3">
+          <!-- Mobile: back to conversation list -->
+          <button
+            type="button"
+            class="ui-icon-btn -ml-1 md:hidden"
+            aria-label="Kembali ke daftar percakapan"
+            onclick={() => {
+              selectedConvId = null;
+              messageList = [];
+            }}
+          >
+            <ChevronLeft class="h-5 w-5" />
+          </button>
+          <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold {avatarTone(selectedConv.contact.name)}">
+            {initials(selectedConv.contact.name)}
           </div>
           <div class="min-w-0">
-            <div class="flex items-center gap-2">
-              <h3
-                class="text-sm font-bold text-slate-900 dark:text-white truncate"
-              >
+            <div class="flex min-w-0 items-center gap-2">
+              <h3 class="truncate text-[15px] font-semibold text-slate-900 dark:text-white">
                 {selectedConv.contact.name}
               </h3>
-
               {#if selectedConv.status === "RESOLVED"}
-                <span
-                  class="px-2 py-0.5 rounded-full text-[10px] bg-purple-500/15 text-purple-700 dark:text-purple-300 font-semibold border border-purple-500/30 shrink-0"
-                >
-                  Selesai
-                </span>
+                <span class="hidden shrink-0 items-center gap-1 rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600 sm:inline-flex dark:bg-slate-800 dark:text-slate-400"><Lock class="h-3 w-3" /> Selesai</span>
               {:else if selectedConv.status === "UNASSIGNED" || !selectedConv.assignedUser}
-                <span
-                  class="px-2 py-0.5 rounded-full text-[10px] bg-amber-500/15 text-amber-700 dark:text-amber-300 font-bold border border-amber-500/30 shrink-0"
-                >
-                  Belum Ditugaskan
-                </span>
-              {:else}
-                <span
-                  class="px-2 py-0.5 rounded-full text-[10px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 font-semibold border border-emerald-500/20 shrink-0"
-                >
-                  Aktif
-                </span>
+                <span class="hidden shrink-0 rounded-md bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 ring-1 ring-inset ring-amber-600/20 sm:inline-flex dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-400/20">Belum ditugaskan</span>
               {/if}
             </div>
-
-            <p
-              class="text-[11px] text-slate-500 dark:text-slate-400 truncate flex items-center gap-1.5 mt-0.5"
-            >
-              <span class="font-mono">+{selectedConv.contact.waId}</span>
-              <span>•</span>
-              <span class="text-slate-700 dark:text-slate-300 font-medium"
-                >{selectedConv.assignedUser?.fullName ||
-                  "Belum di-assign"}</span
-              >
-              {#if selectedConv}
-                {@const effectiveExpiresAt = selectedConv.windowExpiresAt
-                  ? new Date(selectedConv.windowExpiresAt).getTime()
-                  : selectedConv.lastMessageAt
-                    ? new Date(selectedConv.lastMessageAt).getTime() +
-                      24 * 60 * 60 * 1000
-                    : 0}
-                {@const timeLeftMs = effectiveExpiresAt
-                  ? effectiveExpiresAt - Date.now()
-                  : 0}
-                {@const hoursLeft = Math.floor(
-                  Math.max(0, timeLeftMs) / (1000 * 60 * 60),
-                )}
-                {@const minutesLeft = Math.floor(
-                  (Math.max(0, timeLeftMs) % (1000 * 60 * 60)) / (1000 * 60),
-                )}
-                <span>•</span>
-                {#if timeLeftMs > 0}
-                  <span
-                    class="text-emerald-600 dark:text-emerald-400 font-bold font-mono"
-                    title="Jendela Sesi 24 Jam Meta Aktif"
-                  >
-                    Sesi Meta: {String(hoursLeft).padStart(2, "0")} jam {String(
-                      minutesLeft,
-                    ).padStart(2, "0")} menit
-                  </span>
-                {:else}
-                  <span
-                    class="text-rose-600 dark:text-rose-400 font-bold font-mono bg-rose-500/10 px-2 py-0.5 rounded-md border border-rose-500/20"
-                    title="Jendela Sesi 24 Jam Meta Kadaluarsa"
-                  >
-                    ⚠️ Sesi Meta Kadaluarsa (>24 Jam)
-                  </span>
-                {/if}
-              {/if}
+            <p class="mt-0.5 flex min-w-0 items-center gap-1.5 truncate text-xs text-slate-500 dark:text-slate-400">
+              <span class="tabular-nums">+{selectedConv.contact.waId}</span>
+              <span class="hidden text-slate-300 sm:inline dark:text-slate-600" aria-hidden="true">·</span>
+              <span class="hidden truncate sm:inline">{selectedConv.assignedUser?.fullName || "Belum ada agen"}</span>
             </p>
           </div>
         </div>
 
-        <!-- Right: Action Buttons -->
-        <div class="flex items-center gap-2 shrink-0">
-          <!-- Ambil Obrolan / Claim Button if unassigned -->
+        <div class="flex shrink-0 items-center gap-2">
           {#if selectedConv.status !== "RESOLVED" && (!selectedConv.assignedUser || selectedConv.status === "UNASSIGNED")}
             <button
               onclick={() => claimConversation()}
               disabled={isActionLoading}
-              class="py-1.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm shadow-emerald-500/20 transition cursor-pointer"
+              class="ui-btn-primary !px-3 !py-1.5 text-xs"
               title="Ambil dan tugaskan obrolan ini ke saya"
             >
-              <UserPlus class="w-3.5 h-3.5" />
+              <UserPlus class="h-3.5 w-3.5" />
               <span>Ambil</span>
             </button>
           {/if}
 
-          <!-- Resolve Status Badge / Button -->
-          {#if selectedConv.status === "RESOLVED"}
-            <div
-              class="py-1.5 px-3 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-700 dark:text-purple-400 font-bold text-xs flex items-center gap-1.5 shadow-sm"
-            >
-              <Lock class="w-3.5 h-3.5" />
-              <span>Selesai & Terkunci</span>
-            </div>
-          {:else}
+          {#if selectedConv.status !== "RESOLVED"}
             <button
               onclick={promptResolveConversation}
               disabled={isActionLoading}
-              class="py-1.5 px-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs flex items-center gap-1.5 transition cursor-pointer"
-              title="Tandai Tiket Selesai"
+              class="ui-btn-secondary !px-3 !py-1.5 text-xs"
+              title="Tandai tiket selesai"
             >
-              <CheckCircle2 class="w-3.5 h-3.5 text-emerald-500" />
-              <span>Selesaikan</span>
+              <CheckCircle2 class="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+              <span class="hidden xl:inline">Selesaikan</span>
             </button>
           {/if}
+
+          <button
+            type="button"
+            onclick={() => (showContactPanel = !showContactPanel)}
+            class="ui-icon-btn hidden lg:inline-flex {showContactPanel ? 'bg-slate-100 text-slate-900 dark:bg-slate-800 dark:text-white' : ''}"
+            title={showContactPanel ? "Sembunyikan detail kontak" : "Tampilkan detail kontak"}
+            aria-label="Detail kontak"
+            aria-pressed={showContactPanel}
+          >
+            {#if showContactPanel}<PanelRightClose class="h-5 w-5" />{:else}<PanelRightOpen class="h-5 w-5" />{/if}
+          </button>
         </div>
       </div>
 
-      <!-- Messages Thread Flow (Soft Contrast) -->
+      <!-- Messages thread -->
       <div
         bind:this={messagesContainer}
-        class="flex-1 overflow-y-auto p-5 space-y-4 bg-slate-50 dark:bg-slate-950"
+        class="chat-canvas flex-1 overflow-y-auto px-3 py-5 sm:px-6"
       >
-        {#each messageList as msg}
+        <div class="mx-auto flex max-w-3xl flex-col gap-1.5">
+        {#each messageList as msg, i}
+          {@const prev = i > 0 ? messageList[i - 1] : null}
+          {@const newDay = !prev || dayKey(prev.createdAt) !== dayKey(msg.createdAt)}
+          {@const grouped = !newDay && !!prev && !prev.isInternalNote && !msg.isInternalNote && prev.senderType === msg.senderType && (prev.senderName || '') === (msg.senderName || '')}
+
+          {#if newDay}
+            <div class="sticky top-0 z-10 my-3 flex justify-center">
+              <span class="rounded-full bg-white/90 px-3 py-1 text-[11px] font-medium text-slate-500 shadow-sm ring-1 ring-slate-200/80 backdrop-blur dark:bg-slate-800/90 dark:text-slate-300 dark:ring-slate-700">
+                {dayLabel(msg.createdAt)}
+              </span>
+            </div>
+          {/if}
+
           {#if msg.isInternalNote}
-            <!-- Internal Note Bubble (Eye-friendly Amber) -->
-            <div
-              class="p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 max-w-xl mx-auto text-xs shadow-sm"
-            >
-              <div
-                class="flex items-center gap-1.5 text-amber-800 dark:text-amber-300 font-bold mb-1"
-              >
-                <Eye class="w-3.5 h-3.5" />
-                <span>Catatan Tim Internal ({msg.senderType})</span>
-                <span
-                  class="text-[10px] font-normal text-slate-500 dark:text-slate-400 ml-auto"
-                >
-                  {new Date(msg.createdAt).toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </span>
+            <!-- Internal note: only visible to the team -->
+            <div class="my-2 w-full max-w-xl self-center rounded-xl border border-dashed border-amber-300 bg-amber-50/90 px-4 py-3 dark:border-amber-700/60 dark:bg-amber-950/30">
+              <div class="mb-1 flex items-center gap-1.5 text-xs font-semibold text-amber-800 dark:text-amber-300">
+                <Eye class="h-3.5 w-3.5" />
+                <span>Catatan internal</span>
+                {#if msg.senderName}<span class="font-normal text-amber-700/80 dark:text-amber-400/80">· {msg.senderName}</span>{/if}
+                <span class="ml-auto font-normal text-amber-700/70 dark:text-amber-400/70">{timeLabel(msg.createdAt)}</span>
               </div>
-              <p class="text-slate-800 dark:text-slate-200 leading-relaxed">
+              <div class="text-sm leading-relaxed text-slate-800 dark:text-slate-200">
                 {@html formatWhatsAppMarkdown(msg.body)}
-              </p>
-              <p
-                class="text-[10px] text-amber-700/80 dark:text-amber-400/80 mt-1 italic"
-              >
-                Hanya terlihat oleh seluruh agen/supervisor di percakapan ini
-              </p>
-            </div>
-          {:else if msg.senderType === "CONTACT"}
-            <!-- Inbound Customer Message (Clean White / Soft Slate) -->
-            <div class="flex items-end gap-2.5 max-w-lg">
-              <div
-                class="w-7 h-7 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-[10px] font-bold text-emerald-700 dark:text-emerald-400 shrink-0"
-              >
-                {selectedConv.contact.name.charAt(0)}
               </div>
-              <div
-                class="p-3.5 rounded-2xl rounded-bl-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700/80 text-xs text-slate-900 dark:text-white shadow-sm leading-relaxed space-y-1"
-              >
-                <!-- Label Pengirim: Pelanggan -->
-                <div
-                  class="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 dark:text-slate-400 pb-1 border-b border-slate-100 dark:border-slate-700/50"
-                >
-                  <User class="w-3 h-3 text-slate-400" />
-                  <span class="text-slate-700 dark:text-slate-200"
-                    >{selectedConv.contact.name}</span
-                  >
-                  <span
-                    class="px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-700/80 text-slate-500 dark:text-slate-300 text-[9px] font-semibold"
-                    >Pelanggan</span
-                  >
-                </div>
-
-                <!-- Media Display (Image / Audio / Video / Document) -->
-                {#if msg.mediaUrl}
-                  {#if msg.mediaMimeType?.startsWith("image/") || msg.messageType === "image" || msg.messageType === "sticker" || msg.mediaUrl.match(/\.(jpg|jpeg|png|webp|gif)/i)}
-                    <button
-                      type="button"
-                      onclick={() => (activeLightboxUrl = msg.mediaUrl || null)}
-                      class="block rounded-xl overflow-hidden my-1 max-w-xs border border-slate-200 dark:border-slate-700 hover:opacity-90 transition shadow-sm group text-left cursor-zoom-in"
-                    >
-                      <img
-                        src={msg.mediaUrl}
-                        alt="Foto dari pelanggan"
-                        class="w-full max-h-72 object-cover rounded-xl transition duration-200 group-hover:scale-[1.02]"
-                        loading="lazy"
-                      />
-                    </button>
-                  {:else if msg.mediaMimeType?.startsWith("audio/") || msg.messageType === "audio" || msg.messageType === "voice" || msg.mediaUrl.match(/\.(mp3|ogg|wav|m4a|aac)/i)}
-                    <!-- svelte-ignore a11y_media_has_caption -->
-                    <div
-                      class="my-1.5 p-1 rounded-xl bg-slate-100 dark:bg-slate-700/50 max-w-xs"
-                    >
-                      <audio controls src={msg.mediaUrl} class="w-full h-8"
-                      ></audio>
-                    </div>
-                  {:else if msg.mediaMimeType?.startsWith("video/") || msg.messageType === "video" || msg.mediaUrl.match(/\.(mp4|webm|mov|avi)/i)}
-                    <!-- svelte-ignore a11y_media_has_caption -->
-                    <div
-                      class="my-1.5 rounded-xl overflow-hidden max-w-xs border border-slate-200 dark:border-slate-700 shadow-sm"
-                    >
-                      <video
-                        controls
-                        src={msg.mediaUrl}
-                        class="w-full max-h-72 object-cover rounded-xl"
-                      >
-                        <track kind="captions" />
-                      </video>
-                    </div>
-                  {:else}
-                    <a
-                      href={msg.mediaUrl}
-                      target="_blank"
-                      download
-                      class="flex items-center gap-2.5 p-2.5 my-1.5 rounded-xl bg-slate-100 dark:bg-slate-700/50 hover:bg-slate-200 dark:hover:bg-slate-700 transition border border-slate-200 dark:border-slate-600 max-w-xs text-slate-800 dark:text-slate-200"
-                    >
-                      <FileText
-                        class="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0"
-                      />
-                      <div class="flex-1 min-w-0">
-                        <p class="font-bold text-xs truncate">
-                          {msg.body || "Unduh Dokumen"}
-                        </p>
-                        <p
-                          class="text-[10px] text-slate-500 dark:text-slate-400"
-                        >
-                          Klik untuk mengunduh
-                        </p>
-                      </div>
-                    </a>
-                  {/if}
-                {/if}
-
-                {#if !msg.mediaUrl && (msg.body === "[Gambar]" || msg.body === "[Foto/Gambar]" || msg.messageType === "image")}
-                  <div
-                    class="flex items-center gap-2 p-2.5 my-1 rounded-xl bg-slate-100 dark:bg-slate-700/50 text-slate-600 dark:text-slate-300 text-xs border border-slate-200 dark:border-slate-700"
-                  >
-                    <Image class="w-4 h-4 text-emerald-500 shrink-0" />
-                    <span>Foto / Gambar WhatsApp (Pesan Lama)</span>
-                  </div>
-                {/if}
-
-                {#if msg.body && (!msg.mediaUrl || !["[Foto/Gambar]", "[Gambar]", "[Foto]", "[Stiker]", "[Pesan Suara / Audio]", "[Video]", "[DOCUMENT]", "[IMAGE]"].includes(msg.body)) && !msg.body.startsWith("[IMAGE]") && !msg.body.startsWith("[Foto]") && !msg.body.startsWith("[Gambar]")}
-                  <div
-                    class="text-slate-800 dark:text-slate-100 leading-relaxed font-sans mt-1"
-                  >
-                    {@html formatWhatsAppMarkdown(msg.body)}
-                  </div>
-                {/if}
-
-                <div class="text-[10px] text-slate-400 text-right mt-1.5">
-                  {new Date(msg.createdAt).toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </div>
-              </div>
-            </div>
-          {:else if msg.senderType === "BOT"}
-            <!-- AI Auto-Responder / FAQ BOT Message (Indigo / Purple Glowing Badge) -->
-            <div class="flex items-end gap-2 max-w-lg ml-auto justify-end">
-              <div
-                class="p-3.5 rounded-2xl rounded-br-sm bg-indigo-600 dark:bg-indigo-700 text-xs text-white shadow-md shadow-indigo-600/20 leading-relaxed border border-indigo-500/40 space-y-1"
-              >
-                <!-- Label Pengirim: AI Auto-Responder (FAQ / Jam Tutup) -->
-                <div
-                  class="flex items-center justify-between gap-3 text-[10px] font-bold text-indigo-100 pb-1 border-b border-indigo-400/40"
-                >
-                  <div class="flex items-center gap-1.5">
-                    <Bot class="w-3.5 h-3.5 text-indigo-200" />
-                    <span>AI Assistant (FAQ / Auto-Reply)</span>
-                  </div>
-                  <span
-                    class="px-1.5 py-0.5 rounded bg-indigo-500/60 text-white text-[9px] font-mono font-black"
-                    >BOT</span
-                  >
-                </div>
-
-                {#if msg.mediaUrl}
-                  {#if msg.mediaMimeType?.startsWith("image/") || msg.messageType === "image" || msg.mediaUrl.match(/\.(jpg|jpeg|png|webp|gif)/i)}
-                    <button
-                      type="button"
-                      onclick={() => (activeLightboxUrl = msg.mediaUrl || null)}
-                      class="block rounded-xl overflow-hidden my-1 max-w-xs border border-white/20 hover:opacity-90 transition text-left cursor-zoom-in"
-                    >
-                      <img
-                        src={msg.mediaUrl}
-                        alt="Foto AI"
-                        class="w-full max-h-72 object-cover rounded-xl"
-                        loading="lazy"
-                      />
-                    </button>
-                  {:else if msg.mediaMimeType?.startsWith("audio/") || msg.messageType === "audio" || msg.messageType === "voice" || msg.mediaUrl.match(/\.(mp3|ogg|wav|m4a|aac)/i)}
-                    <!-- svelte-ignore a11y_media_has_caption -->
-                    <div
-                      class="my-1.5 p-1 rounded-xl bg-indigo-700/60 border border-indigo-400/40 max-w-xs"
-                    >
-                      <audio controls src={msg.mediaUrl} class="w-full h-8"
-                      ></audio>
-                    </div>
-                  {:else if msg.mediaMimeType?.startsWith("video/") || msg.messageType === "video" || msg.mediaUrl.match(/\.(mp4|webm|mov|avi)/i)}
-                    <!-- svelte-ignore a11y_media_has_caption -->
-                    <div
-                      class="my-1.5 rounded-xl overflow-hidden max-w-xs border border-indigo-400/40 shadow-sm"
-                    >
-                      <video
-                        controls
-                        src={msg.mediaUrl}
-                        class="w-full max-h-72 object-cover rounded-xl"
-                      >
-                        <track kind="captions" />
-                      </video>
-                    </div>
-                  {:else}
-                    <a
-                      href={msg.mediaUrl}
-                      target="_blank"
-                      download
-                      class="flex items-center gap-2 p-2 my-1 rounded-xl bg-indigo-700/50 text-white border border-white/20"
-                    >
-                      <FileText class="w-4 h-4 shrink-0" />
-                      <span class="truncate font-semibold text-xs"
-                        >{msg.body || "Dokumen"}</span
-                      >
-                    </a>
-                  {/if}
-                {/if}
-
-                <div class="text-white/95 leading-relaxed font-sans">
-                  {@html formatWhatsAppMarkdown(msg.body)}
-                </div>
-                <div
-                  class="text-[10px] text-indigo-200 flex items-center justify-end gap-1 mt-1.5"
-                >
-                  <span
-                    >{new Date(msg.createdAt).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}</span
-                  >
-                  <CheckCheck class="w-3.5 h-3.5 text-indigo-300" />
-                </div>
-              </div>
+              <p class="mt-1.5 text-[11px] text-amber-700/80 dark:text-amber-400/70">Hanya terlihat oleh tim, tidak dikirim ke pelanggan.</p>
             </div>
           {:else}
-            <!-- Outbound Agent Message (Soft Emerald with CS Badge) -->
-            <div class="flex items-end gap-2 max-w-lg ml-auto justify-end">
+            {@const inbound = msg.senderType === "CONTACT"}
+            {@const isBot = msg.senderType === "BOT"}
+            <div class="flex {inbound ? 'justify-start' : 'justify-end'} {grouped ? '' : 'mt-2'}">
               <div
-                class="p-3.5 rounded-2xl rounded-br-sm bg-emerald-600 text-xs text-white shadow-sm shadow-emerald-600/10 leading-relaxed space-y-1"
+                class="bubble relative max-w-[85%] px-3.5 pt-2 pb-1.5 text-sm leading-relaxed shadow-sm sm:max-w-[70%]
+                  {inbound
+                    ? 'bubble-in rounded-2xl bg-white text-slate-800 ring-1 ring-slate-200/70 dark:bg-slate-800 dark:text-slate-100 dark:ring-slate-700/60'
+                    : isBot
+                      ? 'rounded-2xl bg-indigo-50 text-slate-800 ring-1 ring-indigo-200/70 dark:bg-indigo-950/50 dark:text-slate-100 dark:ring-indigo-800/50'
+                      : 'rounded-2xl bg-emerald-50 text-slate-800 ring-1 ring-emerald-200/70 dark:bg-emerald-900/35 dark:text-slate-100 dark:ring-emerald-800/50'}
+                  {!grouped ? (inbound ? 'rounded-tl-md' : 'rounded-tr-md') : ''}"
               >
-                <!-- Label Pengirim: CS / Agent -->
-                <div
-                  class="flex items-center justify-between gap-3 text-[10px] font-bold text-emerald-100 pb-1 border-b border-emerald-500/40"
-                >
-                  <div class="flex items-center gap-1.5">
-                    <User class="w-3.5 h-3.5 text-emerald-200" />
-                    <span>{msg.senderName || "Customer Service"}</span>
+                {#if !inbound && !grouped}
+                  <div class="mb-0.5 flex items-center gap-1 text-xs font-semibold {isBot ? 'text-indigo-600 dark:text-indigo-300' : 'text-emerald-700 dark:text-emerald-400'}">
+                    {#if isBot}<Bot class="h-3.5 w-3.5" /> Balasan otomatis{:else}{msg.senderName || "Customer Service"}{/if}
                   </div>
-                  <span
-                    class="px-1.5 py-0.5 rounded bg-emerald-700/70 text-white text-[9px] font-bold"
-                    >AGENT</span
-                  >
-                </div>
-
-                {#if msg.mediaUrl}
-                  {#if msg.mediaMimeType?.startsWith("image/") || msg.messageType === "image" || msg.mediaUrl.match(/\.(jpg|jpeg|png|webp|gif)/i)}
-                    <button
-                      type="button"
-                      onclick={() => (activeLightboxUrl = msg.mediaUrl || null)}
-                      class="block rounded-xl overflow-hidden my-1 max-w-xs border border-white/20 hover:opacity-90 transition text-left cursor-zoom-in"
-                    >
-                      <img
-                        src={msg.mediaUrl}
-                        alt="Foto Agen"
-                        class="w-full max-h-72 object-cover rounded-xl"
-                        loading="lazy"
-                      />
-                    </button>
-                  {:else if msg.mediaMimeType?.startsWith("audio/") || msg.messageType === "audio" || msg.messageType === "voice" || msg.mediaUrl.match(/\.(mp3|ogg|wav|m4a|aac)/i)}
-                    <!-- svelte-ignore a11y_media_has_caption -->
-                    <div
-                      class="my-1.5 p-1 rounded-xl bg-emerald-700/60 border border-emerald-400/40 max-w-xs"
-                    >
-                      <audio controls src={msg.mediaUrl} class="w-full h-8"
-                      ></audio>
-                    </div>
-                  {:else if msg.mediaMimeType?.startsWith("video/") || msg.messageType === "video" || msg.mediaUrl.match(/\.(mp4|webm|mov|avi)/i)}
-                    <!-- svelte-ignore a11y_media_has_caption -->
-                    <div
-                      class="my-1.5 rounded-xl overflow-hidden max-w-xs border border-emerald-400/40 shadow-sm"
-                    >
-                      <video
-                        controls
-                        src={msg.mediaUrl}
-                        class="w-full max-h-72 object-cover rounded-xl"
-                      >
-                        <track kind="captions" />
-                      </video>
-                    </div>
-                  {:else}
-                    <a
-                      href={msg.mediaUrl}
-                      target="_blank"
-                      download
-                      class="flex items-center gap-2 p-2 my-1 rounded-xl bg-emerald-700/50 text-white border border-white/20"
-                    >
-                      <FileText class="w-4 h-4 shrink-0" />
-                      <span class="truncate font-semibold text-xs"
-                        >{msg.body || "Dokumen"}</span
-                      >
-                    </a>
-                  {/if}
                 {/if}
 
-                {#if msg.body && (!msg.mediaUrl || !["[Foto/Gambar]", "[Gambar]", "[Foto]", "[Stiker]", "[Pesan Suara / Audio]", "[Video]", "[DOCUMENT]", "[IMAGE]"].includes(msg.body)) && !msg.body.startsWith("[IMAGE]") && !msg.body.startsWith("[Foto]") && !msg.body.startsWith("[Gambar]")}
-                  <div class="text-white/95 leading-relaxed font-sans">
+                {@render messageMedia(msg)}
+
+                {#if hasRenderableBody(msg)}
+                  <div class="break-words [overflow-wrap:anywhere]">
                     {@html formatWhatsAppMarkdown(msg.body)}
                   </div>
                 {/if}
 
-                <div
-                  class="text-[10px] text-emerald-100 flex items-center justify-end gap-1 mt-1.5"
-                >
-                  <span
-                    >{new Date(msg.createdAt).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}</span
-                  >
-                  <CheckCheck class="w-3.5 h-3.5 text-emerald-200" />
+                <div class="mt-0.5 flex items-center justify-end gap-1 text-[11px] text-slate-400 dark:text-slate-500">
+                  <span>{timeLabel(msg.createdAt)}</span>
+                  {#if !inbound}
+                    {#if msg.status === "FAILED"}
+                      <span class="flex items-center gap-0.5 font-medium text-rose-500" title="Pesan gagal terkirim"><AlertTriangle class="h-3.5 w-3.5" /> Gagal</span>
+                    {:else if msg.status === "READ"}
+                      <CheckCheck class="h-3.5 w-3.5 text-sky-500" aria-label="Dibaca" />
+                    {:else if msg.status === "DELIVERED"}
+                      <CheckCheck class="h-3.5 w-3.5" aria-label="Terkirim" />
+                    {:else if msg.status === "PENDING"}
+                      <Clock class="h-3 w-3" aria-label="Mengirim" />
+                    {:else}
+                      <Check class="h-3.5 w-3.5" aria-label="Dikirim" />
+                    {/if}
+                  {/if}
                 </div>
               </div>
             </div>
           {/if}
         {/each}
+        </div>
       </div>
 
       <!-- Quick Emoji Bar -->
       {#if showEmojiPicker}
         <div
-          class="px-4 py-2 bg-slate-100 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex items-center gap-2 overflow-x-auto"
+          class="flex items-center gap-1 overflow-x-auto border-t border-slate-200 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-900"
         >
           {#each emojis as em}
             <button
               onclick={() => insertEmoji(em)}
-              class="p-1 text-base hover:scale-125 transition cursor-pointer"
+              class="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg text-xl transition hover:bg-slate-100 dark:hover:bg-slate-800"
             >
               {em}
             </button>
@@ -1901,27 +1688,18 @@
         </div>
       {/if}
 
-      <!-- Bottom Chat Input Bar -->
+      <!-- Bottom composer -->
       <div
-        class="p-3.5 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/80 space-y-2"
+        class="space-y-2 border-t border-slate-200 bg-white px-3 py-3 sm:px-4 dark:border-slate-800 dark:bg-slate-900"
       >
         {#if selectedConv.status === "RESOLVED"}
-          <div
-            class="p-3.5 bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/60 rounded-xl flex items-center gap-3 text-xs text-purple-900 dark:text-purple-200 shadow-sm"
-          >
-            <div
-              class="w-8 h-8 rounded-lg bg-purple-600/10 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0 border border-purple-500/20"
-            >
-              <Lock class="w-4 h-4" />
-            </div>
-            <div>
-              <p class="font-bold">
-                Tiket Percakapan Ini Telah Selesai & Terkunci Permanen
-              </p>
-              <p class="text-[11px] text-purple-700/80 dark:text-purple-300/80">
-                Pesan baru berikutnya dari pelanggan akan otomatis masuk ke
-                antrean sebagai sesi tiket baru.
-              </p>
+          <div class="flex items-center gap-3 rounded-xl bg-slate-50 px-4 py-3 text-sm ring-1 ring-inset ring-slate-200 dark:bg-slate-800/60 dark:ring-slate-700">
+            <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-slate-500 shadow-sm dark:bg-slate-900 dark:text-slate-400">
+              <Lock class="h-4 w-4" />
+            </span>
+            <div class="min-w-0">
+              <p class="font-medium text-slate-800 dark:text-slate-100">Percakapan ini sudah selesai</p>
+              <p class="text-xs text-slate-500 dark:text-slate-400">Pesan baru dari pelanggan akan otomatis masuk antrean sebagai tiket baru.</p>
             </div>
           </div>
         {:else}
@@ -1936,61 +1714,29 @@
             : false}
 
           {#if isExpiredInput && !isInternalNote}
-            <!-- LOCKED BANNER FOR EXPIRED SESSION -->
-            <div
-              class="p-4 bg-rose-50/75 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 rounded-2xl space-y-3 shadow-sm"
-            >
-              <div class="flex items-center gap-3">
-                <div
-                  class="w-9 h-9 rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0 border border-rose-500/20"
-                >
-                  <Lock class="w-5 h-5" />
-                </div>
-                <div class="flex-1 min-w-0">
-                  <p
-                    class="font-bold text-xs text-rose-900 dark:text-rose-200 flex items-center gap-1.5"
-                  >
-                    <span class="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
-                    <span>Sesi 24 Jam Meta Telah Kadaluarsa (&gt;24 Jam)</span>
-                  </p>
-                  <p
-                    class="text-[11px] text-rose-700/90 dark:text-rose-300/90 leading-relaxed mt-0.5"
-                  >
-                    Pesan balasan biasa dikunci oleh Meta karena sudah lebih
-                    dari 24 jam sejak pesan terakhir pelanggan. Gunakan <strong>Template WhatsApp Resmi</strong> untuk melanjutkan percakapan ke nomor ini.
+            <!-- Session expired: only templates can be sent -->
+            <div class="rounded-xl bg-rose-50/70 px-4 py-3 ring-1 ring-inset ring-rose-200 dark:bg-rose-500/5 dark:ring-rose-500/20">
+              <div class="flex items-start gap-3">
+                <span class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-rose-600 shadow-sm dark:bg-slate-900 dark:text-rose-400">
+                  <Clock class="h-4 w-4" />
+                </span>
+                <div class="min-w-0 flex-1">
+                  <p class="text-sm font-medium text-rose-900 dark:text-rose-200">Sesi 24 jam sudah habis</p>
+                  <p class="mt-0.5 text-xs leading-relaxed text-rose-700/90 dark:text-rose-300/80">
+                    Sudah lebih dari 24 jam sejak pesan terakhir pelanggan. Sesuai aturan Meta, balas dengan <strong class="font-semibold">template WhatsApp</strong>.
                   </p>
                 </div>
               </div>
-
-              <div
-                class="flex items-center justify-between gap-2 pt-2.5 border-t border-rose-200/60 dark:border-rose-800/40"
-              >
-                <button
-                  type="button"
-                  onclick={() => (isInternalNote = true)}
-                  class="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer border border-slate-200 dark:border-slate-700 shadow-2xs"
-                >
-                  <Eye class="w-3.5 h-3.5 text-slate-500" />
-                  <span>Beri Catatan Tim Internal</span>
+              <div class="mt-3 flex flex-wrap items-center justify-end gap-2">
+                <button type="button" onclick={() => (isInternalNote = true)} class="ui-btn-ghost !px-3 !py-1.5 text-xs">
+                  <Eye class="h-3.5 w-3.5" />
+                  Tulis catatan internal
                 </button>
-
-                <div class="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onclick={() => (showTemplateSendModal = true)}
-                    class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-emerald-600/20 transition cursor-pointer"
-                  >
-                    <Zap class="w-4 h-4 fill-current" />
-                    <span>Kirim Template Instan</span>
-                  </button>
-
-                  <a
-                    href="/broadcast"
-                    class="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer"
-                  >
-                    <span>Broadcast</span>
-                  </a>
-                </div>
+                <a href="/broadcast" class="ui-btn-secondary !px-3 !py-1.5 text-xs">Broadcast</a>
+                <button type="button" onclick={() => (showTemplateSendModal = true)} class="ui-btn-primary !px-3 !py-1.5 text-xs">
+                  <Zap class="h-3.5 w-3.5" />
+                  Kirim template
+                </button>
               </div>
             </div>
           {:else}
@@ -2049,7 +1795,7 @@
               </div>
             {/if}
 
-            <!-- Meta 24-Hour Session Status Bar (Above Input Form) -->
+            <!-- Mode / session indicator (session timer is in the header on large screens) -->
             {#if selectedConv}
               {@const effectiveExpiresAt = selectedConv.windowExpiresAt
                 ? new Date(selectedConv.windowExpiresAt).getTime()
@@ -2060,50 +1806,20 @@
               {@const timeLeftMs = effectiveExpiresAt
                 ? effectiveExpiresAt - Date.now()
                 : 0}
-              {@const hoursLeft = Math.floor(
-                Math.max(0, timeLeftMs) / (1000 * 60 * 60),
-              )}
-              {@const minutesLeft = Math.floor(
-                (Math.max(0, timeLeftMs) % (1000 * 60 * 60)) / (1000 * 60),
-              )}
+              {@const hoursLeft = Math.floor(Math.max(0, timeLeftMs) / 3600000)}
+              {@const minutesLeft = Math.floor((Math.max(0, timeLeftMs) % 3600000) / 60000)}
 
-              <div
-                class="flex items-center justify-between gap-2 px-1 mb-1.5 text-[11px]"
-              >
-                {#if isInternalNote}
-                  <div
-                    class="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-bold animate-pulse"
-                  >
-                    <FileText class="w-3.5 h-3.5" />
-                    <span>Mode Catatan Internal Tim (Whisper Note)</span>
-                  </div>
-                {:else if timeLeftMs > 0}
-                  <div
-                    class="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400 font-semibold bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-lg border border-emerald-200 dark:border-emerald-800/60"
-                  >
-                    <Clock class="w-3.5 h-3.5 text-emerald-500 animate-pulse" />
-                    <span
-                      >Sesi 24 Jam Meta Aktif: <strong
-                        >{hoursLeft} jam {minutesLeft} menit</strong
-                      > tersisa</span
-                    >
-                  </div>
-                {:else}
-                  <div
-                    class="flex items-center gap-1.5 text-rose-700 dark:text-rose-400 font-bold bg-rose-50 dark:bg-rose-950/50 px-2 py-0.5 rounded-lg border border-rose-200 dark:border-rose-800/60"
-                  >
-                    <Clock class="w-3.5 h-3.5 text-rose-500" />
-                    <span>⚠️ Sesi 24 Jam Meta Kadaluarsa (&gt;24 Jam)</span>
-                  </div>
-                {/if}
-
-                {#if timeLeftMs > 0 && !isInternalNote}
-                  <span
-                    class="text-[10px] text-slate-400 font-mono hidden sm:inline"
-                    >Meta Open Session (24h)</span
-                  >
-                {/if}
-              </div>
+              {#if isInternalNote}
+                <div class="flex items-center justify-between gap-2 rounded-lg bg-amber-50 px-3 py-1.5 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
+                  <span class="flex items-center gap-1.5 font-medium"><Eye class="h-3.5 w-3.5" /> Mode catatan internal: pesan hanya terlihat oleh tim</span>
+                  <button type="button" class="cursor-pointer font-semibold hover:underline" onclick={() => (isInternalNote = false)}>Batal</button>
+                </div>
+              {:else if timeLeftMs > 0}
+                <p class="flex items-center gap-1.5 px-1 text-xs text-slate-500 dark:text-slate-400" title="Sisa waktu jendela 24 jam Meta untuk membalas tanpa template">
+                  <Clock class="h-3.5 w-3.5 text-emerald-500" />
+                  Sesi 24 jam tersisa {hoursLeft}j {String(minutesLeft).padStart(2, "0")}m
+                </p>
+              {/if}
             {/if}
 
             <!-- WhatsApp Attachment Preview Bar -->
@@ -2174,154 +1890,135 @@
               class="hidden"
             />
 
-            <!-- Input Box with Single Tight Horizontal Icon Row -->
-            <div class="flex items-end gap-1.5">
-              <!-- TIGHT HORIZONTAL TOOLBAR ICONS -->
-              <div
-                class="flex items-center gap-0.5 text-slate-500 dark:text-slate-400 shrink-0 pb-1"
-              >
-                <!-- 1. Media Upload Icon with Popup Menu -->
+            <!-- Composer box -->
+            <div
+              class="flex items-end gap-1 rounded-2xl border bg-white p-1.5 transition focus-within:ring-4 dark:bg-slate-800/60
+                {isInternalNote
+                  ? 'border-amber-300 focus-within:border-amber-400 focus-within:ring-amber-500/10 dark:border-amber-600/60'
+                  : 'border-slate-200 focus-within:border-emerald-500 focus-within:ring-emerald-500/10 dark:border-slate-700'}"
+            >
+              <div class="flex shrink-0 items-center text-slate-500 dark:text-slate-400">
+                <!-- Attachment menu -->
                 <div class="relative">
                   <button
                     type="button"
                     onclick={() => (showAttachmentMenu = !showAttachmentMenu)}
-                    class="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 {showAttachmentMenu ? 'bg-slate-100 dark:bg-slate-800 text-emerald-600 dark:text-emerald-400' : ''}"
-                    title="Kirim Media (Foto, Video, Dokumen, Audio)"
+                    class="composer-tool {showAttachmentMenu ? 'bg-slate-100 text-emerald-600 dark:bg-slate-700 dark:text-emerald-400' : ''}"
+                    title="Lampirkan foto, video, dokumen, atau audio"
+                    aria-label="Lampirkan file"
+                    aria-expanded={showAttachmentMenu}
                   >
-                    <Paperclip class="w-4 h-4" />
+                    <Paperclip class="h-5 w-5" />
                   </button>
 
-                  <!-- Popup Menu Media Attachment (WhatsApp Style) -->
                   {#if showAttachmentMenu}
                     <div
-                      class="absolute bottom-full mb-2.5 left-0 w-40 bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl shadow-xl p-1.5 z-50 flex flex-col gap-0.5 animate-in fade-in slide-in-from-bottom-2 duration-150"
+                      class="absolute bottom-full left-0 z-50 mb-3 flex w-44 flex-col gap-0.5 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-900"
                     >
-                      <button
-                        type="button"
-                        onclick={() => openFilePicker('image/*')}
-                        class="w-full px-3 py-2 flex items-center gap-3 rounded-xl hover:bg-purple-50 dark:hover:bg-purple-950/40 text-slate-700 dark:text-slate-200 font-semibold text-xs transition cursor-pointer"
-                      >
-                        <Image class="w-4.5 h-4.5 text-purple-600 dark:text-purple-400" />
-                        <span>Foto</span>
+                      <button type="button" onclick={() => openFilePicker(ACCEPT_IMAGE)} class="attach-item">
+                        <span class="attach-icon bg-violet-100 text-violet-600 dark:bg-violet-500/15 dark:text-violet-300"><Image class="h-4 w-4" /></span>
+                        Foto
                       </button>
-
-                      <button
-                        type="button"
-                        onclick={() => openFilePicker('video/*')}
-                        class="w-full px-3 py-2 flex items-center gap-3 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950/40 text-slate-700 dark:text-slate-200 font-semibold text-xs transition cursor-pointer"
-                      >
-                        <Video class="w-4.5 h-4.5 text-rose-500 dark:text-rose-400" />
-                        <span>Video</span>
+                      <button type="button" onclick={() => openFilePicker(ACCEPT_VIDEO)} class="attach-item">
+                        <span class="attach-icon bg-rose-100 text-rose-600 dark:bg-rose-500/15 dark:text-rose-300"><Video class="h-4 w-4" /></span>
+                        Video
                       </button>
-
-                      <button
-                        type="button"
-                        onclick={() => openFilePicker('.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.csv')}
-                        class="w-full px-3 py-2 flex items-center gap-3 rounded-xl hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-slate-700 dark:text-slate-200 font-semibold text-xs transition cursor-pointer"
-                      >
-                        <FileText class="w-4.5 h-4.5 text-indigo-600 dark:text-indigo-400" />
-                        <span>Dokumen</span>
+                      <button type="button" onclick={() => openFilePicker(ACCEPT_DOCUMENT)} class="attach-item">
+                        <span class="attach-icon bg-sky-100 text-sky-600 dark:bg-sky-500/15 dark:text-sky-300"><FileText class="h-4 w-4" /></span>
+                        Dokumen
                       </button>
-
-                      <button
-                        type="button"
-                        onclick={() => openFilePicker('audio/*')}
-                        class="w-full px-3 py-2 flex items-center gap-3 rounded-xl hover:bg-amber-50 dark:hover:bg-amber-950/40 text-slate-700 dark:text-slate-200 font-semibold text-xs transition cursor-pointer"
-                      >
-                        <Music class="w-4.5 h-4.5 text-amber-500 dark:text-amber-400" />
-                        <span>Audio</span>
+                      <button type="button" onclick={() => openFilePicker(ACCEPT_AUDIO)} class="attach-item">
+                        <span class="attach-icon bg-amber-100 text-amber-600 dark:bg-amber-500/15 dark:text-amber-300"><Music class="h-4 w-4" /></span>
+                        Audio
                       </button>
                     </div>
                   {/if}
                 </div>
 
-                <!-- 2. Emoji Icon -->
                 <button
+                  type="button"
                   onclick={() => (showEmojiPicker = !showEmojiPicker)}
-                  class="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer text-slate-500 hover:text-slate-700 dark:hover:text-slate-200"
-                  title="Pilih Emoji"
+                  class="composer-tool {showEmojiPicker ? 'bg-slate-100 text-emerald-600 dark:bg-slate-700 dark:text-emerald-400' : ''}"
+                  title="Emoji"
+                  aria-label="Emoji"
                 >
-                  <Smile class="w-4 h-4" />
+                  <Smile class="h-5 w-5" />
                 </button>
 
-                <!-- 3. Catatan Tim (Document / Whisper Note) -->
                 <button
+                  type="button"
                   onclick={() => (isInternalNote = !isInternalNote)}
-                  class="p-1 rounded-lg transition cursor-pointer {isInternalNote
-                    ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-                    : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-amber-600 dark:hover:text-amber-400'}"
-                  title={isInternalNote
-                    ? "Catatan Internal Tim (Aktif)"
-                    : "Beri Catatan Tim (Dokumen Internal)"}
+                  class="composer-tool {isInternalNote ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300' : 'hover:text-amber-600'}"
+                  title={isInternalNote ? "Matikan mode catatan internal" : "Tulis catatan internal untuk tim"}
+                  aria-label="Catatan internal"
+                  aria-pressed={isInternalNote}
                 >
-                  <FileText class="w-4 h-4" />
+                  <Eye class="h-5 w-5" />
                 </button>
 
-                <!-- 4. Saran Balasan AI (AI Emoticon / Sparkles) -->
                 <button
+                  type="button"
                   onclick={fetchAiSuggestions}
                   disabled={isAiGenerating}
-                  class="p-1 rounded-lg transition cursor-pointer text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/40 disabled:opacity-60"
-                  title="✨ Saran Balasan Pintar AI"
+                  class="composer-tool text-violet-500 hover:text-violet-600 disabled:opacity-60 dark:text-violet-400"
+                  title="Saran balasan AI"
+                  aria-label="Saran balasan AI"
                 >
-                  <Sparkles
-                    class="w-4 h-4 text-purple-500 {isAiGenerating
-                      ? 'animate-spin'
-                      : ''}"
-                  />
+                  <Sparkles class="h-5 w-5 {isAiGenerating ? 'animate-spin' : ''}" />
                 </button>
               </div>
 
-              <!-- Textarea Input (Auto-expands on typing) -->
               <textarea
                 bind:this={messageInputRef}
                 rows="1"
                 value={messageText}
                 oninput={handleInput}
                 onkeydown={handleKeydown}
-                placeholder={isInternalNote
-                  ? "Ketik catatan internal tim (Ketik / untuk balasan cepat • Shift+Enter baris baru • Enter kirim)..."
-                  : "Ketik balasan (Ketik / untuk balasan cepat • Shift+Enter baris baru • Enter kirim)..."}
-                class="flex-1 px-3.5 py-2.5 rounded-xl text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none transition resize-none max-h-44 min-h-[40px] leading-relaxed overflow-y-auto {isInternalNote
-                  ? 'bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700 focus:border-amber-500'
-                  : 'bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 focus:border-emerald-500'}"
+                placeholder={isInternalNote ? "Tulis catatan untuk tim…" : "Tulis pesan…"}
+                aria-label={isInternalNote ? "Catatan internal" : "Pesan"}
+                class="max-h-44 min-h-[40px] flex-1 resize-none overflow-y-auto bg-transparent px-2 py-2 text-sm leading-relaxed text-slate-900 placeholder-slate-400 focus:outline-none dark:text-white dark:placeholder-slate-500"
               ></textarea>
 
-              <!-- Send Button -->
               <button
                 type="button"
                 onclick={sendMessage}
                 disabled={isUploadingMedia}
-                class="p-2.5 rounded-xl text-white font-bold transition shadow-sm shrink-0 mb-0.5 disabled:opacity-60 {isInternalNote
-                  ? 'bg-amber-500 hover:bg-amber-400 text-slate-950'
-                  : 'bg-emerald-600 hover:bg-emerald-500'} cursor-pointer"
+                class="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-xl transition disabled:opacity-60
+                  {isInternalNote
+                    ? 'bg-amber-500 text-slate-950 hover:bg-amber-400'
+                    : 'bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-500 dark:text-slate-950 dark:hover:bg-emerald-400'}"
+                title={isInternalNote ? "Simpan catatan" : "Kirim (Enter)"}
+                aria-label={isInternalNote ? "Simpan catatan" : "Kirim pesan"}
               >
                 {#if isUploadingMedia}
-                  <Loader2 class="w-4 h-4 animate-spin" />
+                  <Loader2 class="h-4.5 w-4.5 animate-spin" />
                 {:else}
-                  <Send class="w-4 h-4" />
+                  <Send class="h-4.5 w-4.5" />
                 {/if}
               </button>
             </div>
+            <p class="hidden px-1 text-[11px] text-slate-400 sm:block dark:text-slate-500">
+              <kbd class="font-sans font-semibold">Enter</kbd> kirim · <kbd class="font-sans font-semibold">Shift + Enter</kbd> baris baru · <kbd class="font-sans font-semibold">/</kbd> balas cepat
+            </p>
           {/if}
         {/if}
       </div>
     {:else}
       <div
-        class="flex-1 flex flex-col items-center justify-center p-8 text-center bg-slate-50/50 dark:bg-slate-950/50"
+        class="chat-canvas flex flex-1 flex-col items-center justify-center p-8 text-center"
       >
         <div
-          class="w-16 h-16 rounded-2xl bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mb-4 shadow-sm border border-emerald-500/20"
+          class="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-white text-emerald-600 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:text-emerald-400 dark:ring-slate-800"
         >
           <MessageSquare class="w-8 h-8" />
         </div>
         <h3
-          class="text-base font-bold text-slate-800 dark:text-slate-100 mb-1.5"
+          class="mb-1.5 text-base font-semibold text-slate-800 dark:text-slate-100"
         >
-          Pilih Percakapan Pelanggan
+          Pilih percakapan
         </h3>
         <p
-          class="text-xs text-slate-500 dark:text-slate-400 max-w-sm leading-relaxed"
+          class="max-w-sm text-sm leading-relaxed text-slate-500 dark:text-slate-400"
         >
           Pilih salah satu kontak dari daftar di sebelah kiri untuk membuka
           ruang obrolan dan melihat riwayat pesan.
@@ -2332,223 +2029,152 @@
 
   <!-- 3. RIGHT COLUMN: Contact & Team Info -->
   {#if selectedConv}
-    <div
-      class="w-72 border-l border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-900/60 p-4 space-y-5 overflow-y-auto hidden lg:block shrink-0"
+    <aside
+      class="hidden w-72 shrink-0 overflow-y-auto border-l border-slate-200 bg-white xl:w-80 {showContactPanel ? 'lg:block' : ''} dark:border-slate-800 dark:bg-slate-900"
+      aria-label="Detail kontak"
     >
-      <!-- Profile Header -->
-      <div
-        class="text-center pb-4 border-b border-slate-200 dark:border-slate-800/80"
-      >
-        <div
-          class="w-14 h-14 rounded-full bg-slate-200 dark:bg-slate-700 mx-auto flex items-center justify-center font-bold text-xl text-emerald-700 dark:text-emerald-400 border-2 border-emerald-500/30 mb-2"
-        >
-          {selectedConv.contact.name.charAt(0)}
+      <!-- Profile -->
+      <div class="flex flex-col items-center border-b border-slate-100 px-5 pt-6 pb-5 text-center dark:border-slate-800">
+        <div class="mb-3 flex h-16 w-16 items-center justify-center rounded-full text-xl font-semibold {avatarTone(selectedConv.contact.name)}">
+          {initials(selectedConv.contact.name)}
         </div>
-        <h4 class="text-sm font-bold text-slate-900 dark:text-white">
-          {selectedConv.contact.name}
-        </h4>
-        <p class="text-xs text-slate-500 dark:text-slate-400">
-          +{selectedConv.contact.waId}
-        </p>
-      </div>
-
-      <!-- 👥 TIM PENANGGUNG JAWAB (Multi-Agent) -->
-      <div class="space-y-2.5">
-        <div class="flex items-center justify-between">
-          <h5
-            class="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5"
-          >
-            <Users class="w-3.5 h-3.5 text-indigo-500" />
-            Tim Penangan ({1 + (selectedConv.participants?.length || 0)})
-          </h5>
-
-          {#if authStore.role !== "AGENT"}
-            <button
-              onclick={() => (showAddCollaboratorModal = true)}
-              class="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
-            >
-              + Tambah
-            </button>
+        <h4 class="text-base font-semibold text-slate-900 dark:text-white">{selectedConv.contact.name}</h4>
+        <p class="mt-0.5 text-sm tabular-nums text-slate-500 dark:text-slate-400">+{selectedConv.contact.waId}</p>
+        <div class="mt-3 flex flex-wrap justify-center gap-1.5">
+          {#if selectedConv.status === "RESOLVED"}
+            <span class="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300"><CheckCircle2 class="h-3 w-3" /> Tiket selesai</span>
+          {:else}
+            <span class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"><span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span> Tiket aktif</span>
           {/if}
-        </div>
-
-        <div
-          class="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 space-y-2"
-        >
-          <!-- Primary Agent -->
-          <div class="flex items-center justify-between text-xs">
-            <div class="flex items-center gap-2 min-w-0">
-              <div
-                class="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 flex items-center justify-center font-bold text-[10px] shrink-0"
-              >
-                {selectedConv.assignedUser?.fullName?.charAt(0) || "U"}
-              </div>
-              <div class="min-w-0">
-                <p class="font-bold text-slate-900 dark:text-white truncate">
-                  {selectedConv.assignedUser?.fullName || "Belum di-assign"}
-                </p>
-                <span
-                  class="text-[9px] text-emerald-700 dark:text-emerald-400 font-semibold uppercase"
-                  >Agen Utama</span
-                >
-              </div>
-            </div>
-          </div>
-
-          <!-- Collaborators -->
-          {#if selectedConv.participants && selectedConv.participants.length > 0}
-            {#each selectedConv.participants as participant}
-              <div
-                class="flex items-center justify-between text-xs pt-2 border-t border-slate-200 dark:border-slate-700/60"
-              >
-                <div class="flex items-center gap-2 min-w-0">
-                  <div
-                    class="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-700 dark:text-indigo-400 flex items-center justify-center font-bold text-[10px] shrink-0"
-                  >
-                    {participant.fullName.charAt(0)}
-                  </div>
-                  <div class="min-w-0">
-                    <p
-                      class="font-semibold text-slate-800 dark:text-slate-200 truncate"
-                    >
-                      {participant.fullName}
-                    </p>
-                    <span
-                      class="text-[9px] text-indigo-600 dark:text-indigo-400 font-medium"
-                      >Kolaborator ({participant.role})</span
-                    >
-                  </div>
-                </div>
-
-                {#if authStore.role !== "AGENT"}
-                  <button
-                    onclick={() => removeCollaborator(participant.id)}
-                    class="text-slate-400 hover:text-rose-500 p-1 shrink-0 cursor-pointer"
-                    title="Keluarkan dari obrolan"
-                  >
-                    <X class="w-3 h-3" />
-                  </button>
-                {/if}
-              </div>
-            {/each}
-          {/if}
+          <span class="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+            {selectedConv.contact.customAttributes?.memberLevel || "Regular"}
+          </span>
         </div>
       </div>
 
-      <!-- Customer CRM Attributes -->
-      <div class="space-y-2">
-        <h5
-          class="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider"
-        >
-          Atribut Kontak
-        </h5>
-
-        <div
-          class="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 space-y-2 text-xs"
-        >
-          <div class="flex justify-between">
-            <span class="text-slate-500 dark:text-slate-400">Status Tiket:</span
-            >
-            <span
-              class={selectedConv.status === "RESOLVED"
-                ? "text-purple-700 dark:text-purple-400 font-bold"
-                : "text-emerald-700 dark:text-emerald-400 font-bold"}
-            >
-              {selectedConv.status === "RESOLVED"
-                ? "RESOLVED"
-                : "ACTIVE / OPEN"}
-            </span>
-          </div>
-          <div class="flex justify-between">
-            <span class="text-slate-500 dark:text-slate-400">Member:</span>
-            <span class="text-emerald-700 dark:text-emerald-400 font-semibold"
-              >{selectedConv.contact.customAttributes?.memberLevel ||
-                "Regular"}</span
-            >
-          </div>
-          {#if selectedConv.contact.customAttributes?.totalSpend}
-            <div class="flex justify-between">
-              <span class="text-slate-500 dark:text-slate-400"
-                >Total Spend:</span
-              >
-              <span class="text-slate-900 dark:text-white font-semibold"
-                >Rp {selectedConv.contact.customAttributes.totalSpend.toLocaleString(
-                  "id-ID",
-                )}</span
-              >
-            </div>
-          {/if}
-        </div>
-      </div>
-
-      <!-- Quick Tags -->
-      <div class="space-y-2">
-        <div class="flex items-center justify-between">
-          <h5
-            class="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider"
-          >
-            Tags Kontak
-          </h5>
-          <button
-            onclick={() => (showTagModal = true)}
-            class="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
-          >
-            + Tambah
-          </button>
-        </div>
-
-        <div class="flex flex-wrap gap-1.5">
-          {#each customTags as t}
-            <span
-              class="px-2 py-0.5 rounded-lg text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 flex items-center gap-1"
-            >
-              {t}
+      <div class="space-y-6 p-5">
+        <!-- Team -->
+        <section>
+          <div class="mb-2.5 flex items-center justify-between">
+            <h5 class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              Tim penangan · {1 + (selectedConv.participants?.length || 0)}
+            </h5>
+            {#if authStore.role !== "AGENT"}
               <button
-                onclick={() => removeTag(t)}
-                class="hover:text-rose-500 cursor-pointer">×</button
+                onclick={() => (showAddCollaboratorModal = true)}
+                class="inline-flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-semibold text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-500/10"
               >
-            </span>
-          {/each}
-        </div>
-      </div>
+                <Plus class="h-3.5 w-3.5" /> Tambah
+              </button>
+            {/if}
+          </div>
 
-      <!-- Quick Actions -->
-      <div
-        class="space-y-2 pt-2 border-t border-slate-200 dark:border-slate-800/80"
-      >
-        <h5
-          class="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider"
-        >
-          Tindakan Cepat
-        </h5>
+          <ul class="space-y-1">
+            <li class="flex items-center gap-3 rounded-xl px-2 py-2">
+              <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold {selectedConv.assignedUser ? avatarTone(selectedConv.assignedUser.fullName) : 'bg-slate-100 text-slate-400 dark:bg-slate-800'}">
+                {selectedConv.assignedUser ? initials(selectedConv.assignedUser.fullName) : "?"}
+              </div>
+              <div class="min-w-0 flex-1">
+                <p class="truncate text-sm font-medium text-slate-900 dark:text-white">
+                  {selectedConv.assignedUser?.fullName || "Belum ada agen"}
+                </p>
+                <p class="text-xs text-slate-500 dark:text-slate-400">Agen utama</p>
+              </div>
+            </li>
 
+            {#if selectedConv.participants && selectedConv.participants.length > 0}
+              {#each selectedConv.participants as participant}
+                <li class="group flex items-center gap-3 rounded-xl px-2 py-2 hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                  <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold {avatarTone(participant.fullName)}">
+                    {initials(participant.fullName)}
+                  </div>
+                  <div class="min-w-0 flex-1">
+                    <p class="truncate text-sm font-medium text-slate-800 dark:text-slate-200">{participant.fullName}</p>
+                    <p class="text-xs text-slate-500 dark:text-slate-400">Kolaborator · {participant.role}</p>
+                  </div>
+                  {#if authStore.role !== "AGENT"}
+                    <button
+                      onclick={() => removeCollaborator(participant.id)}
+                      class="cursor-pointer rounded-md p-1 text-slate-400 opacity-70 hover:bg-rose-50 hover:text-rose-600 group-hover:opacity-100 dark:hover:bg-rose-500/10"
+                      title="Keluarkan dari obrolan"
+                      aria-label="Keluarkan {participant.fullName} dari obrolan"
+                    >
+                      <X class="h-3.5 w-3.5" />
+                    </button>
+                  {/if}
+                </li>
+              {/each}
+            {/if}
+          </ul>
+        </section>
+
+        <!-- Contact details -->
+        <section>
+          <h5 class="mb-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Detail kontak</h5>
+          <dl class="divide-y divide-slate-100 rounded-xl border border-slate-200 text-sm dark:divide-slate-800 dark:border-slate-800">
+            <div class="flex items-center justify-between gap-3 px-3.5 py-2.5">
+              <dt class="text-slate-500 dark:text-slate-400">Status tiket</dt>
+              <dd class="font-medium text-slate-900 dark:text-white">{selectedConv.status === "RESOLVED" ? "Selesai" : "Aktif"}</dd>
+            </div>
+            <div class="flex items-center justify-between gap-3 px-3.5 py-2.5">
+              <dt class="text-slate-500 dark:text-slate-400">Member</dt>
+              <dd class="font-medium text-slate-900 dark:text-white">{selectedConv.contact.customAttributes?.memberLevel || "Regular"}</dd>
+            </div>
+            {#if selectedConv.contact.customAttributes?.totalSpend}
+              <div class="flex items-center justify-between gap-3 px-3.5 py-2.5">
+                <dt class="text-slate-500 dark:text-slate-400">Total belanja</dt>
+                <dd class="font-medium tabular-nums text-slate-900 dark:text-white">Rp {selectedConv.contact.customAttributes.totalSpend.toLocaleString("id-ID")}</dd>
+              </div>
+            {/if}
+          </dl>
+        </section>
+
+        <!-- Tags -->
+        <section>
+          <div class="mb-2.5 flex items-center justify-between">
+            <h5 class="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Tag</h5>
+            <button
+              onclick={() => (showTagModal = true)}
+              class="inline-flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-semibold text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-500/10"
+            >
+              <Plus class="h-3.5 w-3.5" /> Tambah
+            </button>
+          </div>
+          {#if customTags.length > 0}
+            <div class="flex flex-wrap gap-1.5">
+              {#each customTags as t}
+                <span class="inline-flex items-center gap-1 rounded-full bg-slate-100 py-0.5 pr-1 pl-2.5 text-xs font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                  {t}
+                  <button
+                    onclick={() => removeTag(t)}
+                    class="cursor-pointer rounded-full p-0.5 text-slate-400 hover:bg-slate-200 hover:text-rose-600 dark:hover:bg-slate-700"
+                    aria-label="Hapus tag {t}"
+                  >
+                    <X class="h-3 w-3" />
+                  </button>
+                </span>
+              {/each}
+            </div>
+          {:else}
+            <p class="text-sm text-slate-400 dark:text-slate-500">Belum ada tag.</p>
+          {/if}
+        </section>
+
+        <!-- Actions -->
         {#if authStore.role !== "AGENT"}
-          <button
-            onclick={() => (showReassignModal = true)}
-            class="w-full py-2 px-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center justify-center gap-2 transition cursor-pointer"
-          >
-            <User class="w-3.5 h-3.5 text-amber-500" />
-            Pindahkan Agen Utama
-          </button>
-
-          <button
-            onclick={() => (showAddCollaboratorModal = true)}
-            class="w-full py-2 px-3 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-700 dark:text-indigo-400 border border-indigo-500/20 text-xs font-semibold flex items-center justify-center gap-2 transition cursor-pointer"
-          >
-            <UserPlus class="w-3.5 h-3.5" />
-            + Tambah Agen / SPV
-          </button>
+          <section class="space-y-2 border-t border-slate-100 pt-5 dark:border-slate-800">
+            <button onclick={() => (showReassignModal = true)} class="ui-btn-secondary w-full justify-start">
+              <User class="h-4 w-4 text-slate-400" />
+              Pindahkan agen utama
+            </button>
+            <button onclick={() => (showAddCollaboratorModal = true)} class="ui-btn-secondary w-full justify-start">
+              <UserPlus class="h-4 w-4 text-slate-400" />
+              Undang agen / supervisor
+            </button>
+          </section>
         {/if}
-
-        <button
-          onclick={() => (showTagModal = true)}
-          class="w-full py-2 px-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center justify-center gap-2 transition cursor-pointer"
-        >
-          <Tag class="w-3.5 h-3.5 text-emerald-500" />
-          Kelola Tag Pelanggan
-        </button>
       </div>
-    </div>
+    </aside>
   {/if}
 </div>
 

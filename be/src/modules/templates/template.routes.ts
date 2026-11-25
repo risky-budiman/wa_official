@@ -12,6 +12,7 @@ import { authPlugin } from '../../middleware/auth';
 import { rbacPlugin } from '../../middleware/rbac';
 import { MetaApiService } from '../../services/meta-api.service';
 import type { TemplateCategory, TemplateStatus } from '../../db/schema/message-templates';
+import { getActivePhone } from '../../services/phone-number.service';
 
 export class TemplateService {
   static async list(orgId: string) {
@@ -718,11 +719,7 @@ export const templateRoutes = new Elysia({ prefix: '/templates' })
         }
 
         // 2. Resolve Active Credentials & Phone Record
-        const phones = await db
-          .select()
-          .from(phoneNumbers)
-          .where(eq(phoneNumbers.organizationId, user.orgId));
-        const phone = phones.length > 0 ? phones[0] : null;
+        const phone = await getActivePhone(user.orgId);
         const activePhoneNumberId = phone?.phoneNumberId || env.META_PHONE_NUMBER_ID;
 
         const [org] = await db

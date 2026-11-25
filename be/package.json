@@ -13,9 +13,9 @@
     "db:seed": "bun run src/db/seed.ts"
   },
   "dependencies": {
-    "elysia": "latest",
-    "@elysiajs/jwt": "latest",
-    "@elysiajs/cors": "latest",
+    "elysia": "1.4.30",
+    "@elysiajs/jwt": "1.4.2",
+    "@elysiajs/cors": "1.4.2",
     "drizzle-orm": "^0.44.0",
     "mysql2": "^3.11.0",
     "bullmq": "^5.30.0",
@@ -24,7 +24,7 @@
     "nanoid": "^5.0.0"
   },
   "devDependencies": {
-    "@types/bun": "latest",
+    "@types/bun": "1.4.0",
     "typescript": "^5.7.0",
     "drizzle-kit": "^0.30.0"
   }

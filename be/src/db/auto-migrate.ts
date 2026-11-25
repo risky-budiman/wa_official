@@ -20,6 +20,15 @@ export async function autoMigrateSchema(): Promise<void> {
       } catch (_) {}
     });
 
+    // 2. Hash any API key still stored in plaintext (security hardening, idempotent)
+    try {
+      const { migratePlaintextApiKeys } = await import('../middleware/api-key-auth');
+      const migrated = await migratePlaintextApiKeys();
+      if (migrated > 0) console.log(`🔐 ${migrated} API key lama dienkripsi (hash SHA-256).`);
+    } catch (err: any) {
+      console.warn('⚠️ API key hashing migration notice:', err?.message || err);
+    }
+
     console.log('✅ Database schema auto-migration check complete!');
   } catch (err: any) {
     console.warn('⚠️ Auto-migration check notice:', err?.message || err);

@@ -3,9 +3,33 @@
 // ===========================================
 
 import { Elysia } from 'elysia';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
+import { createHash } from 'crypto';
 import { db } from '../config/database';
 import { apiKeys } from '../db/schema';
+
+const HASH_PREFIX = 'sha256:';
+
+/**
+ * API keys are stored as a SHA-256 hash (never in plaintext), so a database leak
+ * does not expose usable keys. Keys are long random strings, so a fast hash is sufficient.
+ */
+export function hashApiKey(rawKey: string): string {
+  return HASH_PREFIX + createHash('sha256').update(rawKey, 'utf8').digest('hex');
+}
+
+/** One-time migration: hash every API key that is still stored in plaintext. */
+export async function migratePlaintextApiKeys(): Promise<number> {
+  const legacy = await db
+    .select({ id: apiKeys.id, key: apiKeys.key })
+    .from(apiKeys)
+    .where(sql`${apiKeys.key} NOT LIKE 'sha256:%'`);
+
+  for (const row of legacy) {
+    await db.update(apiKeys).set({ key: hashApiKey(row.key) }).where(eq(apiKeys.id, row.id));
+  }
+  return legacy.length;
+}
 
 export interface ApiKeyContext {
   apiKeyId: string;
@@ -30,11 +54,20 @@ export const apiKeyAuthPlugin = new Elysia({ name: 'api-key-auth' })
     }
 
     try {
-      const [keyRecord] = await db
+      const hashed = hashApiKey(token);
+      let [keyRecord] = await db
         .select()
         .from(apiKeys)
-        .where(eq(apiKeys.key, token))
+        .where(eq(apiKeys.key, hashed))
         .limit(1);
+
+      // Legacy fallback: key created before hashing was introduced → upgrade it in place
+      if (!keyRecord) {
+        [keyRecord] = await db.select().from(apiKeys).where(eq(apiKeys.key, token)).limit(1);
+        if (keyRecord) {
+          await db.update(apiKeys).set({ key: hashed }).where(eq(apiKeys.id, keyRecord.id)).catch(() => {});
+        }
+      }
 
       if (!keyRecord) {
         return { externalApp: null };

@@ -87,7 +87,7 @@
         <ShieldCheck class="w-8 h-8 stroke-[2.2]" />
       </div>
       <div class="flex items-center justify-center gap-2 mb-1">
-        <h1 class="text-xl font-extrabold tracking-tight text-white">
+        <h1 class="text-xl font-bold tracking-tight text-white">
           SaaS Master Administrator
         </h1>
       </div>
@@ -109,7 +109,7 @@
             </p>
           </div>
           <span
-            class="text-[9px] font-extrabold px-2 py-0.5 rounded uppercase tracking-wider bg-indigo-500/15 text-indigo-400 border border-indigo-500/25"
+            class="text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider bg-indigo-500/15 text-indigo-400 border border-indigo-500/25"
           >
             Standalone
           </span>
@@ -142,7 +142,7 @@
               type="email"
               bind:value={email}
               placeholder="admin@perusahaan.com"
-              class="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"
+              class="ui-input pl-10 pr-4 text-white"
               required
             />
           </div>
@@ -164,7 +164,7 @@
               type="password"
               bind:value={password}
               placeholder="••••••••"
-              class="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition"
+              class="ui-input pl-10 pr-4 text-white"
               required
             />
           </div>
@@ -195,7 +195,7 @@
           <ShieldCheck class="w-3.5 h-3.5 text-indigo-400" />
           <span>Isolasi Pintu Masuk Administrator</span>
         </div>
-        <p class="text-[10px] leading-relaxed text-slate-400">
+        <p class="text-[11px] leading-relaxed text-slate-400">
           Halaman ini khusus untuk pemegang role <strong>SUPER_ADMIN</strong> dan
           staf platform. Akun tenant klien dilarang masuk dari pintu ini.
         </p>

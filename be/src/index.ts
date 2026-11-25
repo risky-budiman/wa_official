@@ -109,8 +109,6 @@ const app = new Elysia()
     hostname: '0.0.0.0',
   });
 
-// Test DB connection after server starts
-testConnection();
 
 console.log(`
 ╔════════════════════════════════════════════╗

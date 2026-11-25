@@ -3,7 +3,7 @@
 // ===========================================
 
 import { Worker, Job } from 'bullmq';
-import { eq, and, or, sql, desc, ne } from 'drizzle-orm';
+import { eq, and, or, sql, desc, ne, inArray, isNotNull } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { redis } from '../../config/redis';
 import { db } from '../../config/database';
@@ -21,6 +21,7 @@ import { AiAgentService } from '../../services/ai-agent.service';
 import { MetaApiService } from '../../services/meta-api.service';
 import { env } from '../../config/env';
 import type { MetaWebhookBody } from './webhook.types';
+import { notArchived } from '../../services/phone-number.service';
 
 export class WebhookProcessor {
   /**
@@ -132,11 +133,33 @@ export class WebhookProcessor {
 
           console.log(`📋 Meta Template Webhook: event=${tplEvent}, name=${tplName}, metaId=${tplMetaId}, reason=${(value as any).reason || 'none'}`);
 
-          if (tplName || tplMetaId) {
+          // 🔒 Scope the update to the organization(s) that own this WABA (entry.id = WABA ID).
+          // Without this, a template with the same name in OTHER tenants would be changed/deleted too.
+          const wabaId = (entry as any).id ? String((entry as any).id) : null;
+          const ownerOrgs = wabaId
+            ? await db
+                .select({ id: organizations.id })
+                .from(organizations)
+                .where(eq(organizations.wabaId, wabaId))
+            : [];
+          const ownerOrgIds = ownerOrgs.map((o) => o.id);
+
+          let matchCondition: any = null;
+          if (ownerOrgIds.length > 0) {
+            const byIdOrName = tplMetaId
+              ? or(eq(messageTemplates.metaTemplateId, tplMetaId), eq(messageTemplates.name, tplName))
+              : eq(messageTemplates.name, tplName);
+            matchCondition = and(inArray(messageTemplates.organizationId, ownerOrgIds), byIdOrName);
+          } else if (tplMetaId) {
+            // WABA owner unknown → only match by Meta's globally-unique template ID (never by name)
+            matchCondition = eq(messageTemplates.metaTemplateId, tplMetaId);
+          } else {
+            console.warn(`⚠️ Webhook template "${tplName}" diabaikan: WABA ${wabaId || '-'} tidak terhubung ke organisasi mana pun.`);
+          }
+
+          if (matchCondition && (tplName || tplMetaId)) {
             if (tplEvent === 'DELETED') {
-              const deleteCondition = tplMetaId
-                ? or(eq(messageTemplates.metaTemplateId, tplMetaId), eq(messageTemplates.name, tplName))
-                : eq(messageTemplates.name, tplName);
+              const deleteCondition = matchCondition;
 
               await db.delete(messageTemplates).where(deleteCondition);
               console.log(`🗑️ Webhook: Template "${tplName || tplMetaId}" berhasil dihapus dari database karena dihapus di Meta.`);
@@ -150,9 +173,7 @@ export class WebhookProcessor {
               };
 
               const newStatus = statusMap[tplEvent] || 'PENDING';
-              const updateCondition = tplMetaId
-                ? or(eq(messageTemplates.metaTemplateId, tplMetaId), eq(messageTemplates.name, tplName))
-                : eq(messageTemplates.name, tplName);
+              const updateCondition = matchCondition;
 
               await db
                 .update(messageTemplates)
@@ -169,86 +190,24 @@ export class WebhookProcessor {
         if (!phoneNumberId) continue;
 
         // 1. Resolve Organization by Registered Phone Number ID
-        let [phone] = await db
+        // Prefer a record that is actually linked to an organization (ignore orphan/dummy duplicates)
+        const [phone] = await db
           .select()
           .from(phoneNumbers)
-          .where(eq(phoneNumbers.phoneNumberId, phoneNumberId))
+          .where(and(eq(phoneNumbers.phoneNumberId, phoneNumberId), isNotNull(phoneNumbers.organizationId), notArchived()))
           .limit(1);
 
-        let targetOrgId: string;
-
-        if (phone && phone.organizationId) {
-          // Strictly route to the tenant/organization where this phone number is legitimately linked!
-          targetOrgId = phone.organizationId;
-        } else {
-          // Fallback only if phone number is completely unlinked: find active organization
-          const [activeOrg] = await db
-            .select({ id: organizations.id })
-            .from(organizations)
-            .where(sql`${organizations.id} != 'org-demo-default'`)
-            .orderBy(desc(organizations.createdAt))
-            .limit(1);
-
-          targetOrgId = activeOrg?.id || 'org-demo-default';
-
-          const [firstPhone] = await db.select().from(phoneNumbers).limit(1);
-          if (firstPhone) {
-            await db
-              .update(phoneNumbers)
-              .set({
-                phoneNumberId: phoneNumberId,
-                organizationId: targetOrgId,
-                status: 'CONNECTED',
-              })
-              .where(eq(phoneNumbers.id, firstPhone.id));
-
-            phone = {
-              ...firstPhone,
-              phoneNumberId: phoneNumberId,
-              organizationId: targetOrgId,
-              status: 'CONNECTED',
-            };
-            console.log(`✨ Auto-registered Phone Number ID ${phoneNumberId} to organization ${targetOrgId}`);
-          } else {
-            const newPhoneId = nanoid();
-            await db.insert(phoneNumbers).values({
-              id: newPhoneId,
-              organizationId: targetOrgId,
-              phoneNumberId: phoneNumberId,
-              displayPhoneNumber: '+62 821-6075-0067',
-              verifiedName: 'IDS Payment',
-              qualityRating: 'GREEN',
-              status: 'CONNECTED',
-              createdAt: new Date(),
-            });
-            phone = {
-              id: newPhoneId,
-              organizationId: targetOrgId,
-              phoneNumberId: phoneNumberId,
-              displayPhoneNumber: '+62 821-6075-0067',
-              verifiedName: 'IDS Payment',
-              qualityRating: 'GREEN',
-              status: 'CONNECTED',
-              createdAt: new Date(),
-            };
-            console.log(`✨ Auto-created phone record for Phone Number ID ${phoneNumberId}`);
-          }
+        // 🔒 Only process events for phone numbers that are explicitly linked to an organization.
+        // Unknown numbers are ignored — never auto-assign another tenant's phone record.
+        if (!phone || !phone.organizationId) {
+          console.warn(
+            `⚠️ Webhook diabaikan: Phone Number ID ${phoneNumberId} belum terhubung ke organisasi mana pun. ` +
+              `Hubungkan nomor ini lewat menu Pengaturan > WhatsApp terlebih dahulu.`
+          );
+          continue;
         }
 
-        const orgId = targetOrgId;
-
-        // Auto-migrate any orphan conversations/contacts from demo org to active user org
-        if (targetOrgId !== 'org-demo-default') {
-          await db
-            .update(conversations)
-            .set({ organizationId: targetOrgId })
-            .where(eq(conversations.organizationId, 'org-demo-default'));
-
-          await db
-            .update(contacts)
-            .set({ organizationId: targetOrgId })
-            .where(eq(contacts.organizationId, 'org-demo-default'));
-        }
+        const orgId = phone.organizationId;
 
         // Fetch Organization Settings (Care Window, Access Token, Operating Hours)
         const [orgFull] = await db
@@ -464,6 +423,8 @@ export class WebhookProcessor {
                   lastMessageAt: new Date(),
                   assignedUserId: targetAssignedUser,
                   status: targetStatus,
+                  // The customer wrote to this number: replies must go out from it (after a number change)
+                  phoneNumberId: phone.id,
                 })
                 .where(eq(conversations.id, activeConv.id));
             }
@@ -552,10 +513,29 @@ export class WebhookProcessor {
             else if (st.status === 'read') statusEnum = 'READ';
             else if (st.status === 'failed') statusEnum = 'FAILED';
 
-            await db
-              .update(messages)
-              .set({ status: statusEnum })
-              .where(eq(messages.wamId, st.id));
+            // Meta can deliver status events out of order → never downgrade (e.g. READ back to DELIVERED).
+            // FAILED always wins and stores Meta's error reason.
+            const lowerStatuses: Record<string, string[]> = {
+              SENT: ['PENDING'],
+              DELIVERED: ['PENDING', 'SENT'],
+              READ: ['PENDING', 'SENT', 'DELIVERED'],
+            };
+
+            if (statusEnum === 'FAILED') {
+              const metaError = (st as any).errors?.[0];
+              await db
+                .update(messages)
+                .set({
+                  status: 'FAILED',
+                  ...(metaError ? { errorDetails: metaError } : {}),
+                } as any)
+                .where(eq(messages.wamId, st.id));
+            } else {
+              await db
+                .update(messages)
+                .set({ status: statusEnum })
+                .where(and(eq(messages.wamId, st.id), inArray(messages.status, lowerStatuses[statusEnum] as any)));
+            }
           }
         }
       }

@@ -14,7 +14,13 @@ export async function verifyWebhookSignature(
   signatureHeader: string | undefined
 ): Promise<boolean> {
   if (!env.META_APP_SECRET) {
-    // If META_APP_SECRET is not set in .env, log warning and allow webhook processing
+    // 🔒 Production: never accept unsigned webhooks (anyone could inject fake messages)
+    if (env.NODE_ENV === 'production') {
+      console.error('❌ META_APP_SECRET belum diset di .env — webhook Meta DITOLAK (mode production).');
+      return false;
+    }
+    // Development only: allow, but warn loudly
+    console.warn('⚠️ META_APP_SECRET kosong — signature webhook TIDAK diverifikasi (hanya diizinkan di development).');
     return true;
   }
 
@@ -39,13 +45,21 @@ export async function verifyWebhookSignature(
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
 
-  return signatureHex === expectedSignature;
+  // Constant-time comparison to avoid timing attacks
+  const a = encoder.encode(signatureHex);
+  const b = encoder.encode(expectedSignature.trim().toLowerCase());
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+  return diff === 0;
 }
 
 /**
  * Elysia plugin that validates X-Hub-Signature-256 on webhook routes
  */
 export const webhookVerifyPlugin = new Elysia({ name: 'webhook-verify' })
+  // NOTE: not used by /webhook anymore (a local hook never ran for parent routes and the body
+  // was already consumed). Signature is verified on the raw body inside webhook.routes.ts.
   .onBeforeHandle(async ({ request, set }) => {
     // Skip verification for GET requests (Meta handshake)
     if (request.method === 'GET') return;

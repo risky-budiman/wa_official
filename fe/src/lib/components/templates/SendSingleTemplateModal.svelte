@@ -97,8 +97,8 @@
 
   // Extract variable indices in BODY e.g. {{1}}, {{2}}
   let bodyVarIndices = $derived.by(() => {
-    const text = bodyComponent?.text || '';
-    const matches = Array.from(text.matchAll(/\{\{(\d+)\}\}/g));
+    const text: string = bodyComponent?.text || '';
+    const matches: RegExpMatchArray[] = Array.from(text.matchAll(/\{\{(\d+)\}\}/g));
     if (matches.length === 0) return [];
     return Array.from(new Set(matches.map((m) => parseInt(m[1], 10)))).sort((a, b) => a - b);
   });
@@ -109,8 +109,8 @@
     if (tpl && tpl.id !== initializedForTemplateId) {
       initializedForTemplateId = tpl.id;
       const initialMap: Record<string, string> = {};
-      const text = tpl.components?.find((c: any) => c.type === 'BODY')?.text || '';
-      const matches = Array.from(text.matchAll(/\{\{(\d+)\}\}/g));
+      const text: string = tpl.components?.find((c: any) => c.type === 'BODY')?.text || '';
+      const matches: RegExpMatchArray[] = Array.from(text.matchAll(/\{\{(\d+)\}\}/g));
       const indices = Array.from(new Set(matches.map((m) => parseInt(m[1], 10)))).sort((a, b) => a - b);
       indices.forEach((idx) => {
         initialMap[String(idx)] = (idx === 1 && contactName) ? contactName : '';

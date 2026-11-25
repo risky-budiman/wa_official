@@ -3,12 +3,14 @@
 // ===========================================
 
 import { Elysia, t } from 'elysia';
-import { authPlugin } from '../../middleware/auth';
+import { authPlugin, invalidateAccountCache } from '../../middleware/auth';
 import { AuthService } from './auth.service';
 import { db } from '../../config/database';
 import { users } from '../../db/schema/users';
 import { organizations } from '../../db/schema/organizations';
+import { superAdmins } from '../../db/schema/super-admins';
 import { eq, and, ne } from 'drizzle-orm';
+import { RULES, getClientIp, hit, reset, retryAfterSeconds, tooManyRequests } from '../../middleware/rate-limit';
 
 export const authRoutes = new Elysia({ prefix: '/auth' })
   .use(authPlugin)
@@ -16,7 +18,13 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
   // ─── POST /auth/register ───────────────────
   .post(
     '/register',
-    async ({ body, jwt, set }) => {
+    async ({ body, jwt, set, request, server }) => {
+      // 🔒 Rate limit registrations per IP
+      const ipKey = `register:ip:${getClientIp(request, server)}`;
+      const wait = retryAfterSeconds(ipKey, RULES.registerPerIp);
+      if (wait > 0) return tooManyRequests(set, wait);
+      hit(ipKey, RULES.registerPerIp);
+
       try {
         const user = await AuthService.register(body);
 
@@ -63,9 +71,20 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
   // ─── POST /auth/login ─────────────────────
   .post(
     '/login',
-    async ({ body, jwt, set }) => {
+    async ({ body, jwt, set, request, server }) => {
+      // 🔒 Brute-force protection: limit FAILED attempts per account and per IP
+      const portal = body.portalType || 'TENANT';
+      const accountKey = `login:acct:${portal}:${String(body.email || '').trim().toLowerCase()}`;
+      const ipKey = `login:ip:${getClientIp(request, server)}`;
+      const wait = Math.max(
+        retryAfterSeconds(accountKey, RULES.loginPerAccount),
+        retryAfterSeconds(ipKey, RULES.loginPerIp)
+      );
+      if (wait > 0) return tooManyRequests(set, wait);
+
       try {
         const user = await AuthService.login(body);
+        reset(accountKey);
 
         // Generate JWT token
         const token = await jwt.sign({
@@ -81,6 +100,8 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
           user,
         };
       } catch (error: any) {
+        hit(accountKey, RULES.loginPerAccount);
+        hit(ipKey, RULES.loginPerIp);
         set.status = 401;
         return {
           success: false,
@@ -107,6 +128,27 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
 
     try {
       const [dbUser] = await db.select().from(users).where(eq(users.id, user.id)).limit(1);
+
+      // Platform staff (Super Admin / Finance / Support) live in the super_admins table
+      if (!dbUser) {
+        const [sa] = await db.select().from(superAdmins).where(eq(superAdmins.id, user.id)).limit(1);
+        if (sa) {
+          return {
+            success: true,
+            user: {
+              id: sa.id,
+              email: sa.email,
+              fullName: sa.fullName,
+              role: sa.role,
+              organizationId: null,
+              organizationName: 'Platform Administrator (Independen)',
+              isOnline: true,
+              isPrimaryAdmin: Boolean(sa.isPrimaryAdmin),
+            },
+          };
+        }
+      }
+
       const [org] = (dbUser?.organizationId)
         ? await db.select().from(organizations).where(eq(organizations.id, dbUser.organizationId)).limit(1)
         : [null];
@@ -121,7 +163,7 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
           organizationId: dbUser?.organizationId || null,
           organizationName: org?.name || 'Platform Administrator (Independen)',
           isOnline: dbUser?.isOnline ?? true,
-          isPrimaryAdmin: Boolean(dbUser?.isPrimaryAdmin || dbUser?.email === 'admin@perusahaan.com' || dbUser?.email === 'riskybudiman1@gmail.com'),
+          isPrimaryAdmin: Boolean(dbUser?.isPrimaryAdmin),
         },
       };
     } catch {
@@ -149,7 +191,17 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
         return { success: false, error: 'Unauthorized' };
       }
 
-      const [dbUser] = await db.select().from(users).where(eq(users.id, user.id)).limit(1);
+      // Tenant users live in `users`; platform staff live in `super_admins`
+      const [tenantUser] = await db.select().from(users).where(eq(users.id, user.id)).limit(1);
+      const [platformUser] = tenantUser
+        ? [undefined]
+        : await db.select().from(superAdmins).where(eq(superAdmins.id, user.id)).limit(1);
+      const isPlatform = !tenantUser && !!platformUser;
+      const dbUser = (tenantUser || platformUser) as
+        | { id: string; email: string; fullName: string; role: any; passwordHash: string; organizationId?: string | null }
+        | undefined;
+      const accountTable: any = isPlatform ? superAdmins : users;
+
       if (!dbUser) {
         set.status = 404;
         return { success: false, error: 'Pengguna tidak ditemukan' };
@@ -164,9 +216,9 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
       if (body.email && body.email.trim().toLowerCase() !== dbUser.email.toLowerCase()) {
         const cleanEmail = body.email.trim().toLowerCase();
         const [existing] = await db
-          .select({ id: users.id })
-          .from(users)
-          .where(and(eq(users.email, cleanEmail), ne(users.id, user.id)))
+          .select({ id: accountTable.id })
+          .from(accountTable)
+          .where(and(eq(accountTable.email, cleanEmail), ne(accountTable.id, user.id)))
           .limit(1);
 
         if (existing) {
@@ -177,15 +229,25 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
       }
 
       if (body.newPassword && body.newPassword.trim()) {
-        if (body.currentPassword) {
-          const isCurrentValid = await Bun.password.verify(body.currentPassword, dbUser.passwordHash).catch(() => false);
-          if (!isCurrentValid) {
-            const { verify } = await import('argon2');
-            const isArgonValid = await verify(dbUser.passwordHash, body.currentPassword).catch(() => false);
-            if (!isArgonValid) {
-              set.status = 400;
-              return { success: false, error: 'Password saat ini salah.' };
-            }
+        // 🔒 Limit wrong current-password guesses (stolen-token scenario)
+        const pwdKey = `pwdchange:user:${user.id}`;
+        const pwdWait = retryAfterSeconds(pwdKey, RULES.passwordChangePerUser);
+        if (pwdWait > 0) return tooManyRequests(set, pwdWait);
+
+        // 🔒 Changing the password always requires the current password
+        if (!body.currentPassword || !body.currentPassword.trim()) {
+          set.status = 400;
+          return { success: false, error: 'Masukkan password saat ini untuk mengganti password.' };
+        }
+
+        const isCurrentValid = await Bun.password.verify(body.currentPassword, dbUser.passwordHash).catch(() => false);
+        if (!isCurrentValid) {
+          const { verify } = await import('argon2');
+          const isArgonValid = await verify(dbUser.passwordHash, body.currentPassword).catch(() => false);
+          if (!isArgonValid) {
+            hit(pwdKey, RULES.passwordChangePerUser);
+            set.status = 400;
+            return { success: false, error: 'Password saat ini salah.' };
           }
         }
 
@@ -197,7 +259,8 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
       }
 
       if (Object.keys(updateData).length > 0) {
-        await db.update(users).set(updateData).where(eq(users.id, user.id));
+        await db.update(accountTable).set(updateData).where(eq(accountTable.id, user.id));
+        invalidateAccountCache(user.id);
       }
 
       const finalEmail = updateData.email || dbUser.email;
@@ -234,7 +297,13 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
   // ─── GET /auth/org/:id — Validate Organization ID (for Join Org Registration) ──
   .get(
     '/org/:id',
-    async ({ params, set }) => {
+    async ({ params, set, request, server }) => {
+      // 🔒 Prevent organization ID enumeration
+      const ipKey = `orglookup:ip:${getClientIp(request, server)}`;
+      const wait = retryAfterSeconds(ipKey, RULES.orgLookupPerIp);
+      if (wait > 0) return tooManyRequests(set, wait);
+      hit(ipKey, RULES.orgLookupPerIp);
+
       try {
         const org = await AuthService.lookupOrganization(params.id);
         if (!org) {

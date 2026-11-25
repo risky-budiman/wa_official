@@ -87,4 +87,157 @@
 /* Smooth Transitions for Theme Switch */
 body {
   transition: background-color 0.2s ease, color 0.2s ease;
+  font-feature-settings: 'cv11', 'ss01';
+  text-rendering: optimizeLegibility;
+}
+
+/* ===========================================
+   Design system — shared building blocks
+   Use these for new UI so every page looks the same.
+   =========================================== */
+@theme {
+  --radius-card: 1rem;
+  --shadow-card: 0 1px 2px 0 rgb(15 23 42 / 0.04), 0 1px 3px 0 rgb(15 23 42 / 0.06);
+  --shadow-pop: 0 12px 32px -8px rgb(15 23 42 / 0.18), 0 4px 12px -4px rgb(15 23 42 / 0.08);
+}
+
+@layer base {
+  /* Clear, consistent keyboard focus everywhere (accessibility) */
+  :where(a, button, input, select, textarea, [tabindex]):focus-visible {
+    outline: 2px solid var(--color-brand-500);
+    outline-offset: 2px;
+    border-radius: 0.5rem;
+  }
+
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']) {
+    cursor: pointer;
+  }
+
+  ::selection {
+    background: var(--color-brand-500);
+    color: white;
+  }
+}
+
+@layer components {
+  /* Surfaces */
+  .ui-card {
+    @apply rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900;
+    box-shadow: var(--shadow-card);
+  }
+
+  /* Buttons */
+  .ui-btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-3.5 py-2 text-sm font-semibold transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .ui-btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-3.5 py-2 text-sm font-semibold transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50 bg-emerald-600 text-white shadow-sm hover:bg-emerald-700 dark:bg-emerald-500 dark:text-slate-950 dark:hover:bg-emerald-400;
+  }
+  .ui-btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-3.5 py-2 text-sm font-semibold transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50 border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800;
+  }
+  .ui-btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-3.5 py-2 text-sm font-semibold transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50 text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white;
+  }
+  .ui-icon-btn {
+    @apply relative inline-flex h-9 w-9 items-center justify-center rounded-xl text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white;
+  }
+
+  /* Form controls */
+  /* Inbox composer */
+  .composer-tool {
+    @apply inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl transition-colors hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-slate-700 dark:hover:text-white;
+  }
+  .attach-item {
+    @apply flex w-full cursor-pointer items-center gap-3 rounded-lg px-2.5 py-2 text-left text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800;
+  }
+  .attach-icon {
+    @apply flex h-8 w-8 shrink-0 items-center justify-center rounded-lg;
+  }
+  .ui-input {
+    @apply w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm text-slate-900 placeholder:text-slate-400 transition focus:border-emerald-500 focus:outline-none focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:placeholder:text-slate-500;
+  }
+
+  /* Standard page container (all app pages) */
+  .ui-page {
+    @apply mx-auto w-full max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8;
+  }
+
+  /* Status pill */
+  .ui-pill {
+    @apply inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ===========================================
+   Data tables — add class="ui-table" to a <table>.
+   Intentionally NOT inside a cascade layer so it normalises
+   existing tables without rewriting every cell's utility classes.
+   =========================================== */
+.ui-table {
+  font-size: 0.8125rem;
+}
+.ui-table thead tr {
+  background: rgb(248 250 252);
+  border-bottom: 1px solid rgb(226 232 240);
+}
+.ui-table thead th {
+  padding: 0.75rem 1rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgb(100 116 139);
+  white-space: nowrap;
+}
+.ui-table tbody td {
+  padding: 0.875rem 1rem;
+  vertical-align: middle;
+}
+.ui-table tbody tr {
+  border-top: 1px solid rgb(241 245 249);
+  transition: background-color 0.15s ease;
+}
+.ui-table tbody tr:first-child {
+  border-top: 0;
+}
+.ui-table tbody tr:hover {
+  background: rgb(248 250 252 / 0.8);
+}
+.dark .ui-table thead tr {
+  background: rgb(2 6 23 / 0.4);
+  border-bottom-color: rgb(30 41 59);
+}
+.dark .ui-table thead th {
+  color: rgb(148 163 184);
+}
+.dark .ui-table tbody tr {
+  border-top-color: rgb(30 41 59 / 0.7);
+}
+.dark .ui-table tbody tr:hover {
+  background: rgb(30 41 59 / 0.35);
+}
+
+/* ───────────────────────────────────────────
+   Chat canvas — soft background behind bubbles
+   ─────────────────────────────────────────── */
+.chat-canvas {
+  background-color: rgb(241 245 249 / 0.7);
+  background-image: radial-gradient(rgb(148 163 184 / 0.18) 1px, transparent 1px);
+  background-size: 18px 18px;
+}
+.dark .chat-canvas {
+  background-color: rgb(2 6 23);
+  background-image: radial-gradient(rgb(51 65 85 / 0.35) 1px, transparent 1px);
 }

@@ -114,17 +114,53 @@ export async function testConnection(): Promise<void> {
       // Seed default Primary Super Admin into super_admins table if table is completely empty
       const [saRows]: any = await connection.query(`SELECT id FROM super_admins LIMIT 1;`);
       if (!saRows || saRows.length === 0) {
+        // 🔒 First install: create ONE primary Super Admin with a random password (printed once).
+        // Email can be set via INITIAL_SUPER_ADMIN_EMAIL / password via INITIAL_SUPER_ADMIN_PASSWORD in .env.
         const { hash } = await import('argon2');
-        const defaultHash = await hash('admin12345');
+        const { nanoid } = await import('nanoid');
+        const initialEmail = (process.env.INITIAL_SUPER_ADMIN_EMAIL || 'admin@perusahaan.com').trim().toLowerCase();
+        const initialPassword = process.env.INITIAL_SUPER_ADMIN_PASSWORD || nanoid(16);
+        const initialHash = await hash(initialPassword);
         await connection.query(`
           INSERT IGNORE INTO super_admins (id, email, password_hash, full_name, role, status, is_primary_admin, created_at, updated_at)
-          VALUES 
-            ('sa-primary-001', 'admin@perusahaan.com', ?, 'Administrator Utama SaaS', 'SUPER_ADMIN', 'ACTIVE', 1, NOW(), NOW()),
-            ('sa-primary-002', 'riskybudiman1@gmail.com', ?, 'Risky Budiman (Super Admin)', 'SUPER_ADMIN', 'ACTIVE', 1, NOW(), NOW()),
-            ('sa-finance-001', 'finance@perusahaan.com', ?, 'Dewi Sartika (Finance Staff)', 'ADMIN_FINANCE', 'ACTIVE', 0, NOW(), NOW());
-        `, [defaultHash, defaultHash, defaultHash]);
-        console.log('✅ Default Platform Super Admins seeded into super_admins table');
+          VALUES ('sa-primary-001', ?, ?, 'Administrator Utama SaaS', 'SUPER_ADMIN', 'ACTIVE', 1, NOW(), NOW());
+        `, [initialEmail, initialHash]);
+        console.log('╔══════════════════════════════════════════════════════════════╗');
+        console.log('║  ✅ Akun Super Admin pertama dibuat (portal /administrator)  ║');
+        console.log(`║  Email    : ${initialEmail}`);
+        if (!process.env.INITIAL_SUPER_ADMIN_PASSWORD) {
+          console.log(`║  Password : ${initialPassword}   ← CATAT & SEGERA GANTI`);
+        }
+        console.log('╚══════════════════════════════════════════════════════════════╝');
       }
+
+      // 🔒 Warn loudly if any active platform account still uses the old well-known default password
+      try {
+        const [staffRows]: any = await connection.query(
+          `SELECT email, password_hash FROM super_admins WHERE status = 'ACTIVE'
+           UNION ALL
+           SELECT CONCAT(email, ' (baris lama di tabel users)'), password_hash FROM users
+           WHERE status = 'ACTIVE' AND role IN ('SUPER_ADMIN', 'CO_SUPER_ADMIN', 'ADMIN_FINANCE', 'ADMIN_SUPPORT');`
+        );
+        const { verify } = await import('argon2');
+        const weak: string[] = [];
+        for (const row of staffRows || []) {
+          let isDefault = false;
+          try { isDefault = await verify(row.password_hash, 'admin12345'); } catch (_) {}
+          if (!isDefault) {
+            try { isDefault = await Bun.password.verify('admin12345', row.password_hash); } catch (_) {}
+          }
+          if (isDefault) weak.push(row.email);
+        }
+        if (weak.length > 0) {
+          console.warn('');
+          console.warn('🚨🚨 PERINGATAN KEAMANAN: akun platform berikut masih memakai password default "admin12345":');
+          for (const e of weak) console.warn(`   - ${e}`);
+          console.warn('   Segera ganti lewat portal /administrator (menu Profil) atau jalankan:');
+          console.warn('   bun run src/scripts/reset-password.ts <email> <password-baru>');
+          console.warn('');
+        }
+      } catch (_) {}
 
       // Cleanup users table: remove platform admins from users table so users table only contains tenant agents/admins
       await connection.query(`

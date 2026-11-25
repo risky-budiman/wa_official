@@ -1,4 +1,7 @@
 <script lang="ts">
+  import Alert from '$lib/components/ui/Alert.svelte';
+  import StatCard from '$lib/components/ui/StatCard.svelte';
+  import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import { apiRequest } from '$lib/api/client';
   import { onMount } from 'svelte';
   import {
@@ -88,7 +91,8 @@
       body: JSON.stringify({
         fullName: newName.trim(),
         email: newEmail.trim(),
-        password: newPassword.trim() || 'admin12345',
+        // Empty → server generates a strong random password and returns it once
+        ...(newPassword.trim() ? { password: newPassword.trim() } : {}),
         role: newRole,
       }),
     });
@@ -100,9 +104,12 @@
       newEmail = '';
       newPassword = '';
       newRole = 'AGENT';
-      successMsg = 'Pengguna baru berhasil ditambahkan!';
+      const generated = (res as any).item?.generatedPassword;
+      successMsg = generated
+        ? `Pengguna baru berhasil ditambahkan! Password sementara: ${generated} — catat & berikan ke pengguna (tidak akan ditampilkan lagi).`
+        : 'Pengguna baru berhasil ditambahkan!';
       await loadUsers();
-      setTimeout(() => (successMsg = null), 4000);
+      setTimeout(() => (successMsg = null), generated ? 60000 : 4000);
     } else {
       errorMsg = res.error || 'Gagal menambahkan pengguna baru';
     }
@@ -197,92 +204,43 @@
   });
 </script>
 
-<div class="p-6 md:p-8 max-w-7xl mx-auto space-y-6">
-  <!-- Header & Actions -->
-  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-    <div>
-      <h2 class="text-xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2.5">
-        <div class="w-8 h-8 rounded-xl bg-emerald-500/10 dark:bg-emerald-950/60 flex items-center justify-center text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-          <Users class="w-4 h-4" />
-        </div>
-        Manajemen Tim & Pengguna (RBAC)
-      </h2>
-      <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
-        Kelola anggota tim, edit hak akses peran (Admin/SPV/Agent), dan atur status Online/Offline agen.
-      </p>
-    </div>
-
-    <div class="flex items-center gap-2.5">
-      <button
-        onclick={loadUsers}
-        class="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 transition cursor-pointer"
-        title="Muat Ulang"
-      >
-        <RefreshCw class="w-4 h-4 {isLoading ? 'animate-spin' : ''}" />
+<div class="ui-page">
+  <PageHeader
+    title="Tim & Pengguna"
+    description="Kelola anggota tim, atur peran (Administrator, Supervisor, Agent) dan status ketersediaan agen."
+    icon={Users}
+  >
+    {#snippet actions()}
+      <button onclick={loadUsers} class="ui-btn-secondary px-2.5" title="Muat ulang" aria-label="Muat ulang">
+        <RefreshCw class="h-4 w-4 {isLoading ? 'animate-spin' : ''}" />
       </button>
-
-      <button
-        onclick={() => (showAddModal = true)}
-        class="py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-2 shadow-md shadow-emerald-600/30 transition cursor-pointer"
-      >
-        <UserPlus class="w-4 h-4" />
-        Tambah Pengguna Baru
+      <button onclick={() => (showAddModal = true)} class="ui-btn-primary">
+        <UserPlus class="h-4 w-4" />
+        Tambah Pengguna
       </button>
-    </div>
-  </div>
+    {/snippet}
+  </PageHeader>
 
   <!-- Notification Banners -->
   {#if successMsg}
-    <div class="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex items-center gap-2 text-xs text-emerald-800 dark:text-emerald-300 font-bold shadow-sm">
-      <Check class="w-4 h-4 shrink-0 text-emerald-600" />
-      <span>{successMsg}</span>
-    </div>
+    <Alert tone="success" message={successMsg} />
   {/if}
 
   {#if errorMsg}
-    <div class="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 flex items-center gap-2 text-xs text-rose-800 dark:text-rose-300 font-bold shadow-sm">
-      <AlertCircle class="w-4 h-4 shrink-0 text-rose-600" />
-      <span>{errorMsg}</span>
-    </div>
+    <Alert tone="error" message={errorMsg} />
   {/if}
 
   <!-- Stats Grid -->
-  <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-    <div class="bg-white dark:bg-slate-900/70 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-4">
-      <div class="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 flex items-center justify-center text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 shrink-0">
-        <Users class="w-6 h-6" />
-      </div>
-      <div>
-        <span class="text-slate-500 dark:text-slate-400 text-xs font-semibold block">Total Anggota Tim</span>
-        <span class="text-xl font-extrabold text-slate-900 dark:text-white mt-0.5 block">{userList.length}</span>
-      </div>
-    </div>
-
-    <div class="bg-white dark:bg-slate-900/70 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-4">
-      <div class="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 flex items-center justify-center text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 shrink-0">
-        <CircleDot class="w-6 h-6" />
-      </div>
-      <div>
-        <span class="text-slate-500 dark:text-slate-400 text-xs font-semibold block">Agen Online (Siap Melayani)</span>
-        <span class="text-xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-0.5 block">{onlineCount}</span>
-      </div>
-    </div>
-
-    <div class="bg-white dark:bg-slate-900/70 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-4">
-      <div class="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 shrink-0">
-        <Radio class="w-6 h-6" />
-      </div>
-      <div>
-        <span class="text-slate-500 dark:text-slate-400 text-xs font-semibold block">Agen Offline</span>
-        <span class="text-xl font-extrabold text-slate-600 dark:text-slate-300 mt-0.5 block">{offlineCount}</span>
-      </div>
-    </div>
+  <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+    <StatCard label="Total Anggota Tim" value={userList.length} icon={Users} tone="emerald" />
+    <StatCard label="Agen Online" value={onlineCount} icon={CircleDot} tone="emerald" hint="Siap menerima percakapan" hintTone="emerald" />
+    <StatCard label="Agen Offline" value={offlineCount} icon={Radio} tone="slate" hint="Tidak menerima percakapan baru" />
   </div>
 
   <!-- Users Table Card -->
-  <div class="bg-white dark:bg-slate-900/70 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+  <div class="ui-card overflow-hidden">
     <div class="overflow-x-auto">
-      <table class="w-full text-left border-collapse text-xs">
+      <table class="ui-table w-full text-left border-collapse">
         <thead>
           <tr class="border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/50 text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wider text-[10px]">
             <th class="py-3.5 px-4">Nama Lengkap</th>
@@ -436,7 +394,7 @@
         </div>
 
         <div>
-          <label for="new_user_pwd" class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Kata Sandi (Default: admin12345)</label>
+          <label for="new_user_pwd" class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Kata Sandi (kosongkan = dibuatkan otomatis)</label>
           <input
             id="new_user_pwd"
             type="password"

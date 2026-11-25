@@ -57,13 +57,51 @@ export class AnalyticsService {
       .groupBy(users.id, users.fullName, users.email, users.role)
       .orderBy(desc(sql`COUNT(${conversations.id})`));
 
+    // 4. Real SLA timings (previously hardcoded placeholder values)
+    //    FRT = first non-internal OUTBOUND reply after the customer's first INBOUND message
+    const [frtRows]: any = await db.execute(sql`
+      SELECT c.assigned_user_id AS uid,
+             TIMESTAMPDIFF(SECOND, fi.first_in, (
+               SELECT MIN(o.created_at) FROM messages o
+               WHERE o.conversation_id = fi.cid
+                 AND o.direction = 'OUTBOUND'
+                 AND o.is_internal_note = 0
+                 AND o.sender_type <> 'SYSTEM'
+                 AND o.created_at >= fi.first_in
+             )) AS secs
+      FROM (
+        SELECT m.conversation_id AS cid, MIN(m.created_at) AS first_in
+        FROM messages m
+        JOIN conversations c2 ON c2.id = m.conversation_id
+        WHERE c2.organization_id = ${orgId} AND m.direction = 'INBOUND'
+        GROUP BY m.conversation_id
+      ) fi
+      JOIN conversations c ON c.id = fi.cid
+    `);
+
+    //    Ticket duration = opened → last message, for RESOLVED tickets
+    const [artRows]: any = await db.execute(sql`
+      SELECT assigned_user_id AS uid,
+             TIMESTAMPDIFF(SECOND, created_at, last_message_at) AS secs
+      FROM conversations
+      WHERE organization_id = ${orgId} AND status = 'RESOLVED' AND last_message_at IS NOT NULL
+    `);
+
+    const avg = (rows: any[], uid?: string): number | null => {
+      const vals = rows
+        .filter((r) => (uid === undefined || r.uid === uid) && r.secs !== null && Number(r.secs) >= 0)
+        .map((r) => Number(r.secs));
+      return vals.length ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : null;
+    };
+
     return {
       overview: {
         totalResolved: Number(resolvedStats?.totalResolved || 0),
         totalActive: Number(activeStats?.totalActive || 0),
-        avgFirstResponseTime: '1m 42s',
-        avgResolutionTime: '4m 52s',
-        csatScore: '4.85 / 5',
+        avgFirstResponseTime: formatDuration(avg(frtRows)),
+        avgResolutionTime: formatDuration(avg(artRows)),
+        // No customer-satisfaction survey exists yet → null instead of a fake score
+        csatScore: null as string | null,
       },
       agentPerformance: agentStats.map((a) => ({
         id: a.id,
@@ -71,12 +109,25 @@ export class AnalyticsService {
         email: a.email,
         role: a.role,
         resolved: Number(a.resolvedCount),
-        frt: '1m 30s',
-        art: '4m 20s',
-        csat: '4.9/5',
+        frt: formatDuration(avg(frtRows, a.id)),
+        art: formatDuration(avg(artRows, a.id)),
+        csat: null as string | null,
       })),
     };
   }
+}
+
+/** 102 → "1 mnt 42 dtk", 7500 → "2 jam 5 mnt", null → null */
+function formatDuration(totalSeconds: number | null): string | null {
+  if (totalSeconds === null) return null;
+  if (totalSeconds < 60) return `${totalSeconds} dtk`;
+  const days = Math.floor(totalSeconds / 86400);
+  const h = Math.floor((totalSeconds % 86400) / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const sec = totalSeconds % 60;
+  if (days > 0) return `${days} hari ${h} jam`;
+  if (h > 0) return `${h} jam ${m} mnt`;
+  return `${m} mnt ${sec} dtk`;
 }
 
 export const analyticsRoutes = new Elysia({ prefix: '/analytics' })

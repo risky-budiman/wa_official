@@ -6,6 +6,9 @@
   import { apiRequest } from '$lib/api/client';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
+  import { page } from '$app/stores';
+  import { uiStore } from '$lib/stores/ui.svelte';
+  import { findNavItem } from '$lib/navigation';
   import {
     Bell,
     Volume2,
@@ -22,14 +25,21 @@
     ExternalLink,
     Smartphone,
     AlertCircle,
-    CircleDot
+    CircleDot,
+    Menu,
+    ChevronRight
   } from 'lucide-svelte';
 
   interface Props {
     title?: string;
     subtitle?: string;
   }
-  let { title = 'Dashboard', subtitle }: Props = $props();
+  let { title, subtitle }: Props = $props();
+
+  // Page title & breadcrumb come from the shared navigation config (unless a page overrides them)
+  const current = $derived(findNavItem($page.url.pathname));
+  const pageTitle = $derived(title || current?.item.name || 'WhatsApp CRM');
+  const pageSubtitle = $derived(subtitle ?? current?.item.description);
 
   let showNotifications = $state(false);
   let showSecurityModal = $state(false);
@@ -58,81 +68,107 @@
   }
 </script>
 
-<header class="h-16 bg-white dark:bg-slate-900/90 backdrop-blur border-b border-slate-200 dark:border-slate-800 px-6 flex items-center justify-between shrink-0 relative z-30 transition-colors duration-200">
-  <div class="min-w-0">
-    <h2 class="text-base font-bold text-slate-900 dark:text-white tracking-tight truncate">{title}</h2>
-    {#if subtitle}
-      <p class="text-xs text-slate-600 dark:text-slate-400 truncate">{subtitle}</p>
-    {/if}
+<svelte:head>
+  <title>{pageTitle} · WhatsApp CRM</title>
+</svelte:head>
+
+<header class="relative z-30 flex h-16 shrink-0 items-center justify-between gap-4 border-b border-slate-200 bg-white/90 px-4 backdrop-blur transition-colors duration-200 sm:px-6 dark:border-slate-800 dark:bg-slate-900/90">
+  <div class="flex min-w-0 items-center gap-3">
+    <button
+      type="button"
+      class="ui-icon-btn -ml-1 lg:hidden"
+      aria-label="Buka menu"
+      onclick={() => uiStore.openSidebar()}
+    >
+      <Menu class="h-5 w-5" />
+    </button>
+
+    <div class="min-w-0">
+      <!-- Breadcrumb only: the page itself renders its own H1 via <PageHeader> -->
+      <nav aria-label="Breadcrumb" class="flex min-w-0 items-center gap-1.5 text-sm">
+        {#if current}
+          <span class="hidden shrink-0 text-slate-500 sm:inline dark:text-slate-400">{current.section.label}</span>
+          <ChevronRight class="hidden h-3.5 w-3.5 shrink-0 text-slate-300 sm:inline dark:text-slate-600" />
+        {/if}
+        <span class="truncate font-semibold text-slate-900 dark:text-white" aria-current="page">{pageTitle}</span>
+      </nav>
+      {#if pageSubtitle && !current}
+        <p class="truncate text-xs text-slate-500 dark:text-slate-400">{pageSubtitle}</p>
+      {/if}
+    </div>
   </div>
 
-  <div class="flex items-center gap-2.5 sm:gap-3.5">
-    <!-- 🟢/⚪ User Online/Offline Status Pill Toggle -->
+  <div class="flex shrink-0 items-center gap-1.5 sm:gap-2">
+    <!-- Availability (online / offline) -->
     <button
+      type="button"
       onclick={() => authStore.toggleOnline()}
-      class="flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs transition cursor-pointer {authStore.isOnline 
-        ? 'bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 font-bold' 
-        : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400 font-semibold'}"
-      title="Klik untuk mengubah status ketersediaan Anda (Online / Offline)"
+      class="ui-pill transition {authStore.isOnline
+        ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300 dark:hover:bg-emerald-500/15'
+        : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'}"
+      title="Klik untuk mengubah status ketersediaan Anda"
     >
-      <span class="w-2 h-2 rounded-full {authStore.isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}"></span>
-      <span class="text-[11px]">{authStore.isOnline ? '🟢 Online' : '⚪ Offline'}</span>
+      <span class="relative flex h-2 w-2">
+        {#if authStore.isOnline}
+          <span class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60"></span>
+        {/if}
+        <span class="relative inline-flex h-2 w-2 rounded-full {authStore.isOnline ? 'bg-emerald-500' : 'bg-slate-400'}"></span>
+      </span>
+      {authStore.isOnline ? 'Online' : 'Offline'}
     </button>
 
-    <!-- 🟢/🔴 DYNAMIC WhatsApp Connection Health Badge -->
+    <!-- WhatsApp channel health -->
     <button
+      type="button"
       onclick={() => (showWabaModal = true)}
-      class="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs transition cursor-pointer {channelStore.isConnected 
-        ? 'bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300' 
-        : 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400'}"
-      title="Lihat Status Saluran WhatsApp"
+      class="ui-pill hidden transition md:inline-flex {channelStore.isConnected
+        ? 'border-emerald-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800'
+        : 'border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300 dark:hover:bg-rose-500/15'}"
+      title="Lihat status saluran WhatsApp"
     >
-      {#if channelStore.isConnected}
-        <span class="relative flex h-2 w-2">
-          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-          <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-600 dark:bg-emerald-400"></span>
-        </span>
-        <span class="font-semibold text-[11px]">WABA Connected</span>
-      {:else}
-        <span class="relative flex h-2 w-2">
-          <span class="inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
-        </span>
-        <span class="font-semibold text-[11px]">WABA Disconnected</span>
-      {/if}
+      <Smartphone class="h-3.5 w-3.5" />
+      {channelStore.isConnected ? 'WhatsApp Terhubung' : 'WhatsApp Terputus'}
     </button>
 
-    <!-- 🌓 THEME TOGGLE BUTTON -->
+    <span class="mx-1 hidden h-6 w-px bg-slate-200 sm:block dark:bg-slate-700"></span>
+
+    <!-- Theme toggle -->
     <button
+      type="button"
       onclick={() => themeStore.toggle()}
-      class="p-2 rounded-xl text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 transition cursor-pointer"
-      title="Ubah Tema (Light / Dark)"
+      class="ui-icon-btn"
+      title={themeStore.current === 'dark' ? 'Mode terang' : 'Mode gelap'}
+      aria-label="Ubah tema"
     >
       {#if themeStore.current === 'dark'}
-        <Sun class="w-4 h-4 text-amber-400" />
+        <Sun class="h-[18px] w-[18px]" />
       {:else}
-        <Moon class="w-4 h-4 text-indigo-600" />
+        <Moon class="h-[18px] w-[18px]" />
       {/if}
     </button>
 
-    <!-- 🛡️ Security Indicator (Clickable) -->
+    <!-- Security center -->
     <button
+      type="button"
       onclick={() => (showSecurityModal = true)}
-      class="p-2 rounded-xl text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-slate-800 hover:bg-emerald-100 dark:hover:bg-slate-700 border border-emerald-200 dark:border-slate-700 transition cursor-pointer"
+      class="ui-icon-btn hidden sm:inline-flex"
       title="Pusat Keamanan & Enkripsi"
+      aria-label="Pusat keamanan"
     >
-      <ShieldCheck class="w-4 h-4 stroke-[2.5]" />
+      <ShieldCheck class="h-[18px] w-[18px]" />
     </button>
 
     <!-- 🔔 Notification Bell (Clickable with Live Badge) -->
     <div class="relative">
       <button
         onclick={() => (showNotifications = !showNotifications)}
-        class="relative p-2 rounded-xl text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-slate-700 transition cursor-pointer"
-        title="Notifikasi Aktivitas & Pesan Masuk"
+        class="ui-icon-btn"
+        title="Notifikasi"
+        aria-label="Notifikasi"
       >
-        <Bell class="w-4 h-4 {notificationStore.unreadCount > 0 ? 'text-amber-500 animate-bounce' : ''}" />
+        <Bell class="h-[18px] w-[18px]" />
         {#if notificationStore.unreadCount > 0}
-          <span class="absolute -top-1 -right-1 px-1.5 py-0.2 min-w-[18px] text-[9px] font-bold rounded-full bg-rose-500 text-white flex items-center justify-center shadow-md">
+          <span class="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white ring-2 ring-white dark:ring-slate-900">
             {notificationStore.unreadCount > 9 ? '9+' : notificationStore.unreadCount}
           </span>
         {/if}

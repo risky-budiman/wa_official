@@ -42,6 +42,40 @@ if (fs.existsSync(envPath)) {
   }
 }
 
+// ─── JWT secret resolution ────────────────────────────────
+// The default secret is public (it is in the repository), so anyone could forge login tokens with it.
+// If JWT_SECRET is missing/default, use a strong random secret persisted in `.jwt-secret`
+// (created once, git-ignored) so the server still starts and tokens survive restarts.
+const DEFAULT_JWT_SECRET = 'change-this-to-a-random-secret-key-min-32-chars';
+let jwtSecretSource: 'env' | 'file' | 'generated' = 'env';
+
+function resolveJwtSecret(): string {
+  const fromEnv = (process.env.JWT_SECRET || '').trim();
+  if (fromEnv && fromEnv !== DEFAULT_JWT_SECRET && fromEnv.length >= 32) return fromEnv;
+
+  const secretFile = path.resolve(process.cwd(), '.jwt-secret');
+  try {
+    if (fs.existsSync(secretFile)) {
+      const saved = fs.readFileSync(secretFile, 'utf-8').trim();
+      if (saved.length >= 32) {
+        jwtSecretSource = 'file';
+        return saved;
+      }
+    }
+  } catch (_) {}
+
+  const generated = Array.from(crypto.getRandomValues(new Uint8Array(64)))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+  try {
+    fs.writeFileSync(secretFile, generated, { encoding: 'utf-8', mode: 0o600 });
+  } catch (err: any) {
+    console.error(`❌ Tidak dapat menyimpan ${secretFile}: ${err?.message}. Token login akan reset setiap restart.`);
+  }
+  jwtSecretSource = 'generated';
+  return generated;
+}
+
 export const env = {
   // Server
   PORT: Number(process.env.PORT) || 3000,
@@ -62,7 +96,7 @@ export const env = {
   REDIS_PASSWORD: process.env.REDIS_PASSWORD || '',
 
   // JWT
-  JWT_SECRET: process.env.JWT_SECRET || 'change-this-to-a-random-secret-key-min-32-chars',
+  JWT_SECRET: resolveJwtSecret(),
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '7d',
 
   // Meta WhatsApp Cloud API (Dynamic live getters)
@@ -97,8 +131,16 @@ export function validateEnv(): void {
     console.warn(`⚠️  Missing environment variables: ${missing.join(', ')}`);
   }
 
-  if (env.JWT_SECRET === 'change-this-to-a-random-secret-key-min-32-chars') {
-    console.warn('⚠️  WARNING: Using default JWT_SECRET. Please set a secure secret in production!');
+  if (jwtSecretSource !== 'env') {
+    console.warn(
+      jwtSecretSource === 'generated'
+        ? '🔐 JWT_SECRET di .env kosong/default/terlalu pendek → secret acak baru dibuat & disimpan di .jwt-secret. Semua user perlu login ulang sekali.'
+        : '🔐 JWT_SECRET di .env kosong/default → memakai secret acak dari file .jwt-secret.'
+    );
+  }
+
+  if (env.NODE_ENV === 'production' && env.CORS_ORIGIN === '*') {
+    console.warn('⚠️  CORS_ORIGIN=* di production — sebaiknya isi dengan domain frontend (mis. https://crm.domainanda.com).');
   }
 
   console.log(`✅ Environment loaded (${env.NODE_ENV})`);

@@ -13,6 +13,7 @@ import { MessageService } from '../messages/message.service';
 import { AiAgentService } from '../../services/ai-agent.service';
 import { ChatbotService } from '../../services/chatbot.service';
 import type { ConversationStatus } from '../../db/schema/conversations';
+import { getActivePhone } from '../../services/phone-number.service';
 
 export const conversationRoutes = new Elysia({ prefix: '/conversations' })
   .use(authPlugin)
@@ -277,11 +278,7 @@ export const conversationRoutes = new Elysia({ prefix: '/conversations' })
         const orgId = user.orgId;
 
         // 1. Get Phone Number
-        const [phone] = await db
-          .select()
-          .from(phoneNumbers)
-          .where(eq(phoneNumbers.organizationId, orgId))
-          .limit(1);
+        const phone = await getActivePhone(orgId);
 
         const phoneId = phone?.id || 'phone_default';
 

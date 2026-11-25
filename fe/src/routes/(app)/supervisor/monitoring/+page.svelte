@@ -1,4 +1,9 @@
 <script lang="ts">
+  import MetaQuotaCard from '$lib/components/ui/MetaQuotaCard.svelte';
+  import EmptyState from '$lib/components/ui/EmptyState.svelte';
+  import Alert from '$lib/components/ui/Alert.svelte';
+  import StatCard from '$lib/components/ui/StatCard.svelte';
+  import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import { apiRequest } from '$lib/api/client';
   import { authStore } from '$lib/stores/auth.svelte';
   import { onMount, onDestroy } from 'svelte';
@@ -36,6 +41,29 @@
     UserPlus,
     CornerDownRight
   } from 'lucide-svelte';
+
+  /** The conversations API returns nested contact/assignedUser objects; flatten them for this view. */
+  function toMonitoringItem(c: any): MonitoringItem {
+    if (c && c.contactName !== undefined) return c as MonitoringItem; // already flat
+    return {
+      id: c.id,
+      status: c.status,
+      windowExpiresAt: c.windowExpiresAt ?? null,
+      lastMessagePreview: c.lastMessagePreview ?? null,
+      lastMessageAt: c.lastMessageAt,
+      createdAt: c.createdAt,
+      contactId: c.contact?.id ?? '',
+      contactName: c.contact?.name ?? '',
+      contactWaId: c.contact?.waId ?? '',
+      contactEmail: c.contact?.email ?? null,
+      contactCustomAttributes: c.contact?.customAttributes ?? null,
+      assignedUserId: c.assignedUser?.id ?? null,
+      assignedFullName: c.assignedUser?.fullName ?? null,
+      assignedEmail: c.assignedUser?.email ?? null,
+      assignedRole: c.assignedUser?.role ?? null,
+      participants: c.participants,
+    };
+  }
 
   interface MonitoringItem {
     id: string;
@@ -146,13 +174,13 @@
 
     try {
       const [convRes, usersRes, quotaRes] = await Promise.all([
-        apiRequest<{ items: MonitoringItem[] }>('/conversations?limit=100'),
+        apiRequest<{ items: any[] }>('/conversations?limit=100'),
         apiRequest<{ items: TeamUser[] }>('/users'),
         apiRequest<{ quota: MetaQuotaData }>('/settings/waba/quota'),
       ]);
 
       if (convRes.success && convRes.items) {
-        activeChats = convRes.items;
+        activeChats = convRes.items.map(toMonitoringItem);
       }
       if (usersRes.success && usersRes.items) {
         teamUsers = usersRes.items;
@@ -257,14 +285,14 @@
 
   // Calculate 24-hr WhatsApp Session Window Status
   function getWindowStatus(expiresAt: string | null) {
-    if (!expiresAt) return { isExpired: true, text: 'Kadaluarsa', hours: 0 };
+    if (!expiresAt) return { isExpired: true, text: 'Sesi habis', hours: 0 };
     const diff = new Date(expiresAt).getTime() - Date.now();
-    if (diff <= 0) return { isExpired: true, text: '24-Jam Berakhir', hours: 0 };
+    if (diff <= 0) return { isExpired: true, text: 'Sesi habis', hours: 0 };
     const hours = Math.floor(diff / (1000 * 60 * 60));
     const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
     return {
       isExpired: false,
-      text: `${hours}j ${mins}m tersisa`,
+      text: `Sesi ${hours}j ${mins}m`,
       hours,
     };
   }
@@ -336,333 +364,135 @@
   });
 </script>
 
-<div class="p-6 md:p-8 max-w-7xl mx-auto space-y-6">
-  <!-- Header Bar -->
-  <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-    <div>
-      <div class="flex items-center gap-3">
-        <div class="p-2.5 rounded-2xl bg-amber-500/10 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400">
-          <Activity class="w-6 h-6" />
-        </div>
-        <div>
-          <div class="flex items-center gap-2">
-            <h2 class="text-xl font-extrabold text-slate-900 dark:text-white tracking-tight">Live Monitoring Tim</h2>
-            <span class="px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold border border-emerald-300 dark:border-emerald-800 flex items-center gap-1.5 font-mono animate-pulse">
-              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span> LIVE FEED
-            </span>
-          </div>
-          <p class="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
-            Pantau seluruh sesi chat aktif, beban kerja agen, dan berikan bantuan via catatan internal (whispering).
-          </p>
-        </div>
-      </div>
-    </div>
-
-    <!-- Controls & View Mode Selector -->
-    <div class="flex flex-wrap items-center gap-2.5">
-      <!-- Auto-refresh switch -->
+<div class="ui-page">
+  <PageHeader
+    title="Monitoring Tim"
+    description="Pantau percakapan aktif dan beban kerja agen, lalu bantu lewat catatan internal tanpa diketahui pelanggan."
+    icon={Activity}
+  >
+    {#snippet meta()}
+      <span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-inset ring-emerald-600/15 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-400/20">
+        <span class="h-1.5 w-1.5 rounded-full bg-emerald-500 {autoRefreshEnabled ? 'animate-pulse' : 'opacity-40'}"></span>
+        {autoRefreshEnabled ? 'Live · diperbarui tiap 10 detik' : 'Pembaruan otomatis mati'}
+      </span>
+    {/snippet}
+    {#snippet actions()}
       <button
         onclick={() => (autoRefreshEnabled = !autoRefreshEnabled)}
-        class="py-2 px-3 rounded-xl border text-xs font-bold flex items-center gap-2 transition cursor-pointer {autoRefreshEnabled
-          ? 'bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
-          : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500'}"
-        title="Otomatis menyegarkan feed setiap 10 detik"
+        class="ui-btn-secondary"
+        aria-pressed={autoRefreshEnabled}
+        title="Otomatis menyegarkan data setiap 10 detik"
       >
-        <Timer class="w-3.5 h-3.5 {autoRefreshEnabled ? 'text-emerald-500' : 'text-slate-400'}" />
-        <span>Auto-Sync: {autoRefreshEnabled ? 'ON (10s)' : 'OFF'}</span>
+        <Timer class="h-4 w-4 {autoRefreshEnabled ? 'text-emerald-500' : 'text-slate-400'}" />
+        Auto {autoRefreshEnabled ? 'aktif' : 'mati'}
       </button>
-
-      <!-- Manual Refresh Button -->
-      <button
-        onclick={() => loadData(false)}
-        disabled={isRefreshing}
-        class="py-2 px-3 rounded-xl bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs flex items-center gap-1.5 shadow-2xs transition cursor-pointer disabled:opacity-60"
-      >
-        <RefreshCw class="w-3.5 h-3.5 {isRefreshing ? 'animate-spin text-emerald-500' : ''}" />
-        <span>Segarkan</span>
+      <button onclick={() => loadData(false)} disabled={isRefreshing} class="ui-btn-secondary px-2.5" title="Muat ulang" aria-label="Muat ulang">
+        <RefreshCw class="h-4 w-4 {isRefreshing ? 'animate-spin' : ''}" />
       </button>
+    {/snippet}
+  </PageHeader>
 
-      <!-- View Switcher -->
-      <div class="flex items-center bg-slate-100 dark:bg-slate-950 p-1 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-semibold">
-        <button
-          onclick={() => (viewMode = 'grid')}
-          class="px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition cursor-pointer {viewMode === 'grid'
-            ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs'
-            : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}"
-          title="Tampilan Kartu Obrolan"
-        >
-          <LayoutGrid class="w-3.5 h-3.5" />
-          <span>Kartu</span>
-        </button>
-
-        <button
-          onclick={() => (viewMode = 'workload')}
-          class="px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition cursor-pointer {viewMode === 'workload'
-            ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-xs'
-            : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}"
-          title="Tampilan Matriks Beban Kerja Tim"
-        >
-          <Users class="w-3.5 h-3.5" />
-          <span>Beban Tim</span>
-        </button>
-
-        <button
-          onclick={() => (viewMode = 'kanban')}
-          class="px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition cursor-pointer {viewMode === 'kanban'
-            ? 'bg-white dark:bg-slate-800 text-amber-600 dark:text-amber-400 shadow-xs'
-            : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'}"
-          title="Tampilan Papan Kolom Agen"
-        >
-          <Columns3 class="w-3.5 h-3.5" />
-          <span>Kanban</span>
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Toast Notification -->
   {#if feedbackToast}
-    <div class="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/70 border border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 text-xs font-semibold flex items-center justify-between shadow-sm animate-fadeIn">
-      <div class="flex items-center gap-2">
-        <CheckCircle2 class="w-4 h-4 text-emerald-600 shrink-0" />
-        <span>{feedbackToast}</span>
-      </div>
-      <button onclick={() => (feedbackToast = null)} class="text-slate-400 hover:text-slate-600 cursor-pointer">
-        <X class="w-4 h-4" />
-      </button>
-    </div>
+    <Alert tone="success" message={feedbackToast} ondismiss={() => (feedbackToast = null)} />
   {/if}
 
-  <!-- Meta 24-Hour Messaging Limit Quota Monitor Card -->
   {#if metaQuota}
-    <div class="p-5 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900 to-indigo-950/90 border border-indigo-500/20 text-white shadow-md space-y-4">
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div class="flex items-center gap-3">
-          <div class="p-2.5 rounded-2xl bg-amber-500/10 text-amber-400 border border-amber-500/20 shrink-0">
-            <Flame class="w-5 h-5" />
-          </div>
-          <div>
-            <div class="flex items-center gap-2 flex-wrap">
-              <h3 class="text-sm font-bold text-white tracking-wide">Monitor Limit Pesan Meta (24 Jam)</h3>
-              <span class="px-2 py-0.5 rounded-md bg-indigo-500/30 text-indigo-300 text-[10px] font-mono font-bold border border-indigo-500/40">
-                {metaQuota.tierDisplay}
-              </span>
-            </div>
-            <p class="text-xs text-slate-400 mt-0.5">
-              Jendela bergulir 24 jam untuk pesan bisnis ({metaQuota.resetWindow})
-            </p>
-          </div>
-        </div>
-
-        <div class="flex items-center gap-2">
-          <!-- Quality Rating Badge -->
-          <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800/90 border border-slate-700 text-xs">
-            <span class="text-slate-400 text-[11px]">Kualitas Nomor:</span>
-            <span class="font-bold flex items-center gap-1 font-mono {metaQuota.qualityRating === 'GREEN' ? 'text-emerald-400' : metaQuota.qualityRating === 'YELLOW' ? 'text-amber-400' : 'text-rose-400'}">
-              <span class="w-2 h-2 rounded-full {metaQuota.qualityRating === 'GREEN' ? 'bg-emerald-400 animate-pulse' : metaQuota.qualityRating === 'YELLOW' ? 'bg-amber-400' : 'bg-rose-400'}"></span>
-              {metaQuota.qualityRating === 'GREEN' ? 'TINGGI (GREEN)' : metaQuota.qualityRating === 'YELLOW' ? 'SEDANG (YELLOW)' : 'RENDAH (RED)'}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Quota Meter Progress & Breakdown Grid -->
-      <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center pt-3 border-t border-slate-800">
-        <!-- Progress Bar & Percentage (Left 7 Cols) -->
-        <div class="lg:col-span-7 space-y-2">
-          <div class="flex items-center justify-between text-xs">
-            <div class="flex items-center gap-2">
-              <span class="text-slate-300 font-semibold">Penggunaan Kuota:</span>
-              <span class="text-white font-black text-sm font-mono">{metaQuota.totalUsed.toLocaleString('id-ID')} / {metaQuota.dailyLimit.toLocaleString('id-ID')} Chat</span>
-            </div>
-            <span class="font-mono font-bold {metaQuota.usedPercentage >= 90 ? 'text-rose-400' : metaQuota.usedPercentage >= 70 ? 'text-amber-400' : 'text-emerald-400'}">
-              {metaQuota.usedPercentage}% Terpakai ({metaQuota.remainingQuota.toLocaleString('id-ID')} Sisa)
-            </span>
-          </div>
-
-          <!-- Dynamic Multi-stage Progress Bar -->
-          <div class="w-full h-3 bg-slate-800 rounded-full overflow-hidden p-0.5 border border-slate-700/80">
-            <div
-              class="h-full rounded-full transition-all duration-700 bg-gradient-to-r {metaQuota.usedPercentage >= 90
-                ? 'from-amber-500 to-rose-500'
-                : metaQuota.usedPercentage >= 70
-                  ? 'from-emerald-500 to-amber-500'
-                  : 'from-indigo-500 to-emerald-400'}"
-              style="width: {Math.max(metaQuota.usedPercentage, 2)}%"
-            ></div>
-          </div>
-        </div>
-
-        <!-- Breakdown Stats (Right 5 Cols) -->
-        <div class="lg:col-span-5 grid grid-cols-3 gap-2 text-center">
-          <div class="p-2.5 rounded-xl bg-slate-800/70 border border-slate-700/60">
-            <span class="text-[10px] text-slate-400 block font-semibold">Kontak Dilayani</span>
-            <span class="text-xs font-bold text-white font-mono">{metaQuota.uniqueContactsReached.toLocaleString('id-ID')}</span>
-          </div>
-          <div class="p-2.5 rounded-xl bg-slate-800/70 border border-slate-700/60" title="Balasan chat langsung oleh CS tidak memotong batas kuota 1.000 Meta">
-            <span class="text-[10px] text-emerald-400 block font-semibold">Balasan CS (Bebas)</span>
-            <span class="text-xs font-bold text-emerald-400 font-mono">{metaQuota.csReplies24h.toLocaleString('id-ID')}</span>
-          </div>
-          <div class="p-2.5 rounded-xl bg-slate-800/70 border border-slate-700/60" title="Broadcast & Notifikasi Bisnis yang memotong batas kuota 1.000 Meta">
-            <span class="text-[10px] text-amber-400 block font-semibold">Broadcast (Limit)</span>
-            <span class="text-xs font-bold text-amber-400 font-mono">{metaQuota.broadcastSent24h.toLocaleString('id-ID')}</span>
-          </div>
-        </div>
-      </div>
-    </div>
+    <MetaQuotaCard quota={metaQuota} detailed />
   {/if}
 
-  <!-- KPI Overview Stat Cards -->
-  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-    <!-- Card 1: Total Active Chats -->
-    <div class="p-4 rounded-2xl bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
-      <div class="space-y-1">
-        <span class="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Obrolan Aktif</span>
-        <div class="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2">
-          {totalActive}
-          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
-        </div>
-        <span class="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">Sedang berlangsung</span>
-      </div>
-      <div class="w-11 h-11 rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-        <MessageSquare class="w-5 h-5" />
-      </div>
-    </div>
-
-    <!-- Card 2: Unassigned Queue -->
-    <div class="p-4 rounded-2xl bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
-      <div class="space-y-1">
-        <span class="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Antrean Belum Di-assign</span>
-        <div class="text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2">
-          {totalUnassigned}
-          {#if totalUnassigned > 0}
-            <span class="px-1.5 py-0.5 text-[10px] bg-rose-100 text-rose-700 font-bold rounded-md">Perlu Assign</span>
-          {/if}
-        </div>
-        <span class="text-[10px] text-slate-500 dark:text-slate-400">Menunggu dialokasikan</span>
-      </div>
-      <div class="w-11 h-11 rounded-2xl bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center">
-        <AlertCircle class="w-5 h-5" />
-      </div>
-    </div>
-
-    <!-- Card 3: Online Agents -->
-    <div class="p-4 rounded-2xl bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
-      <div class="space-y-1">
-        <span class="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Agen Bertugas</span>
-        <div class="text-2xl font-black text-slate-900 dark:text-white">
-          {onlineAgentsCount} <span class="text-xs text-slate-400 font-normal">/ {teamUsers.filter(u => u.role === 'AGENT').length} Online</span>
-        </div>
-        <span class="text-[10px] text-indigo-600 dark:text-indigo-400 font-semibold">Siap menerima chat</span>
-      </div>
-      <div class="w-11 h-11 rounded-2xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
-        <UserCheck class="w-5 h-5" />
-      </div>
-    </div>
-
-    <!-- Card 4: Selesai / Resolved -->
-    <div class="p-4 rounded-2xl bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
-      <div class="space-y-1">
-        <span class="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Tiket Selesai</span>
-        <div class="text-2xl font-black text-slate-900 dark:text-white">
-          {totalResolved}
-        </div>
-        <span class="text-[10px] text-purple-600 dark:text-purple-400 font-semibold">Terselesaikan (Resolved)</span>
-      </div>
-      <div class="w-11 h-11 rounded-2xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center">
-        <CheckCircle2 class="w-5 h-5" />
-      </div>
-    </div>
+  <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+    <StatCard label="Obrolan aktif" value={totalActive} icon={MessageSquare} tone="emerald" hint="Sedang berlangsung" />
+    <StatCard
+      label="Belum ditugaskan"
+      value={totalUnassigned}
+      icon={AlertCircle}
+      tone={totalUnassigned > 0 ? 'rose' : 'slate'}
+      hint={totalUnassigned > 0 ? 'Perlu segera dialokasikan' : 'Antrean kosong'}
+      hintTone={totalUnassigned > 0 ? 'rose' : 'muted'}
+    />
+    <StatCard label="Agen online" icon={UserCheck} tone="blue" hint="Siap menerima chat">
+      {onlineAgentsCount}<span class="ml-1 text-sm font-medium text-slate-400">/ {teamUsers.filter((u) => u.role === 'AGENT').length}</span>
+    </StatCard>
+    <StatCard label="Tiket selesai" value={totalResolved} icon={CheckCircle2} tone="violet" hint="Sudah diselesaikan" />
   </div>
 
-  <!-- Filters Toolbar -->
-  <div class="p-4 rounded-2xl bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
-    <!-- Search Bar -->
-    <div class="relative flex-1 max-w-md">
-      <Search class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-      <input
-        type="text"
-        bind:value={searchQuery}
-        placeholder="Cari pelanggan, nomor WA, pesan, atau agen..."
-        class="w-full pl-9 pr-8 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-amber-500 transition"
-      />
-      {#if searchQuery}
-        <button onclick={() => (searchQuery = '')} class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer">
-          <X class="w-3.5 h-3.5" />
-        </button>
-      {/if}
-    </div>
-
-    <!-- Dropdown Filters -->
-    <div class="flex flex-wrap items-center gap-2">
-      <!-- Filter by Agent -->
-      <select
-        bind:value={selectedAgentFilter}
-        class="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus:border-amber-500"
-      >
-        <option value="ALL">Semua Agen & Supervisor</option>
-        <option value="UNASSIGNED">Belum Di-assign (Antrean)</option>
+  <div class="ui-card flex flex-col gap-3 p-3 2xl:flex-row 2xl:items-center 2xl:justify-between">
+    <div class="flex flex-1 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+      <div class="relative w-full sm:min-w-[220px] sm:flex-1">
+        <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <input type="text" bind:value={searchQuery} placeholder="Cari pelanggan, nomor, pesan, atau agen…" class="ui-input pl-9 pr-8" aria-label="Cari percakapan" />
+        {#if searchQuery}
+          <button onclick={() => (searchQuery = '')} class="absolute right-2.5 top-1/2 -translate-y-1/2 cursor-pointer rounded p-0.5 text-slate-400 hover:text-slate-600" aria-label="Hapus pencarian">
+            <X class="h-3.5 w-3.5" />
+          </button>
+        {/if}
+      </div>
+      <select bind:value={selectedAgentFilter} class="ui-input w-full sm:w-44" aria-label="Filter agen">
+        <option value="ALL">Semua agen</option>
+        <option value="UNASSIGNED">Belum ditugaskan</option>
         {#each teamUsers as user}
-          <option value={user.id}>{user.fullName} ({user.role})</option>
+          <option value={user.id}>{user.fullName}</option>
         {/each}
       </select>
-
-      <!-- Filter by Status -->
-      <select
-        bind:value={selectedStatusFilter}
-        class="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus:border-amber-500"
-      >
-        <option value="ALL">Semua Status Chat</option>
-        <option value="OPEN">Aktif (Open)</option>
-        <option value="PENDING">Menunggu (Pending)</option>
-        <option value="UNASSIGNED">Unassigned</option>
-        <option value="RESOLVED">Selesai (Resolved)</option>
+      <select bind:value={selectedStatusFilter} class="ui-input w-full sm:w-44" aria-label="Filter status">
+        <option value="ALL">Semua status</option>
+        <option value="OPEN">Aktif</option>
+        <option value="PENDING">Menunggu</option>
+        <option value="UNASSIGNED">Belum ditugaskan</option>
+        <option value="RESOLVED">Selesai</option>
       </select>
-
-      <!-- Filter by 24h Window -->
-      <select
-        bind:value={selectedWindowFilter}
-        class="px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 focus:outline-none focus:border-amber-500"
-      >
-        <option value="ALL">Semua Jendela WA</option>
-        <option value="ACTIVE">Jendela Aktif (&lt;24 Jam)</option>
-        <option value="EXPIRED">Jendela Kadaluarsa (&gt;24 Jam)</option>
+      <select bind:value={selectedWindowFilter} class="ui-input w-full sm:w-44" aria-label="Filter sesi 24 jam">
+        <option value="ALL">Semua sesi</option>
+        <option value="ACTIVE">Sesi 24 jam aktif</option>
+        <option value="EXPIRED">Sesi 24 jam habis</option>
       </select>
+    </div>
+
+    <div class="inline-flex shrink-0 self-start rounded-xl bg-slate-100 p-1 text-sm font-medium dark:bg-slate-800" role="tablist" aria-label="Tampilan">
+      {#each [{ id: 'grid', label: 'Kartu', icon: LayoutGrid }, { id: 'workload', label: 'Beban tim', icon: Users }, { id: 'kanban', label: 'Kanban', icon: Columns3 }] as v}
+        <button
+          role="tab"
+          aria-selected={viewMode === v.id}
+          onclick={() => (viewMode = v.id as typeof viewMode)}
+          class="inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 transition {viewMode === v.id
+            ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-white'
+            : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white'}"
+        >
+          <v.icon class="h-4 w-4" />
+          {v.label}
+        </button>
+      {/each}
     </div>
   </div>
 
   <!-- MAIN VIEW CONTENT -->
   {#if isLoading}
-    <div class="py-20 text-center text-xs text-slate-500 dark:text-slate-400 flex flex-col items-center justify-center gap-2">
-      <RefreshCw class="w-6 h-6 animate-spin text-amber-500" />
-      <span>Memuat data monitoring obrolan tim...</span>
+    <div class="ui-card flex flex-col items-center justify-center gap-2 py-16 text-sm text-slate-500 dark:text-slate-400">
+      <RefreshCw class="h-5 w-5 animate-spin text-emerald-500" />
+      Memuat data monitoring…
     </div>
   {:else if activeChats.length === 0}
-    <div class="p-12 text-center bg-white dark:bg-slate-900/60 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2">
-      <div class="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center mx-auto">
-        <MessageSquare class="w-6 h-6" />
-      </div>
-      <h4 class="text-sm font-bold text-slate-800 dark:text-slate-200">Belum Ada Percakapan</h4>
-      <p class="text-xs text-slate-500 dark:text-slate-400">Saat pesan masuk dari pelanggan, obrolan akan muncul di sini secara real-time.</p>
+    <div class="ui-card">
+      <EmptyState icon={MessageSquare} title="Belum ada percakapan" description="Percakapan akan muncul di sini secara real-time saat pelanggan mengirim pesan." />
     </div>
   {:else}
     <!-- VIEW 1: GRID VIEW -->
     {#if viewMode === 'grid'}
       {#if filteredChats.length === 0}
-        <div class="p-8 text-center text-xs text-slate-500 bg-white dark:bg-slate-900/60 rounded-2xl border border-slate-200 dark:border-slate-800">
-          Tidak ada percakapan yang cocok dengan filter yang dipilih.
+        <div class="ui-card">
+          <EmptyState icon={Search} title="Tidak ada hasil" description="Tidak ada percakapan yang cocok dengan filter yang dipilih." />
         </div>
       {:else}
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {#each filteredChats as chat (chat.id)}
             {@const win = getWindowStatus(chat.windowExpiresAt)}
 
-            <div class="bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800/90 rounded-2xl p-5 flex flex-col justify-between space-y-4 hover:border-slate-300 dark:hover:border-slate-700 transition shadow-sm group">
+            <div class="ui-card flex flex-col justify-between space-y-4 p-5 transition hover:border-slate-300 hover:shadow-sm dark:hover:border-slate-700">
               <div class="space-y-3">
                 <!-- Card Header -->
                 <div class="flex items-start justify-between gap-2">
                   <div class="flex items-center gap-2.5">
-                    <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 text-white font-bold text-xs flex items-center justify-center shadow-xs">
+                    <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                       {(chat.contactName || 'U').charAt(0).toUpperCase()}
                     </div>
                     <div>
@@ -671,6 +501,7 @@
                     </div>
                   </div>
 
+                  {#if chat.status !== 'RESOLVED'}
                   <!-- 24-hr Window Badge -->
                   <span
                     class="px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 {win.isExpired
@@ -681,6 +512,7 @@
                     <Clock class="w-3 h-3" />
                     <span>{win.text}</span>
                   </span>
+                  {/if}
                 </div>
 
                 <!-- Assigned Agent & Status Row -->
@@ -691,33 +523,33 @@
                     {#if chat.assignedFullName}
                       <span class="font-bold text-slate-900 dark:text-slate-200 text-[11px]">{chat.assignedFullName}</span>
                     {:else}
-                      <span class="px-1.5 py-0.2 rounded bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 text-[10px] font-bold">Unassigned</span>
+                      <span class="rounded-md bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">Belum ditugaskan</span>
                     {/if}
                   </div>
 
                   {#if chat.status === 'RESOLVED'}
-                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-300">
-                      Resolved
+                    <span class="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                      Selesai
                     </span>
                   {:else if chat.status === 'OPEN'}
-                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300">
-                      Aktif (Open)
+                    <span class="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
+                      Aktif
                     </span>
                   {:else}
-                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300">
+                    <span class="inline-flex items-center gap-1 rounded-md bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
                       {chat.status}
                     </span>
                   {/if}
                 </div>
 
                 <!-- Last Message Bubble Preview -->
-                <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800/90 text-xs text-slate-800 dark:text-slate-300 space-y-1">
+                <div class="space-y-1 rounded-xl bg-slate-50 p-3 text-sm text-slate-700 dark:bg-slate-800/50 dark:text-slate-300">
                   <div class="flex items-center justify-between text-[10px] text-slate-400">
-                    <span class="font-bold">Pesan Terakhir:</span>
+                    <span class="font-medium">Pesan terakhir</span>
                     <span>{new Date(chat.lastMessageAt || chat.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                   </div>
-                  <p class="line-clamp-2 leading-relaxed italic">
-                    "{chat.lastMessagePreview || 'Belum ada riwayat pesan'}"
+                  <p class="line-clamp-2 leading-relaxed">
+                    {chat.lastMessagePreview || 'Belum ada riwayat pesan'}
                   </p>
                 </div>
               </div>
@@ -731,7 +563,7 @@
                   title="Intip pesan obrolan & kirim catatan internal (whisper)"
                 >
                   <Eye class="w-3.5 h-3.5" />
-                  <span>Intip & Whispering</span>
+                  <span>Intip & beri catatan</span>
                 </button>
 
                 <!-- Open in Inbox Link -->
@@ -752,10 +584,10 @@
     {:else if viewMode === 'workload'}
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {#each agentWorkload as item (item.user.id)}
-          <div class="bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 space-y-4 shadow-sm">
+          <div class="ui-card space-y-4 p-5">
             <div class="flex items-start justify-between gap-2">
               <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-2xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-bold text-sm flex items-center justify-center">
+                <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                   {item.user.fullName.charAt(0).toUpperCase()}
                 </div>
                 <div>
@@ -773,15 +605,15 @@
                 </div>
               </div>
 
-              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold {item.isFull ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}">
-                {item.count} / {item.maxLimit} Chat
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold {item.isFull ? 'bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300' : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300'}">
+                {item.count} / {item.maxLimit} chat
               </span>
             </div>
 
             <!-- Capacity Progress Bar -->
             <div class="space-y-1">
               <div class="flex justify-between text-[11px] text-slate-500 font-semibold">
-                <span>Beban Kerja Agen</span>
+                <span>Kapasitas terpakai</span>
                 <span>{item.percent}%</span>
               </div>
               <div class="w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
@@ -798,7 +630,7 @@
 
             <!-- Assigned Customers Chips -->
             <div class="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-              <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Pelanggan yang Ditangani:</span>
+              <span class="block text-xs font-medium text-slate-500 dark:text-slate-400">Pelanggan yang ditangani</span>
               {#if item.chats.length === 0}
                 <span class="text-xs text-slate-400 italic">Sedang tidak menangani obrolan</span>
               {:else}
@@ -824,11 +656,11 @@
     {:else if viewMode === 'kanban'}
       <div class="flex gap-4 overflow-x-auto pb-4 scrollbar-thin">
         <!-- Column Unassigned -->
-        <div class="w-80 shrink-0 bg-slate-100/70 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex flex-col space-y-3">
+        <div class="flex w-80 shrink-0 flex-col space-y-3 rounded-2xl bg-slate-100/80 p-3 ring-1 ring-inset ring-slate-200 dark:bg-slate-900/60 dark:ring-slate-800">
           <div class="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800">
             <div class="flex items-center gap-2">
               <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
-              <h4 class="text-xs font-bold text-slate-900 dark:text-white uppercase">Antrean Unassigned</h4>
+              <h4 class="text-sm font-semibold text-slate-900 dark:text-white">Belum ditugaskan</h4>
             </div>
             <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300">
               {activeChats.filter(c => !c.assignedUserId).length}
@@ -837,9 +669,9 @@
 
           <div class="space-y-3 flex-1 overflow-y-auto max-h-[600px] pr-1">
             {#each activeChats.filter(c => !c.assignedUserId) as chat}
-              <div class="bg-white dark:bg-slate-900 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-2">
+              <div class="space-y-2 rounded-xl bg-white p-3.5 shadow-sm ring-1 ring-slate-200/70 dark:bg-slate-900 dark:ring-slate-800">
                 <div class="flex items-center justify-between">
-                  <span class="text-xs font-bold text-slate-900 dark:text-white">{chat.contactName}</span>
+                  <span class="text-sm font-semibold text-slate-900 dark:text-white">{chat.contactName}</span>
                   <button
                     onclick={() => openInspector(chat)}
                     class="text-amber-600 hover:text-amber-700 dark:text-amber-400 p-1 cursor-pointer"
@@ -848,7 +680,7 @@
                     <Eye class="w-3.5 h-3.5" />
                   </button>
                 </div>
-                <p class="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2">"{chat.lastMessagePreview || 'Pesan baru'}"</p>
+                <p class="line-clamp-2 text-xs text-slate-500 dark:text-slate-400">{chat.lastMessagePreview || 'Pesan baru'}</p>
                 <div class="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[10px]">
                   <span class="text-slate-400 font-mono">+{chat.contactWaId}</span>
                   <select
@@ -869,11 +701,11 @@
         <!-- Columns for each Agent -->
         {#each teamUsers.filter(u => u.role === 'AGENT' || u.role === 'SUPERVISOR') as user}
           {@const userChats = activeChats.filter(c => c.assignedUserId === user.id && c.status !== 'RESOLVED')}
-          <div class="w-80 shrink-0 bg-slate-100/70 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex flex-col space-y-3">
+          <div class="flex w-80 shrink-0 flex-col space-y-3 rounded-2xl bg-slate-100/80 p-3 ring-1 ring-inset ring-slate-200 dark:bg-slate-900/60 dark:ring-slate-800">
             <div class="flex items-center justify-between pb-2 border-b border-slate-200 dark:border-slate-800">
               <div class="flex items-center gap-2">
                 <span class="w-2.5 h-2.5 rounded-full {user.isOnline ? 'bg-emerald-500' : 'bg-slate-400'}"></span>
-                <h4 class="text-xs font-bold text-slate-900 dark:text-white truncate max-w-[150px]">{user.fullName}</h4>
+                <h4 class="max-w-[170px] truncate text-sm font-semibold text-slate-900 dark:text-white">{user.fullName}</h4>
               </div>
               <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
                 {userChats.length} / {user.maxActiveChats || 5}
@@ -882,12 +714,12 @@
 
             <div class="space-y-3 flex-1 overflow-y-auto max-h-[600px] pr-1">
               {#if userChats.length === 0}
-                <div class="p-6 text-center text-xs text-slate-400 italic">Tidak ada chat aktif</div>
+                <div class="p-6 text-center text-xs text-slate-400">Tidak ada chat aktif</div>
               {:else}
                 {#each userChats as chat}
-                  <div class="bg-white dark:bg-slate-900 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs space-y-2">
+                  <div class="space-y-2 rounded-xl bg-white p-3.5 shadow-sm ring-1 ring-slate-200/70 dark:bg-slate-900 dark:ring-slate-800">
                     <div class="flex items-center justify-between">
-                      <span class="text-xs font-bold text-slate-900 dark:text-white">{chat.contactName}</span>
+                      <span class="text-sm font-semibold text-slate-900 dark:text-white">{chat.contactName}</span>
                       <button
                         onclick={() => openInspector(chat)}
                         class="text-amber-600 hover:text-amber-700 dark:text-amber-400 p-1 cursor-pointer"
@@ -896,14 +728,14 @@
                         <Eye class="w-3.5 h-3.5" />
                       </button>
                     </div>
-                    <p class="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-2">"{chat.lastMessagePreview || 'Pesan'}"</p>
+                    <p class="line-clamp-2 text-xs text-slate-500 dark:text-slate-400">{chat.lastMessagePreview || 'Pesan'}</p>
                     <div class="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[10px]">
                       <span class="text-slate-400 font-mono">+{chat.contactWaId}</span>
                       <button
                         onclick={() => openInspector(chat)}
                         class="text-indigo-600 font-bold hover:underline cursor-pointer"
                       >
-                        Whisper / Reassign →
+                        Catatan / alihkan →
                       </button>
                     </div>
                   </div>
@@ -963,7 +795,7 @@
               bind:value={targetReassignUser}
               class="px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-indigo-200 dark:border-indigo-800 text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none"
             >
-              <option value="">Pilih Agen Tujuan...</option>
+              <option value="">Pilih agen tujuan…</option>
               {#each teamUsers as u}
                 <option value={u.id}>{u.fullName} ({u.role})</option>
               {/each}
@@ -971,15 +803,15 @@
             <button
               onclick={() => selectedChat && handleReassign(selectedChat.id, targetReassignUser)}
               disabled={isReassigning || !targetReassignUser}
-              class="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition cursor-pointer disabled:opacity-50"
+              class="ui-btn-primary !px-3 !py-1.5 text-xs"
             >
-              {isReassigning ? '...' : 'Transfer'}
+              {isReassigning ? 'Memindahkan…' : 'Pindahkan'}
             </button>
           </div>
         </div>
 
         <!-- Chat Stream (Middle scrollable area) -->
-        <div class="flex-1 overflow-y-auto p-5 space-y-3 bg-slate-50/40 dark:bg-slate-950/40">
+        <div class="chat-canvas flex-1 space-y-3 overflow-y-auto p-5">
           {#if isLoadingMessages}
             <div class="py-12 text-center text-xs text-slate-400 flex flex-col items-center justify-center gap-2">
               <RefreshCw class="w-5 h-5 animate-spin text-amber-500" />
@@ -991,11 +823,11 @@
             {#each chatMessages as msg}
               {#if msg.isInternalNote}
                 <!-- Internal Whispering Note Bubble (Yellow/Amber Locked) -->
-                <div class="p-3 rounded-2xl bg-amber-100/80 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-800 text-xs text-amber-950 dark:text-amber-200 space-y-1 shadow-2xs">
+                <div class="space-y-1 rounded-xl border border-dashed border-amber-300 bg-amber-50/90 p-3 text-sm text-slate-800 dark:border-amber-700/60 dark:bg-amber-950/30 dark:text-amber-100">
                   <div class="flex items-center justify-between text-[10px] font-bold text-amber-800 dark:text-amber-400">
                     <span class="flex items-center gap-1">
                       <Lock class="w-3 h-3" />
-                      Catatan Internal (Whispering) • {msg.senderName || 'Supervisor'}
+                      Catatan internal · {msg.senderName || 'Supervisor'}
                     </span>
                     <span>{new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                   </div>
@@ -1004,10 +836,10 @@
               {:else if msg.direction === 'INBOUND'}
                 <!-- Inbound WhatsApp from Customer -->
                 <div class="flex flex-col items-start max-w-[85%]">
-                  <div class="bg-white dark:bg-slate-800 p-3 rounded-2xl rounded-tl-xs border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white shadow-2xs space-y-1">
+                  <div class="space-y-1 rounded-2xl rounded-tl-md bg-white p-3 text-sm text-slate-800 shadow-sm ring-1 ring-slate-200/70 dark:bg-slate-800 dark:text-slate-100 dark:ring-slate-700/60">
                     <span class="text-[10px] font-bold text-slate-400 block">{selectedChat.contactName}</span>
                     <p class="leading-relaxed whitespace-pre-wrap">{msg.body}</p>
-                    <span class="text-[9px] text-slate-400 block text-right">
+                    <span class="block text-right text-[11px] text-slate-400">
                       {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
@@ -1015,10 +847,10 @@
               {:else}
                 <!-- Outbound WhatsApp to Customer -->
                 <div class="flex flex-col items-end max-w-[85%] ml-auto">
-                  <div class="bg-emerald-600 text-white p-3 rounded-2xl rounded-tr-xs shadow-2xs text-xs space-y-1">
-                    <span class="text-[10px] text-emerald-200 font-bold block">{msg.senderName || 'Agen'}</span>
+                  <div class="space-y-1 rounded-2xl rounded-tr-md bg-emerald-50 p-3 text-sm text-slate-800 shadow-sm ring-1 ring-emerald-200/70 dark:bg-emerald-900/35 dark:text-slate-100 dark:ring-emerald-800/50">
+                    <span class="block text-xs font-semibold text-emerald-700 dark:text-emerald-400">{msg.senderName || 'Agen'}</span>
                     <p class="leading-relaxed whitespace-pre-wrap">{msg.body}</p>
-                    <span class="text-[9px] text-emerald-200 block text-right">
+                    <span class="block text-right text-[11px] text-slate-400">
                       {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
@@ -1033,7 +865,7 @@
           <div class="flex items-center justify-between">
             <span class="text-xs font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
               <Lock class="w-3.5 h-3.5" />
-              Kirim Whispering (Catatan Internal Rahasia):
+              Catatan internal untuk agen
             </span>
             <span class="text-[10px] text-slate-400">Hanya dilihat tim, pelanggan tidak tahu</span>
           </div>
@@ -1043,14 +875,14 @@
               bind:value={whisperText}
               rows="2"
               placeholder="Ketik instruksi / saran untuk agen yang menangani..."
-              class="flex-1 px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-amber-500 leading-relaxed font-sans"
+              class="ui-input flex-1 resize-none leading-relaxed"
               required
             ></textarea>
 
             <button
               type="submit"
               disabled={isSendingWhisper || !whisperText.trim()}
-              class="py-2.5 px-4 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition cursor-pointer disabled:opacity-50 shrink-0"
+              class="inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-semibold text-slate-950 shadow-sm transition hover:bg-amber-400 disabled:opacity-50"
             >
               <Send class="w-3.5 h-3.5" />
               <span>{isSendingWhisper ? 'Mengirim...' : 'Kirim'}</span>

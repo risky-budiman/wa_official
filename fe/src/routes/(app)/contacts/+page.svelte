@@ -1,4 +1,7 @@
 <script lang="ts">
+  import Alert from '$lib/components/ui/Alert.svelte';
+  import StatCard from '$lib/components/ui/StatCard.svelte';
+  import PageHeader from '$lib/components/ui/PageHeader.svelte';
   import { onMount } from 'svelte';
   import { apiRequest } from '$lib/api/client';
   import { authStore } from '$lib/stores/auth.svelte';
@@ -71,7 +74,7 @@
   async function loadApprovedTemplates() {
     const res = await apiRequest<{ items: any[] }>('/templates');
     if (res.success && res.items) {
-      approvedTemplates = res.items.filter((t) => t.status === 'APPROVED');
+      approvedTemplates = res.items.filter((t: any) => t.status === 'APPROVED');
     }
   }
 
@@ -236,90 +239,47 @@
   });
 </script>
 
-<div class="p-6 md:p-8 space-y-6 max-w-7xl mx-auto">
-  <!-- Top Header & Actions -->
-  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-    <div>
-      <h2 class="text-xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2.5">
-        <div class="w-8 h-8 rounded-xl bg-emerald-500/10 dark:bg-emerald-950/60 flex items-center justify-center text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-          <Contact class="w-4 h-4" />
-        </div>
-        Kontak Pelanggan (CRM)
-      </h2>
-      <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
-        Kelola database kontak pelanggan. Pelanggan baru otomatis tersimpan saat pertama kali mengirim pesan WhatsApp.
-      </p>
-    </div>
-
-    <div class="flex items-center gap-2.5">
-      <button
-        onclick={() => loadContacts(currentPage)}
-        class="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 transition cursor-pointer"
-        title="Muat Ulang"
-      >
-        <RefreshCw class="w-4 h-4 {isLoading ? 'animate-spin' : ''}" />
+<div class="ui-page">
+  <PageHeader
+    title="Kontak Pelanggan"
+    description="Database pelanggan Anda. Pelanggan baru tersimpan otomatis saat pertama kali mengirim pesan WhatsApp."
+    icon={Contact}
+  >
+    {#snippet actions()}
+      <button onclick={() => loadContacts(currentPage)} class="ui-btn-secondary px-2.5" title="Muat ulang" aria-label="Muat ulang">
+        <RefreshCw class="h-4 w-4 {isLoading ? 'animate-spin' : ''}" />
       </button>
-
-      <button
-        onclick={() => (showAddModal = true)}
-        class="py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-2 shadow-md shadow-emerald-600/30 transition cursor-pointer"
-      >
-        <Plus class="w-4 h-4" />
-        Tambah Kontak Baru
+      <button onclick={() => (showAddModal = true)} class="ui-btn-primary">
+        <Plus class="h-4 w-4" />
+        Tambah Kontak
       </button>
-    </div>
-  </div>
+    {/snippet}
+  </PageHeader>
 
   <!-- Notification Banners -->
   {#if successMsg}
-    <div class="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex items-center gap-2 text-xs text-emerald-800 dark:text-emerald-300 font-bold shadow-sm">
-      <Check class="w-4 h-4 shrink-0 text-emerald-600" />
-      <span>{successMsg}</span>
-    </div>
+    <Alert tone="success" message={successMsg} />
   {/if}
 
   {#if errorMsg}
-    <div class="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 flex items-center gap-2 text-xs text-rose-800 dark:text-rose-300 font-bold shadow-sm">
-      <AlertCircle class="w-4 h-4 shrink-0 text-rose-600" />
-      <span>{errorMsg}</span>
-    </div>
+    <Alert tone="error" message={errorMsg} />
   {/if}
 
   <!-- Stats Grid -->
-  <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-    <div class="bg-white dark:bg-slate-900/70 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-4">
-      <div class="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 flex items-center justify-center text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 shrink-0">
-        <Contact class="w-6 h-6" />
-      </div>
-      <div>
-        <span class="text-slate-500 dark:text-slate-400 text-xs font-semibold block">Total Kontak CRM</span>
-        <span class="text-xl font-extrabold text-slate-900 dark:text-white mt-0.5 block">{totalContacts}</span>
-      </div>
-    </div>
-
-    <div class="bg-white dark:bg-slate-900/70 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-4">
-      <div class="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950/50 flex items-center justify-center text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800 shrink-0">
-        <Sparkles class="w-6 h-6" />
-      </div>
-      <div>
-        <span class="text-slate-500 dark:text-slate-400 text-xs font-semibold block">Perekaman Otomatis</span>
-        <span class="text-xs font-bold text-emerald-600 dark:text-emerald-400 mt-0.5 block">🟢 Aktif (Meta Webhook)</span>
-      </div>
-    </div>
-
-    <div class="bg-white dark:bg-slate-900/70 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-4">
-      <div class="w-12 h-12 rounded-2xl bg-purple-50 dark:bg-purple-950/50 flex items-center justify-center text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-800 shrink-0">
-        <Phone class="w-6 h-6" />
-      </div>
-      <div>
-        <span class="text-slate-500 dark:text-slate-400 text-xs font-semibold block">Kanal Pengirim</span>
-        <span class="text-xs font-bold text-slate-900 dark:text-white mt-0.5 block">Meta WhatsApp Official</span>
-      </div>
-    </div>
+  <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+    <StatCard label="Total Kontak" value={totalContacts} icon={Contact} tone="emerald" />
+    <StatCard label="Perekaman Otomatis" icon={Sparkles} tone="blue" hint="Kontak baru tersimpan dari webhook Meta">
+      <span class="inline-flex items-center gap-1.5 text-base font-semibold text-emerald-600 dark:text-emerald-400">
+        <span class="h-2 w-2 rounded-full bg-emerald-500"></span> Aktif
+      </span>
+    </StatCard>
+    <StatCard label="Kanal Pengirim" icon={Phone} tone="violet" hint="WhatsApp Business Platform">
+      <span class="text-base font-semibold">Meta WhatsApp Official</span>
+    </StatCard>
   </div>
 
   <!-- Search Bar & Filters -->
-  <div class="bg-white dark:bg-slate-900/70 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+  <div class="ui-card p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
     <div class="relative flex-1 max-w-md">
       <Search class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
       <input
@@ -327,7 +287,7 @@
         bind:value={searchQuery}
         oninput={handleSearchInput}
         placeholder="Cari berdasarkan nama, nomor WhatsApp (+62), atau email..."
-        class="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500 transition"
+        class="ui-input pl-10"
       />
     </div>
 
@@ -337,9 +297,9 @@
   </div>
 
   <!-- Contacts Table -->
-  <div class="bg-white dark:bg-slate-900/70 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+  <div class="ui-card overflow-hidden">
     <div class="overflow-x-auto">
-      <table class="w-full text-left border-collapse text-xs">
+      <table class="ui-table w-full text-left border-collapse">
         <thead>
           <tr class="border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/50 text-slate-500 dark:text-slate-400 font-semibold uppercase tracking-wider text-[10px]">
             <th class="py-3.5 px-4">Nama Pelanggan</th>
