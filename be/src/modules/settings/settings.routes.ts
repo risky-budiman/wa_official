@@ -11,6 +11,9 @@ import { organizations, phoneNumbers, messages, conversations, broadcastCampaign
 import { authPlugin } from '../../middleware/auth';
 import { hashApiKey } from '../../middleware/api-key-auth';
 import { MetaApiService } from '../../services/meta-api.service';
+import { AiAgentService, assertSafeLlmBaseUrl } from '../../services/ai-agent.service';
+import { buildAiSystemPrompt } from '../../services/chatbot.service';
+import { decideBotReply, normalizeBotSettings, fillTemplate } from '../../services/bot-engine';
 import {
   activatePhoneNumber,
   archiveOrgPhones,
@@ -82,6 +85,115 @@ async function loadNumberContext(user: any, set: any, phoneId?: string): Promise
     return { error: { success: false, error: 'Nomor tidak ditemukan di WABA organisasi Anda.' } };
   }
   return { wabaId: org.wabaId, token, number };
+}
+
+// ───────── Chatbot & AI settings helpers ─────────
+
+function parseJsonValue<T = any>(v: unknown): T | null {
+  if (!v) return null;
+  if (typeof v === 'string') {
+    try {
+      return JSON.parse(v) as T;
+    } catch {
+      return null;
+    }
+  }
+  return v as T;
+}
+
+const canManageBot = (role?: string) => role === 'ADMINISTRATOR' || role === 'SUPER_ADMIN' || role === 'SUPERVISOR';
+
+async function storedAiKey(orgId: string): Promise<string> {
+  const [org] = await db
+    .select({ aiAgentConfig: organizations.aiAgentConfig })
+    .from(organizations)
+    .where(eq(organizations.id, orgId))
+    .limit(1);
+  return (parseJsonValue<any>(org?.aiAgentConfig)?.apiKey as string) || '';
+}
+
+const botSettingsBody = t.Object({
+  operatingHours: t.Optional(t.Any()),
+  aiAgentConfig: t.Optional(t.Any()),
+  chatbotConfig: t.Optional(t.Any()),
+});
+
+const AI_MODES = ['AI_ASSISTANT', 'STATIC_MESSAGE', 'NONE'];
+const AI_PROVIDERS = ['gemini', 'openai', 'claude', 'custom_llm'];
+const RULE_ACTIONS = ['REPLY', 'HANDOFF_HUMAN', 'HANDOVER_AI'];
+
+function cleanChatbotConfig(c: any) {
+  if (!c || typeof c !== 'object') return c;
+  const str = (v: any, max: number) => (typeof v === 'string' ? v.slice(0, max) : '');
+  const rules = Array.isArray(c.rules) ? c.rules.slice(0, 50) : [];
+  return {
+    enabled: c.enabled === true,
+    greetingText: str(c.greetingText, 4000),
+    greetingKeywords: Array.isArray(c.greetingKeywords)
+      ? c.greetingKeywords.map((k: any) => str(k, 60).trim()).filter(Boolean).slice(0, 30)
+      : undefined,
+    greetOnNewConversation: c.greetOnNewConversation === true,
+    rules: rules.map((r: any, i: number) => ({
+      id: str(r?.id, 60) || `rule-${Date.now()}-${i}`,
+      title: str(r?.title, 120) || `Menu ${i + 1}`,
+      keywords: Array.isArray(r?.keywords)
+        ? r.keywords.map((k: any) => str(k, 60).trim()).filter(Boolean).slice(0, 30)
+        : [],
+      replyText: str(r?.replyText, 4000),
+      action: RULE_ACTIONS.includes(r?.action) ? r.action : 'REPLY',
+    })),
+  };
+}
+
+async function saveBotSettings(user: any, body: any, set: any) {
+  if (!user) {
+    set.status = 401;
+    return { success: false, error: 'Unauthorized' };
+  }
+  if (!canManageBot(user.role)) {
+    set.status = 403;
+    return { success: false, error: 'Akses ditolak (Khusus Administrator atau Supervisor)' };
+  }
+
+  try {
+    const hours = parseJsonValue<any>(body.operatingHours);
+    let ai = parseJsonValue<any>(body.aiAgentConfig);
+    const chatbot = parseJsonValue<any>(body.chatbotConfig);
+    const updateData: any = {};
+
+    if (hours) updateData.operatingHours = hours;
+
+    if (ai) {
+      const { hasApiKey: _h, apiKeyHint: _k, clearApiKey, ...rest } = ai;
+      ai = rest;
+      if (!AI_MODES.includes(ai.mode)) ai.mode = 'AI_ASSISTANT';
+      if (!AI_PROVIDERS.includes(ai.provider)) ai.provider = 'gemini';
+      // The UI never receives the stored key: keep it unless a new one is typed or removal is requested
+      const typed = typeof ai.apiKey === 'string' ? ai.apiKey.trim() : '';
+      ai.apiKey = clearApiKey ? '' : typed && !typed.startsWith('••') ? typed : await storedAiKey(user.orgId);
+      if (ai.provider === 'custom_llm' && ai.baseUrl) {
+        try {
+          assertSafeLlmBaseUrl(ai.baseUrl);
+        } catch (err: any) {
+          set.status = 400;
+          return { success: false, error: err.message };
+        }
+      }
+      updateData.aiAgentConfig = ai;
+    }
+
+    if (chatbot) updateData.chatbotConfig = cleanChatbotConfig(chatbot);
+
+    if (Object.keys(updateData).length === 0) {
+      return { success: true, message: 'Tidak ada perubahan.' };
+    }
+    await db.update(organizations).set(updateData).where(eq(organizations.id, user.orgId));
+    return { success: true, message: 'Pengaturan Chatbot & AI berhasil disimpan.' };
+  } catch (err: any) {
+    console.error('❌ Gagal menyimpan pengaturan chatbot:', err);
+    set.status = 500;
+    return { success: false, error: 'Gagal menyimpan pengaturan. Coba lagi.' };
+  }
 }
 
 export const settingsRoutes = new Elysia({ prefix: '/settings' })
@@ -1025,7 +1137,11 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
     }
   )
 
-  // ─── GET /settings/operating-hours — Get Operating Hours & AI Agent Config ──
+  // ═══════════════════════════════════════════════════════════════
+  // CHATBOT & AI SETTINGS
+  // ═══════════════════════════════════════════════════════════════
+
+  // ─── GET /settings/operating-hours — hours, AI & chatbot config (API key never leaves the server) ──
   .get('/operating-hours', async ({ user, set }) => {
     if (!user) {
       set.status = 401;
@@ -1042,173 +1158,44 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
       .where(eq(organizations.id, user.orgId))
       .limit(1);
 
-    const defaultHours = {
+    const hours = parseJsonValue(org?.operatingHours) || {
       enabled: false,
       timezone: 'Asia/Jakarta',
       days: [1, 2, 3, 4, 5],
       startTime: '08:00',
       endTime: '17:00',
     };
-
-    const defaultAi = {
+    const ai: any = parseJsonValue(org?.aiAgentConfig) || {
       enabled: false,
+      triggerMode: 'ALWAYS',
       mode: 'AI_ASSISTANT',
       provider: 'gemini',
-      apiKey: '',
       model: 'gemini-2.0-flash',
       systemPrompt: '',
-      staticMessage: 'Halo! Layanan kami sedang di luar jam operasional. Pesan Anda telah kami terima dan akan segera dibalas oleh tim kami saat jam kerja dimulai. Terima kasih! 🙏',
+      staticMessage: '',
     };
-
-    let hours = org?.operatingHours;
-    let ai = org?.aiAgentConfig;
-    let chatbot = org?.chatbotConfig;
-
-    if (typeof hours === 'string') {
-      try { hours = JSON.parse(hours); } catch (_) {}
-    }
-    if (typeof ai === 'string') {
-      try { ai = JSON.parse(ai); } catch (_) {}
-    }
-    if (typeof chatbot === 'string') {
-      try { chatbot = JSON.parse(chatbot); } catch (_) {}
-    }
+    const storedKey: string = ai.apiKey || '';
+    const { apiKey: _omit, ...aiPublic } = ai;
 
     return {
       success: true,
-      operatingHours: hours || defaultHours,
-      aiAgentConfig: ai || defaultAi,
-      chatbotConfig: chatbot || null,
+      operatingHours: hours,
+      aiAgentConfig: {
+        ...aiPublic,
+        apiKey: '',
+        hasApiKey: Boolean(storedKey),
+        apiKeyHint: storedKey ? `••••${storedKey.slice(-4)}` : '',
+      },
+      chatbotConfig: parseJsonValue(org?.chatbotConfig) || null,
+      isOutOfHoursNow: AiAgentService.isOutOfOperatingHours(hours as any),
     };
   })
 
-  // ─── PATCH & POST /settings/operating-hours — Save Operating Hours & AI Agent Config ──
-  .patch(
-    '/operating-hours',
-    async ({ user, body, set }) => {
-      if (!user) {
-        set.status = 401;
-        return { success: false, error: 'Unauthorized' };
-      }
-      if (user.role !== 'ADMINISTRATOR' && user.role !== 'SUPER_ADMIN' && user.role !== 'SUPERVISOR') {
-        set.status = 403;
-        return { success: false, error: 'Akses ditolak (Khusus Administrator atau Supervisor)' };
-      }
+  // ─── PATCH & POST /settings/operating-hours — save hours, AI & chatbot config ──
+  .patch('/operating-hours', async ({ user, body, set }) => saveBotSettings(user, body, set), { body: botSettingsBody })
+  .post('/operating-hours', async ({ user, body, set }) => saveBotSettings(user, body, set), { body: botSettingsBody })
 
-      try {
-        console.log(`🕒 Updating Operating Hours & AI Agent for org ${user.orgId}...`);
-        
-        let hoursToSave = body.operatingHours;
-        let aiToSave = body.aiAgentConfig;
-        let chatbotToSave = body.chatbotConfig;
-
-        if (typeof hoursToSave === 'string') {
-          try { hoursToSave = JSON.parse(hoursToSave); } catch (_) {}
-        }
-        if (typeof aiToSave === 'string') {
-          try { aiToSave = JSON.parse(aiToSave); } catch (_) {}
-        }
-        if (typeof chatbotToSave === 'string') {
-          try { chatbotToSave = JSON.parse(chatbotToSave); } catch (_) {}
-        }
-
-        const updateData: any = {};
-        if (hoursToSave !== undefined) updateData.operatingHours = hoursToSave;
-        if (aiToSave !== undefined) updateData.aiAgentConfig = aiToSave;
-        if (chatbotToSave !== undefined) updateData.chatbotConfig = chatbotToSave;
-
-        await db
-          .update(organizations)
-          .set(updateData)
-          .where(eq(organizations.id, user.orgId));
-
-        console.log(`✅ Operating Hours & AI Agent updated successfully for org ${user.orgId}`);
-
-        return {
-          success: true,
-          message: 'Pengaturan Jam Operasional & AI Agent berhasil disimpan!',
-        };
-      } catch (err: any) {
-        console.error('❌ Failed to update operating hours:', err);
-        set.status = 500;
-        return {
-          success: false,
-          error: err.message || 'Gagal menyimpan ke database',
-        };
-      }
-    },
-    {
-      body: t.Object({
-        operatingHours: t.Optional(t.Any()),
-        aiAgentConfig: t.Optional(t.Any()),
-        chatbotConfig: t.Optional(t.Any()),
-      }),
-    }
-  )
-  .post(
-    '/operating-hours',
-    async ({ user, body, set }) => {
-      if (!user) {
-        set.status = 401;
-        return { success: false, error: 'Unauthorized' };
-      }
-      if (user.role !== 'ADMINISTRATOR' && user.role !== 'SUPER_ADMIN' && user.role !== 'SUPERVISOR') {
-        set.status = 403;
-        return { success: false, error: 'Akses ditolak (Khusus Administrator atau Supervisor)' };
-      }
-
-      try {
-        console.log(`🕒 Updating Operating Hours & AI Agent for org ${user.orgId}...`);
-        
-        let hoursToSave = body.operatingHours;
-        let aiToSave = body.aiAgentConfig;
-        let chatbotToSave = body.chatbotConfig;
-
-        if (typeof hoursToSave === 'string') {
-          try { hoursToSave = JSON.parse(hoursToSave); } catch (_) {}
-        }
-        if (typeof aiToSave === 'string') {
-          try { aiToSave = JSON.parse(aiToSave); } catch (_) {}
-        }
-        if (typeof chatbotToSave === 'string') {
-          try { chatbotToSave = JSON.parse(chatbotToSave); } catch (_) {}
-        }
-
-        const updateData: any = {};
-        if (hoursToSave !== undefined) updateData.operatingHours = hoursToSave;
-        if (aiToSave !== undefined) updateData.aiAgentConfig = aiToSave;
-        if (chatbotToSave !== undefined) updateData.chatbotConfig = chatbotToSave;
-
-        await db
-          .update(organizations)
-          .set(updateData)
-          .where(eq(organizations.id, user.orgId));
-
-        console.log(`✅ Operating Hours & AI Agent updated successfully for org ${user.orgId}`);
-
-        return {
-          success: true,
-          message: 'Pengaturan Jam Operasional & AI Agent berhasil disimpan!',
-        };
-      } catch (err: any) {
-        console.error('❌ Failed to update operating hours:', err);
-        set.status = 500;
-        return {
-          success: false,
-          error: err.message || 'Gagal menyimpan ke database',
-        };
-      }
-    },
-    {
-      body: t.Object({
-        operatingHours: t.Optional(t.Any()),
-        aiAgentConfig: t.Optional(t.Any()),
-        chatbotConfig: t.Optional(t.Any()),
-      }),
-    }
-  )
-
-  // ─── POST /settings/ai-agent/test — Test AI Prompt Directly ──
+  // ─── POST /settings/ai-agent/test — quick AI check (admin / supervisor) ──
   .post(
     '/ai-agent/test',
     async ({ user, body, set }) => {
@@ -1216,38 +1203,120 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
         set.status = 401;
         return { success: false, error: 'Unauthorized' };
       }
-
+      if (!canManageBot(user.role)) {
+        set.status = 403;
+        return { success: false, error: 'Akses ditolak (Khusus Administrator atau Supervisor)' };
+      }
       try {
-        const { AiAgentService } = await import('../../services/ai-agent.service');
+        const apiKey = body.apiKey?.trim() || (await storedAiKey(user.orgId)) || undefined;
         const reply = await AiAgentService.generateAiResponse({
           provider: body.provider as any,
-          systemPrompt: body.systemPrompt || '',
+          systemPrompt: buildAiSystemPrompt('bisnis Anda', body.systemPrompt),
           userMessage: body.userMessage || 'Halo, saya mau tanya apakah ada promo hari ini?',
-          apiKey: body.apiKey || undefined,
+          apiKey,
           model: body.model,
           baseUrl: body.baseUrl,
         });
-
-        return {
-          success: true,
-          reply,
-        };
+        return { success: true, reply };
       } catch (err: any) {
         set.status = 400;
-        return {
-          success: false,
-          error: err.message,
-        };
+        return { success: false, error: err.message };
       }
     },
     {
       body: t.Object({
         provider: t.Optional(t.String()),
-        systemPrompt: t.String(),
+        systemPrompt: t.Optional(t.String()),
         userMessage: t.String(),
         apiKey: t.Optional(t.String()),
         model: t.Optional(t.String()),
         baseUrl: t.Optional(t.String()),
+      }),
+    }
+  )
+
+  // ─── POST /settings/chatbot/simulate — run the real decision engine on unsaved settings ──
+  .post(
+    '/chatbot/simulate',
+    async ({ user, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { success: false, error: 'Unauthorized' };
+      }
+      if (!canManageBot(user.role)) {
+        set.status = 403;
+        return { success: false, error: 'Akses ditolak (Khusus Administrator atau Supervisor)' };
+      }
+
+      const [org] = await db
+        .select({ name: organizations.name, aiAgentConfig: organizations.aiAgentConfig })
+        .from(organizations)
+        .where(eq(organizations.id, user.orgId))
+        .limit(1);
+      const businessName = org?.name || 'Bisnis Anda';
+      const ai: any = { ...(body.aiAgentConfig || {}), enabled: true }; // simulate even while switched off
+      const settings = normalizeBotSettings(ai, body.chatbotConfig || {});
+      const contactName = body.contactName?.trim() || 'Budi';
+
+      const decision = decideBotReply({
+        message: body.message,
+        settings,
+        contactName,
+        businessName,
+        isNewConversation: body.isNewConversation === true,
+      });
+
+      const result: any = { success: true, kind: decision.kind };
+      if (decision.kind === 'SILENT') {
+        result.note = decision.reason;
+        return result;
+      }
+      if (decision.kind === 'GREETING' || decision.kind === 'STATIC') {
+        result.reply = decision.reply;
+        return result;
+      }
+      if (decision.kind === 'RULE') {
+        result.reply = decision.reply;
+        result.ruleTitle = decision.rule.title;
+        result.handoff = decision.handoff;
+        if (!decision.thenAi) return result;
+      }
+
+      // AI answer (fallback, or a rule that hands over to AI)
+      try {
+        const storedAi: any = parseJsonValue(org?.aiAgentConfig) || {};
+        const apiKey = ai.apiKey?.trim() || storedAi.apiKey || undefined;
+        const history = Array.isArray(body.history)
+          ? body.history
+              .filter((h: any) => h && typeof h.text === 'string' && h.text.trim())
+              .slice(-10)
+              .map((h: any) => ({ role: (h.role === 'user' ? 'user' : 'model') as 'user' | 'model', text: h.text }))
+          : [];
+        result.reply = await AiAgentService.generateAiResponse({
+          provider: ai.provider || 'gemini',
+          systemPrompt: buildAiSystemPrompt(businessName, ai.systemPrompt),
+          userMessage: body.message,
+          conversationHistory: history,
+          apiKey,
+          model: ai.model,
+          baseUrl: ai.baseUrl,
+        });
+        result.kind = 'AI';
+      } catch (err: any) {
+        result.kind = 'AI_ERROR';
+        result.error = err.message;
+        result.reply = fillTemplate(settings.staticMessage, { contactName, businessName });
+      }
+      return result;
+    },
+    {
+      body: t.Object({
+        message: t.String({ minLength: 1, maxLength: 2000 }),
+        isNewConversation: t.Optional(t.Boolean()),
+        contactName: t.Optional(t.String()),
+        aiAgentConfig: t.Optional(t.Any()),
+        chatbotConfig: t.Optional(t.Any()),
+        history: t.Optional(t.Array(t.Any())),
       }),
     }
   )

@@ -2,13 +2,47 @@
 // AI Agent Service — Out-of-Hours Auto-Responder
 // ===========================================
 
-import { nanoid } from 'nanoid';
-import { eq, desc, asc } from 'drizzle-orm';
-import { db } from '../config/database';
-import { messages, conversations, organizations, phoneNumbers } from '../db/schema';
-import type { OperatingHoursConfig, AiAgentConfig } from '../db/schema/organizations';
-import { MetaApiService } from './meta-api.service';
-import { env } from '../config/env';
+import type { OperatingHoursConfig } from '../db/schema/organizations';
+
+/** Default Claude model for the auto-responder (current Opus). */
+export const DEFAULT_CLAUDE_MODEL = 'claude-opus-5-5';
+
+/**
+ * Tenants can point "Custom LLM" at any URL and the server will call it. Block loopback, link-local
+ * and private ranges so a tenant cannot reach services inside our network (SSRF).
+ * Self-hosted single-tenant installs can opt out with AI_ALLOW_PRIVATE_BASE_URL=true.
+ */
+export function assertSafeLlmBaseUrl(raw: string) {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error('Alamat Custom LLM tidak valid. Contoh: https://llm.domain-anda.com');
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new Error('Alamat Custom LLM harus diawali http:// atau https://');
+  }
+  if (process.env.AI_ALLOW_PRIVATE_BASE_URL === 'true') return;
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  const isPrivate =
+    host === 'localhost' ||
+    host.endsWith('.localhost') ||
+    host.endsWith('.local') ||
+    host.endsWith('.internal') ||
+    /^127\./.test(host) ||
+    /^10\./.test(host) ||
+    /^192\.168\./.test(host) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(host) ||
+    /^169\.254\./.test(host) ||
+    /^0\./.test(host) ||
+    host === '0.0.0.0' ||
+    host === '::1' ||
+    /^f[cd][0-9a-f]{2}:/.test(host) ||
+    /^fe80:/.test(host);
+  if (isPrivate) {
+    throw new Error('Alamat Custom LLM tidak boleh mengarah ke jaringan lokal/privat server. Gunakan alamat publik.');
+  }
+}
 
 export class AiAgentService {
   /**
@@ -123,7 +157,7 @@ export class AiAgentService {
     }
 
     // Flash models first (fastest & cost-effective)
-    const flashModels = availableModels.filter((m) => m.includes('flash') && !m.includes('2.5'));
+    const flashModels = availableModels.filter((m) => m.includes('flash') && !m.includes('image') && !m.includes('tts'));
     modelsToTry.push(...flashModels);
     modelsToTry.push(...availableModels);
 
@@ -259,7 +293,9 @@ export class AiAgentService {
   }
 
   /**
-   * Generate AI response using Anthropic Claude API (Claude 3.5 Sonnet, Claude 3 Haiku)
+   * Generate AI response using the Anthropic Claude Messages API (raw HTTP).
+   * Current models think before answering, so the reply may be preceded by `thinking` blocks:
+   * read every `text` block and leave enough `max_tokens` for thinking + answer.
    */
   static async generateClaudeResponse(params: {
     systemPrompt: string;
@@ -273,42 +309,65 @@ export class AiAgentService {
       throw new Error('Anthropic API Key belum diatur. Harap masukkan API Key Claude di Pengaturan AI.');
     }
 
-    const model = params.model || 'claude-3-5-sonnet-20240620';
-    const messagesPayload: any[] = [];
-    if (params.conversationHistory) {
-      for (const item of params.conversationHistory) {
-        messagesPayload.push({
-          role: item.role === 'user' ? 'user' : 'assistant',
-          content: item.text,
-        });
-      }
+    // Older saved configs may still point at retired Claude 3.x model ids
+    const requested = (params.model || '').trim();
+    const model = !requested || /^claude-(3|instant|2)/.test(requested) ? DEFAULT_CLAUDE_MODEL : requested;
+
+    const messagesPayload: { role: 'user' | 'assistant'; content: string }[] = [];
+    for (const item of params.conversationHistory || []) {
+      if (!item.text?.trim()) continue;
+      messagesPayload.push({ role: item.role === 'user' ? 'user' : 'assistant', content: item.text });
     }
+    // The API requires the conversation to start with a user turn
+    while (messagesPayload.length > 0 && messagesPayload[0].role !== 'user') messagesPayload.shift();
     messagesPayload.push({ role: 'user', content: params.userMessage });
+
+    // Opus / Sonnet 5.5: re-run a policy-declined request on a fallback model inside the same call
+    const supportsFallback = /^claude-(opus|sonnet)-5-5$|^claude-fable-5/.test(model);
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+    };
+    if (supportsFallback) headers['anthropic-beta'] = 'server-side-fallback-2026-07-01';
+
+    const body: Record<string, unknown> = {
+      model,
+      max_tokens: 16000,
+      system: params.systemPrompt,
+      messages: messagesPayload,
+      // Short customer-service replies: low effort keeps answers quick and inexpensive
+      output_config: { effort: 'low' },
+    };
+    if (supportsFallback) body.fallbacks = 'default';
 
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model,
-        system: params.systemPrompt,
-        messages: messagesPayload,
-        max_tokens: 800,
-      }),
+      headers,
+      body: JSON.stringify(body),
     });
 
-    const data = await res.json();
+    const data: any = await res.json().catch(() => ({}));
     if (!res.ok || data?.error) {
-      throw new Error(`Claude API Error: ${data?.error?.message || res.statusText}`);
+      const msg = data?.error?.message || res.statusText;
+      if (res.status === 401) throw new Error('Claude API Error: API key tidak valid.');
+      if (res.status === 404) throw new Error(`Claude API Error: model "${model}" tidak tersedia untuk API key ini.`);
+      if (res.status === 429) throw new Error('Claude API Error: batas pemakaian tercapai, coba lagi sebentar.');
+      throw new Error(`Claude API Error: ${msg}`);
     }
 
-    const reply = data?.content?.[0]?.text;
+    if (data?.stop_reason === 'refusal') {
+      throw new Error('Claude menolak menjawab pesan ini.');
+    }
+
+    const reply = (Array.isArray(data?.content) ? data.content : [])
+      .filter((block: any) => block?.type === 'text' && typeof block.text === 'string')
+      .map((block: any) => block.text)
+      .join('')
+      .trim();
     if (reply) {
-      console.log(`✨ Claude successfully replied using model [${model}]`);
-      return reply.trim();
+      console.log(`✨ Claude successfully replied using model [${data?.model || model}]`);
+      return reply;
     }
     throw new Error('Claude tidak memberikan teks balasan.');
   }
@@ -332,183 +391,12 @@ export class AiAgentService {
     } else if (provider === 'claude') {
       return this.generateClaudeResponse(params);
     } else if (provider === 'custom_llm') {
-      return this.generateOpenAiResponse({
-        ...params,
-        baseUrl: params.baseUrl || 'http://localhost:11434', // Default Ollama / LocalAI endpoint
-      });
+      const baseUrl = params.baseUrl || 'http://localhost:11434'; // Default Ollama / LocalAI endpoint
+      assertSafeLlmBaseUrl(baseUrl);
+      return this.generateOpenAiResponse({ ...params, baseUrl });
     }
 
     // Default: Gemini
     return this.generateGeminiResponse(params);
-  }
-
-  /**
-   * Process out-of-hours inbound message and auto-reply to customer
-   */
-  static async handleOutOfHoursInbound(params: {
-    orgId: string;
-    convId: string;
-    contactWaId: string;
-    contactName: string;
-    incomingText: string;
-    phoneRecordId: string;
-  }) {
-    const { orgId, convId, contactWaId, contactName, incomingText, phoneRecordId } = params;
-
-    // 1. Fetch organization AI config
-    const [org] = await db
-      .select({
-        name: organizations.name,
-        accessToken: organizations.accessToken,
-        operatingHours: organizations.operatingHours,
-        aiAgentConfig: organizations.aiAgentConfig,
-      })
-      .from(organizations)
-      .where(eq(organizations.id, orgId))
-      .limit(1);
-
-    if (!org) return;
-
-    // 1b. Check if conversation has already been assigned / claimed by a human agent
-    const [conv] = await db
-      .select({
-        id: conversations.id,
-        assignedUserId: conversations.assignedUserId,
-        status: conversations.status,
-      })
-      .from(conversations)
-      .where(eq(conversations.id, convId))
-      .limit(1);
-
-    if (conv && (conv.assignedUserId || conv.status === 'RESOLVED')) {
-      console.log(`ℹ️ Percakapan ${convId} sudah diambil/ditugaskan ke agen (${conv.assignedUserId || 'Resolved'}). AI Agent berhenti membalas.`);
-      return;
-    }
-
-    const defaultConfig: AiAgentConfig = {
-      enabled: true,
-      mode: 'AI_ASSISTANT',
-      provider: 'gemini',
-    };
-    const aiConfig: AiAgentConfig = org.aiAgentConfig ? { ...defaultConfig, ...org.aiAgentConfig } : defaultConfig;
-
-    if (aiConfig.enabled === false) {
-      console.log('ℹ️ AI Agent dinonaktifkan untuk organisasi ini.');
-      return;
-    }
-
-    // 2. Fetch Phone details
-    const [phone] = await db
-      .select()
-      .from(phoneNumbers)
-      .where(eq(phoneNumbers.id, phoneRecordId))
-      .limit(1);
-
-    const phoneNumberId = phone?.phoneNumberId || 'phone_default_id';
-
-    const activeToken =
-      org.accessToken && !org.accessToken.startsWith('EAAGm0PX4ZCBO')
-        ? org.accessToken
-        : env.META_ACCESS_TOKEN;
-
-    let responseText = '';
-
-    // Mode A: Static Out-of-Hours Message
-    if (aiConfig.mode === 'STATIC_MESSAGE') {
-      responseText =
-        aiConfig.staticMessage ||
-        `Halo ${contactName}, terima kasih telah menghubungi ${org.name}.\n\nSaat ini layanan pelanggan kami sedang berada di luar jam operasional. Pesan Anda telah kami terima dan akan segera dibalas oleh tim kami saat jam operasional dimulai. Terima kasih atas pengertian Anda! 🙏`;
-    } else {
-      // Mode B: AI Smart Assistant (Gemini)
-      try {
-        // Fetch last 6 messages for context
-        const recentMsgs = await db
-          .select({
-            direction: messages.direction,
-            body: messages.body,
-            senderType: messages.senderType,
-          })
-          .from(messages)
-          .where(eq(messages.conversationId, convId))
-          .orderBy(desc(messages.createdAt))
-          .limit(6);
-
-        const history = recentMsgs.reverse().map((m) => ({
-          role: (m.direction === 'INBOUND' ? 'user' : 'model') as 'user' | 'model',
-          text: m.body || '',
-        }));
-
-        const defaultPrompt = `Anda adalah asisten AI customer service WhatsApp resmi dari ${org.name}.
-Saat ini kantor sedang berada di luar jam operasional.
-Tugas Anda:
-1. Berikan jawaban yang ramah, sopan, solutif, dan profesional dalam Bahasa Indonesia.
-2. Jawab pertanyaan pelanggan dengan singkat dan padat (maksimal 2-3 paragraf).
-3. Jika pelanggan menanyakan hal teknis atau membutuhkan bantuan agen manusia, jelaskan bahwa pesan mereka telah dicatat dan akan ditindaklanjuti oleh agen kami pada jam kerja.`;
-
-        const finalSystemPrompt = aiConfig.systemPrompt?.trim()
-          ? `[PANDUAN & ATURAN UTAMA DARI PERUSAHAAN]\n${aiConfig.systemPrompt.trim()}\n\n[ATURAN WAJIB]: Anda WAJIB mematuhi seluruh panduan, logika, jawaban FAQ, dan batasan yang tertera di atas.`
-          : defaultPrompt;
-
-        responseText = await AiAgentService.generateAiResponse({
-          provider: aiConfig.provider || 'gemini',
-          systemPrompt: finalSystemPrompt,
-          userMessage: incomingText,
-          conversationHistory: history,
-          apiKey: aiConfig.apiKey,
-          model: aiConfig.model,
-          baseUrl: aiConfig.baseUrl,
-        });
-      } catch (aiErr: any) {
-        console.error('❌ AI Agent response error:', aiErr.message);
-        responseText =
-          aiConfig.staticMessage ||
-          `Halo ${contactName}, terima kasih telah menghubungi ${org.name}.\n\nSaat ini layanan pelanggan kami sedang berada di luar jam operasional. Pesan Anda telah kami catat di antrean sistem dan akan segera dibalas oleh tim kami saat jam kerja dimulai. 🙏`;
-      }
-    }
-
-    if (!responseText.trim()) return;
-
-    // 3. Send WhatsApp Outbound Message via Meta API
-    let wamId: string | null = null;
-    try {
-      const metaRes = await MetaApiService.sendTextMessage(
-        {
-          phoneNumberId: phoneNumberId,
-          recipientWaId: contactWaId,
-          text: responseText,
-        },
-        activeToken
-      );
-      wamId = metaRes.messages?.[0]?.id || null;
-    } catch (metaSendErr: any) {
-      console.error('❌ Failed to send AI auto-reply WhatsApp message:', metaSendErr.message);
-    }
-
-    // 4. Save AI Response to Database (senderType: 'BOT')
-    const messageId = nanoid();
-    await db.insert(messages).values({
-      id: messageId,
-      conversationId: convId,
-      wamId,
-      direction: 'OUTBOUND',
-      senderType: 'BOT',
-      senderId: null,
-      messageType: 'text',
-      body: responseText,
-      isInternalNote: false,
-      status: 'SENT',
-      createdAt: new Date(),
-    });
-
-    // 5. Update Conversation preview
-    await db
-      .update(conversations)
-      .set({
-        lastMessagePreview: `[AI]: ${responseText.slice(0, 80)}`,
-        lastMessageAt: new Date(),
-      })
-      .where(eq(conversations.id, convId));
-
-    console.log(`🤖 AI Agent Auto-Replied to ${contactWaId} in conversation ${convId}`);
   }
 }

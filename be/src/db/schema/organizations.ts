@@ -16,7 +16,8 @@ export interface OperatingHoursConfig {
 export interface AiAgentConfig {
   enabled: boolean;
   triggerMode?: 'OUT_OF_HOURS' | 'ALWAYS'; // OUT_OF_HOURS (di luar jam kerja) atau ALWAYS (24/7 selalu aktif)
-  mode: 'AI_ASSISTANT' | 'STATIC_MESSAGE';
+  /** What to do when no menu keyword matches: AI answer, fixed message, or stay silent for a human */
+  mode: 'AI_ASSISTANT' | 'STATIC_MESSAGE' | 'NONE';
   provider: 'gemini' | 'openai' | 'claude' | 'custom_llm';
   apiKey?: string;
   model?: string;
@@ -34,7 +35,13 @@ export interface ChatbotRule {
 }
 
 export interface ChatbotConfig {
+  /** Keyword menu on/off (default off for configs saved before the menu ran in production) */
+  enabled?: boolean;
   greetingText?: string;
+  /** Whole-message words that show the greeting / main menu */
+  greetingKeywords?: string[];
+  /** Also send the greeting on the first message of a new conversation */
+  greetOnNewConversation?: boolean;
   rules?: ChatbotRule[];
   fallbackMode?: 'AI_AGENT' | 'HANDOFF_HUMAN' | 'STATIC_MESSAGE';
 }

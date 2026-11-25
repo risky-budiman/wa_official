@@ -17,7 +17,7 @@ import {
   organizations,
   messageTemplates
 } from '../../db/schema';
-import { AiAgentService } from '../../services/ai-agent.service';
+import { ChatbotService } from '../../services/chatbot.service';
 import { MetaApiService } from '../../services/meta-api.service';
 import { env } from '../../config/env';
 import type { MetaWebhookBody } from './webhook.types';
@@ -410,7 +410,8 @@ export class WebhookProcessor {
               if (!targetAssignedUser) {
                 const onlineAgentId = await WebhookProcessor.getLeastBusyAgent(orgId);
                 targetAssignedUser = onlineAgentId; // null if all agents offline
-                targetStatus = onlineAgentId ? 'OPEN' : 'UNASSIGNED';
+                // A customer who asked for a human (PENDING) keeps waiting for one — the bot stays quiet
+                targetStatus = onlineAgentId ? 'OPEN' : activeConv.status === 'PENDING' ? 'PENDING' : 'UNASSIGNED';
               }
 
               currentAssignedAgentId = targetAssignedUser;
@@ -458,45 +459,22 @@ export class WebhookProcessor {
 
                 console.log(`✅ Pesan WA masuk dari ${customerWaId} ("${messageBody.substring(0, 30)}") berhasil disimpan!`);
 
-                // 2d. AI Agent Auto-Responder Trigger Check
-                const [orgFull] = await db
-                  .select({
-                    operatingHours: organizations.operatingHours,
-                    aiAgentConfig: organizations.aiAgentConfig,
+                // 2d. Automatic reply (keyword menu → AI → fixed message). ChatbotService checks the
+                //     master switch, working hours, and whether a human already owns the conversation.
+                if (!currentAssignedAgentId && msg.type === 'text') {
+                  ChatbotService.processInbound({
+                    orgId,
+                    convId: convId!,
+                    contactWaId: customerWaId,
+                    contactName: customerName,
+                    incomingText: messageBody,
+                    phoneRecordId: phone.id,
+                    isNewConversation: !activeConv,
                   })
-                  .from(organizations)
-                  .where(eq(organizations.id, orgId))
-                  .limit(1);
-
-                const aiCfg = orgFull?.aiAgentConfig;
-                if (aiCfg && aiCfg.enabled) {
-                  const isScheduleEnabled = orgFull.operatingHours && orgFull.operatingHours.enabled;
-                  const isOutOfHours = isScheduleEnabled
-                    ? AiAgentService.isOutOfOperatingHours(orgFull.operatingHours)
-                    : true; // Jika jadwal jam kerja nonaktif, perlakukan sebagai 24/7
-
-                  const isAlwaysOn = aiCfg.triggerMode === 'ALWAYS' || !isScheduleEnabled;
-                  const shouldRespond = isAlwaysOn || isOutOfHours;
-
-                  if (shouldRespond) {
-                    if (!currentAssignedAgentId) {
-                      console.log(`🤖 Memicu AI Agent Auto-Responder untuk ${customerWaId} (Mode: ${isAlwaysOn ? '24/7 Selalu Aktif' : 'Luar Jam Kerja'})...`);
-                      AiAgentService.handleOutOfHoursInbound({
-                        orgId,
-                        convId: convId!,
-                        contactWaId: customerWaId,
-                        contactName: customerName,
-                        incomingText: messageBody,
-                        phoneRecordId: phone.id,
-                      }).catch((aiErr) =>
-                        console.error('❌ AI Agent background handler error:', aiErr.message)
-                      );
-                    } else {
-                      console.log(`ℹ️ Percakapan ${convId} sudah diambil oleh agen manusia (${currentAssignedAgentId}). AI Agent standby.`);
-                    }
-                  } else {
-                    console.log(`ℹ️ Pesan masuk pada JAM OPERASIONAL AKTIF. Menunggu respon agen manusia.`);
-                  }
+                    .then((r) => {
+                      if (r.handledBy !== 'NONE') console.log(`🤖 Balasan otomatis (${r.handledBy}) untuk ${customerWaId}`);
+                    })
+                    .catch((botErr) => console.error('❌ Chatbot background handler error:', botErr?.message || botErr));
                 }
               } catch (msgErr: any) {
                 console.log(`ℹ️ Pesan WA ${wamId} sudah tersimpan sebelumnya.`);
