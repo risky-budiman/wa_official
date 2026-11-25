@@ -1490,7 +1490,7 @@
               {#if isUnassigned || conv.status === "RESOLVED" || isConvExpired || (conv.participants && conv.participants.length > 0)}
                 <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
                   {#if isUnassigned}
-                    <span class="inline-flex items-center rounded-md bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 ring-1 ring-inset ring-amber-600/20 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-400/20">Belum ditugaskan</span>
+                    <span class="inline-flex items-center rounded-md bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 ring-1 ring-inset ring-amber-600/20 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-400/20">{conv.status === "PENDING" ? "Minta agen" : "Belum ditugaskan"}</span>
                   {:else if conv.status === "RESOLVED"}
                     <span class="inline-flex items-center gap-1 rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400"><CheckCircle2 class="h-3 w-3" /> Selesai</span>
                   {/if}
