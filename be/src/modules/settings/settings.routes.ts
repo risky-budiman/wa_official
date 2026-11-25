@@ -9,6 +9,7 @@ import { env } from '../../config/env';
 import { db } from '../../config/database';
 import { organizations, phoneNumbers, messages, conversations, broadcastCampaigns, apiKeys, users } from '../../db/schema';
 import { authPlugin } from '../../middleware/auth';
+import { hashApiKey } from '../../middleware/api-key-auth';
 import { MetaApiService } from '../../services/meta-api.service';
 
 /**
@@ -1162,7 +1163,7 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
         id: keyId,
         organizationId: user.orgId,
         name: body.name.trim(),
-        key: fullKey,
+        key: hashApiKey(fullKey), // 🔒 only the hash is stored; the full key is shown to the admin once
         keyPrefix: prefix,
         permissions,
         expiresAt: body.expiresAt ? new Date(body.expiresAt) : null,

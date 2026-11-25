@@ -139,5 +139,9 @@ export function validateEnv(): void {
     );
   }
 
+  if (env.NODE_ENV === 'production' && env.CORS_ORIGIN === '*') {
+    console.warn('⚠️  CORS_ORIGIN=* di production — sebaiknya isi dengan domain frontend (mis. https://crm.domainanda.com).');
+  }
+
   console.log(`✅ Environment loaded (${env.NODE_ENV})`);
 }

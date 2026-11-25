@@ -31,3 +31,7 @@ src/db/migrations/*.sql
 
 # Auto-generated JWT secret (never commit)
 .jwt-secret
+
+# Local binaries & runtime uploads (never commit)
+*.exe
+be/uploads/
