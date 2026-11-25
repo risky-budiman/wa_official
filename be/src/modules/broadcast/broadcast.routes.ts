@@ -3,7 +3,7 @@
 // ===========================================
 
 import { Elysia, t } from 'elysia';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { db } from '../../config/database';
 import { env } from '../../config/env';
@@ -35,13 +35,13 @@ export class BroadcastService {
         scheduledAt: broadcastCampaigns.scheduledAt,
         createdAt: broadcastCampaigns.createdAt,
         template: {
-          id: messageTemplates.id,
-          name: messageTemplates.name,
-          category: messageTemplates.category,
+          id: broadcastCampaigns.templateId,
+          name: sql<string>`COALESCE(${messageTemplates.name}, ${broadcastCampaigns.templateName}, '(template dihapus)')`,
+          category: sql<string>`COALESCE(${messageTemplates.category}, '-')`,
         },
       })
       .from(broadcastCampaigns)
-      .innerJoin(messageTemplates, eq(broadcastCampaigns.templateId, messageTemplates.id))
+      .leftJoin(messageTemplates, eq(broadcastCampaigns.templateId, messageTemplates.id))
       .where(eq(broadcastCampaigns.organizationId, orgId))
       .orderBy(desc(broadcastCampaigns.createdAt));
   }
@@ -181,6 +181,7 @@ export class BroadcastService {
       organizationId: orgId,
       createdById: userId,
       templateId: body.templateId,
+      templateName: tmpl.name,
       name: body.name,
       status: 'PROCESSING',
       totalRecipients,

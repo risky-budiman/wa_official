@@ -18,9 +18,11 @@ export const broadcastCampaigns = mysqlTable('broadcast_campaigns', {
     .references(() => organizations.id, { onDelete: 'cascade' }),
   createdById: varchar('created_by_id', { length: 36 })
     .references(() => users.id, { onDelete: 'set null' }),
+  // Nullable + ON DELETE SET NULL: deleting a template keeps the campaign history
   templateId: varchar('template_id', { length: 36 })
-    .notNull()
-    .references(() => messageTemplates.id),
+    .references(() => messageTemplates.id, { onDelete: 'set null' }),
+  // Snapshot of the template name at send time (shown when the template was deleted)
+  templateName: varchar('template_name', { length: 255 }),
   name: varchar('name', { length: 255 }).notNull(),
   status: mysqlEnum('status', campaignStatusEnum).default('DRAFT'),
   totalRecipients: int('total_recipients').default(0),
