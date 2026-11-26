@@ -102,6 +102,13 @@ function parseJsonValue<T = any>(v: unknown): T | null {
   return v as T;
 }
 
+const DEFAULT_QUICK_REPLIES = [
+  { id: 'qr-salam', shortcut: '/salam', title: 'Salam pembuka', body: 'Halo, terima kasih telah menghubungi kami. Ada yang bisa kami bantu hari ini? 😊' },
+  { id: 'qr-tunggu', shortcut: '/tunggu', title: 'Mohon ditunggu', body: 'Mohon tunggu sebentar ya, kami sedang mengecek data Anda.' },
+  { id: 'qr-jamkerja', shortcut: '/jam_kerja', title: 'Jam operasional', body: 'Jam operasional layanan kami: Senin–Jumat 08.00–17.00 WIB.' },
+  { id: 'qr-terimakasih', shortcut: '/terimakasih', title: 'Penutup', body: 'Terima kasih atas kepercayaan Anda. Jika ada pertanyaan lain, jangan ragu menghubungi kami kembali! 🙏' },
+];
+
 const canManageBot = (role?: string) => role === 'ADMINISTRATOR' || role === 'SUPER_ADMIN' || role === 'SUPERVISOR';
 
 async function storedAiKey(orgId: string): Promise<string> {
@@ -1195,6 +1202,71 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
   // ─── PATCH & POST /settings/operating-hours — save hours, AI & chatbot config ──
   .patch('/operating-hours', async ({ user, body, set }) => saveBotSettings(user, body, set), { body: botSettingsBody })
   .post('/operating-hours', async ({ user, body, set }) => saveBotSettings(user, body, set), { body: botSettingsBody })
+
+  // ─── Quick replies (shared by the whole team) ───
+  .get('/quick-replies', async ({ user, set }) => {
+    if (!user) {
+      set.status = 401;
+      return { success: false, error: 'Unauthorized' };
+    }
+    const [org] = await db
+      .select({ quickReplies: organizations.quickReplies })
+      .from(organizations)
+      .where(eq(organizations.id, user.orgId))
+      .limit(1);
+    const stored = parseJsonValue<any[]>(org?.quickReplies);
+    const isDefault = !Array.isArray(stored);
+    return { success: true, items: isDefault ? DEFAULT_QUICK_REPLIES : stored, isDefault };
+  })
+
+  .put(
+    '/quick-replies',
+    async ({ user, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { success: false, error: 'Unauthorized' };
+      }
+      if (!canManageBot(user.role)) {
+        set.status = 403;
+        return { success: false, error: 'Hanya Administrator atau Supervisor yang dapat mengubah balas cepat.' };
+      }
+      if (body.reset) {
+        await db.update(organizations).set({ quickReplies: null } as any).where(eq(organizations.id, user.orgId));
+        return { success: true, items: DEFAULT_QUICK_REPLIES, isDefault: true };
+      }
+      const items = Array.isArray(body.items) ? body.items : [];
+      if (items.length > 300) {
+        set.status = 400;
+        return { success: false, error: 'Maksimal 300 balas cepat.' };
+      }
+      const seen = new Set<string>();
+      const clean = [];
+      for (const raw of items) {
+        let shortcut = String(raw?.shortcut || '').trim().toLowerCase().replace(/\s+/g, '_');
+        if (!shortcut.startsWith('/')) shortcut = '/' + shortcut;
+        const title = String(raw?.title || '').trim().slice(0, 120);
+        const text = String(raw?.body || '').trim().slice(0, 4096);
+        if (!/^\/[\p{L}\p{N}_-]{1,40}$/u.test(shortcut) || !title || !text) {
+          set.status = 400;
+          return { success: false, error: `Balas cepat "${title || shortcut}" tidak valid (shortcut huruf/angka, judul & isi wajib).` };
+        }
+        if (seen.has(shortcut)) {
+          set.status = 400;
+          return { success: false, error: `Shortcut ${shortcut} dipakai lebih dari sekali.` };
+        }
+        seen.add(shortcut);
+        clean.push({ id: String(raw?.id || '').slice(0, 60) || `qr-${Date.now()}-${clean.length}`, shortcut, title, body: text });
+      }
+      await db.update(organizations).set({ quickReplies: clean } as any).where(eq(organizations.id, user.orgId));
+      return { success: true, items: clean, isDefault: false };
+    },
+    {
+      body: t.Object({
+        items: t.Optional(t.Array(t.Any())),
+        reset: t.Optional(t.Boolean()),
+      }),
+    }
+  )
 
   // ─── POST /settings/ai-agent/test — quick AI check (admin / supervisor) ──
   .post(

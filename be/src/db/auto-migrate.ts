@@ -132,6 +132,22 @@ export async function autoMigrateSchema(): Promise<void> {
       console.warn('⚠️ Broadcast recovery notice:', err?.message || err);
     }
 
+    // 7. organizations.quick_replies (team-wide quick replies; were only in each browser)
+    try {
+      const cols = rowsOf(
+        await db.execute(sql`
+          SELECT COLUMN_NAME FROM information_schema.COLUMNS
+          WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'organizations' AND COLUMN_NAME = 'quick_replies'
+        `)
+      );
+      if (cols.length === 0) {
+        await db.execute(sql`ALTER TABLE organizations ADD COLUMN quick_replies JSON NULL`);
+        console.log('🧩 organizations.quick_replies ditambahkan.');
+      }
+    } catch (err: any) {
+      console.warn('⚠️ organizations.quick_replies migration notice:', err?.message || err);
+    }
+
     // 6. Deleting a user who created a broadcast failed (FK was NO ACTION in older databases)
     try {
       await ensureFkSetNull('broadcast_campaigns', 'created_by_id', 'users', 'VARCHAR(36)');

@@ -4,6 +4,14 @@
   import { authStore } from '$lib/stores/auth.svelte';
   import { onMount } from 'svelte';
   import {
+    fetchQuickReplies,
+    saveQuickReplies,
+    resetQuickReplies,
+    readLegacyQuickReplies,
+    clearLegacyQuickReplies,
+    type QuickReplyItem,
+  } from '$lib/api/quick-replies';
+  import {
     Zap,
     Plus,
     Search,
@@ -19,12 +27,6 @@
     CornerDownLeft
   } from 'lucide-svelte';
 
-  interface QuickReplyItem {
-    id: string;
-    shortcut: string;
-    title: string;
-    body: string;
-  }
 
   let customQuickReplies = $state<QuickReplyItem[]>([]);
   let searchQuery = $state('');
@@ -53,97 +55,70 @@
     })
   );
 
-  function loadQuickReplies() {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('wa_crm_quick_replies');
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            customQuickReplies = parsed;
-            return;
-          }
-        } catch (e) {}
-      }
-    }
-    // Default fallback list
-    customQuickReplies = [
-      {
-        id: 'qr-salam',
-        shortcut: '/salam',
-        title: 'Salam & Sapaan Pelanggan',
-        body: 'Halo, terima kasih telah menghubungi kami. Ada yang bisa kami bantu hari ini? 😊',
-      },
-      {
-        id: 'qr-terimakasih',
-        shortcut: '/terimakasih',
-        title: 'Ucapan Terima Kasih',
-        body: 'Terima kasih banyak atas kepercayaan Anda. Jika ada pertanyaan lain, jangan ragu untuk menghubungi kami kembali! 🙏',
-      },
-      {
-        id: 'qr-jamkerja',
-        shortcut: '/jam_kerja',
-        title: 'Jam Operasional Layanan',
-        body: 'Jam operasional layanan kami adalah Senin - Jumat (08.00 - 17.00 WIB) dan Sabtu (08.00 - 12.00 WIB).',
-      },
-      {
-        id: 'qr-rekening',
-        shortcut: '/rekening',
-        title: 'Nomor Rekening Pembayaran',
-        body: 'Berikut nomor rekening resmi pembayaran kami:\nBCA: 1234567890 a.n. PT Official WA CRM\nMandiri: 0987654321 a.n. PT Official WA CRM',
-      },
-      {
-        id: 'qr-tunggu',
-        shortcut: '/tunggu',
-        title: 'Konfirmasi Mohon Tunggu',
-        body: 'Mohon tunggu sebentar ya kak, tim kami sedang mengecek data Anda.',
-      },
-    ];
+  let loading = $state(true);
+  let saving = $state(false);
+  let notice = $state<{ tone: 'success' | 'error'; text: string } | null>(null);
+  let isDefaultList = $state(false);
+  let legacyItems = $state<QuickReplyItem[]>([]);
+
+  function flash(tone: 'success' | 'error', text: string) {
+    notice = { tone, text };
+    if (tone === 'success') setTimeout(() => (notice = null), 4000);
   }
 
-  function saveQuickReplies() {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('wa_crm_quick_replies', JSON.stringify(customQuickReplies));
-    }
-  }
-
-  function handleSaveQr() {
-    if (!canManage) {
-      alert('Hanya Supervisor dan Admin yang memiliki akses menambahkan atau mengubah template balas cepat.');
+  async function loadQuickReplies() {
+    loading = true;
+    const res = await fetchQuickReplies();
+    loading = false;
+    if (res.error) {
+      flash('error', res.error);
       return;
     }
+    customQuickReplies = res.items;
+    isDefaultList = res.isDefault;
+    // Older versions kept the list only in this browser — offer a one-time import
+    const legacy = readLegacyQuickReplies();
+    legacyItems = canManage && legacy.length > 0 ? legacy : [];
+  }
 
+  /** Persist the whole list for the team; on failure keep what the server has. */
+  async function persist(next: QuickReplyItem[], successText: string) {
+    saving = true;
+    const res = await saveQuickReplies(next);
+    saving = false;
+    if (!res.success) {
+      flash('error', res.error || 'Gagal menyimpan balas cepat');
+      return false;
+    }
+    customQuickReplies = res.items;
+    isDefaultList = false;
+    flash('success', successText);
+    return true;
+  }
+
+  async function handleSaveQr() {
+    if (!canManage) return;
     if (!newQrShortcut.trim() || !newQrTitle.trim() || !newQrBody.trim()) {
-      alert('Harap isi shortcut, judul, dan isi balasan cepat.');
+      flash('error', 'Isi shortcut, judul, dan isi balasan cepat.');
       return;
     }
 
-    let shortcutClean = newQrShortcut.trim();
-    if (!shortcutClean.startsWith('/')) {
-      shortcutClean = '/' + shortcutClean;
-    }
+    let shortcutClean = newQrShortcut.trim().toLowerCase().replace(/\s+/g, '_');
+    if (!shortcutClean.startsWith('/')) shortcutClean = '/' + shortcutClean;
 
-    if (editingQrId) {
-      customQuickReplies = customQuickReplies.map((q) =>
-        q.id === editingQrId
-          ? { ...q, shortcut: shortcutClean, title: newQrTitle.trim(), body: newQrBody.trim() }
-          : q
-      );
+    const next = editingQrId
+      ? customQuickReplies.map((q) =>
+          q.id === editingQrId ? { ...q, shortcut: shortcutClean, title: newQrTitle.trim(), body: newQrBody.trim() } : q
+        )
+      : [{ id: 'qr-' + Date.now(), shortcut: shortcutClean, title: newQrTitle.trim(), body: newQrBody.trim() }, ...customQuickReplies];
+
+    if (await persist(next, editingQrId ? 'Balas cepat diperbarui untuk seluruh tim.' : 'Balas cepat ditambahkan untuk seluruh tim.')) {
       editingQrId = null;
-    } else {
-      customQuickReplies.unshift({
-        id: 'qr-' + Date.now(),
-        shortcut: shortcutClean,
-        title: newQrTitle.trim(),
-        body: newQrBody.trim(),
-      });
+      showFormModal = false;
+      newQrShortcut = '';
+      newQrTitle = '';
+      newQrBody = '';
     }
-
-    saveQuickReplies();
-    showFormModal = false;
-    newQrShortcut = '';
-    newQrTitle = '';
-    newQrBody = '';
   }
 
   function editQr(qr: QuickReplyItem) {
@@ -155,20 +130,38 @@
     showFormModal = true;
   }
 
-  function deleteQr(id: string) {
+  async function deleteQr(id: string) {
     if (!canManage) return;
-    if (!confirm('Hapus balasan cepat ini?')) return;
-    customQuickReplies = customQuickReplies.filter((q) => q.id !== id);
-    saveQuickReplies();
+    if (!confirm('Hapus balasan cepat ini untuk seluruh tim?')) return;
+    await persist(customQuickReplies.filter((q) => q.id !== id), 'Balas cepat dihapus.');
   }
 
-  function resetDefaultQr() {
+  async function resetDefaultQr() {
     if (!canManage) return;
-    if (!confirm('Kembalikan daftar ke template balasan cepat bawaan awal?')) return;
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('wa_crm_quick_replies');
+    if (!confirm('Kembalikan daftar ke balasan cepat bawaan? Daftar tim saat ini akan diganti.')) return;
+    saving = true;
+    const res = await resetQuickReplies();
+    saving = false;
+    if (res.success) {
+      customQuickReplies = res.items;
+      isDefaultList = true;
+      flash('success', 'Daftar dikembalikan ke bawaan.');
+    } else flash('error', res.error || 'Gagal mengembalikan daftar');
+  }
+
+  async function importLegacy() {
+    const byShortcut = new Map(customQuickReplies.map((q) => [q.shortcut, q]));
+    for (const q of legacyItems) byShortcut.set(q.shortcut.startsWith('/') ? q.shortcut : '/' + q.shortcut, q);
+    const merged = isDefaultList ? legacyItems : Array.from(byShortcut.values());
+    if (await persist(merged, `${legacyItems.length} balas cepat dari browser ini sekarang tersedia untuk seluruh tim.`)) {
+      clearLegacyQuickReplies();
+      legacyItems = [];
     }
-    loadQuickReplies();
+  }
+
+  function dismissLegacy() {
+    clearLegacyQuickReplies();
+    legacyItems = [];
   }
 
   function copyText(text: string, id: string) {
@@ -209,6 +202,23 @@
     {/snippet}
   </PageHeader>
 
+  {#if notice}
+    <Alert tone={notice.tone} message={notice.text} ondismiss={() => (notice = null)} />
+  {/if}
+
+  {#if legacyItems.length > 0}
+    <Alert tone="info" title="Balas cepat lama ditemukan di browser ini">
+      <p class="mt-0.5 opacity-90">
+        {legacyItems.length} balas cepat sebelumnya hanya tersimpan di browser ini (agen lain tidak bisa melihatnya).
+        Impor agar tersedia untuk seluruh tim.
+      </p>
+      <div class="mt-2 flex gap-2">
+        <button type="button" class="ui-btn-primary !py-1.5 text-xs" onclick={importLegacy} disabled={saving}>Impor ke tim</button>
+        <button type="button" class="ui-btn-ghost !py-1.5 text-xs" onclick={dismissLegacy}>Abaikan</button>
+      </div>
+    </Alert>
+  {/if}
+
   {#if !canManage}
     <Alert
       tone="info"
@@ -235,7 +245,9 @@
   </div>
 
   <!-- Cards Grid -->
-  {#if filteredReplies.length === 0}
+  {#if loading}
+    <div class="ui-card p-10 text-center text-sm text-slate-500">Memuat balas cepat…</div>
+  {:else if filteredReplies.length === 0}
     <div class="p-12 text-center bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 space-y-3">
       <div class="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center mx-auto">
         <Zap class="w-6 h-6" />

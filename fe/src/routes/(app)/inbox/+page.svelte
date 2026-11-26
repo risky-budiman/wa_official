@@ -46,6 +46,7 @@
     PanelRightClose,
   } from "lucide-svelte";
   import { formatWhatsAppMarkdown } from "$lib/utils/whatsapp-formatter";
+  import { fetchQuickReplies } from "$lib/api/quick-replies";
   import SendSingleTemplateModal from "$lib/components/templates/SendSingleTemplateModal.svelte";
 
   let activeTab = $state<"ALL" | "MINE" | "UNASSIGNED">("ALL");
@@ -223,136 +224,10 @@
   let newQrBody = $state("");
   let editingQrId = $state<string | null>(null);
 
-  function loadQuickReplies() {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("wa_crm_quick_replies");
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            customQuickReplies = parsed;
-            return;
-          }
-        } catch (e) {}
-      }
-    }
-    // Default fallback
-    customQuickReplies = [
-      {
-        id: "qr-salam",
-        shortcut: "/salam",
-        title: "Salam & Sapaan Pelanggan",
-        body: "Halo, terima kasih telah menghubungi kami. Ada yang bisa kami bantu hari ini? 😊",
-      },
-      {
-        id: "qr-terimakasih",
-        shortcut: "/terimakasih",
-        title: "Ucapan Terima Kasih",
-        body: "Terima kasih banyak atas kepercayaan Anda. Jika ada pertanyaan lain, jangan ragu untuk menghubungi kami kembali! 🙏",
-      },
-      {
-        id: "qr-jamkerja",
-        shortcut: "/jam_kerja",
-        title: "Jam Operasional Layanan",
-        body: "Jam operasional layanan kami adalah Senin - Jumat (08.00 - 17.00 WIB) dan Sabtu (08.00 - 12.00 WIB).",
-      },
-      {
-        id: "qr-rekening",
-        shortcut: "/rekening",
-        title: "Nomor Rekening Pembayaran",
-        body: "Berikut nomor rekening resmi pembayaran kami:\nBCA: 1234567890 a.n. PT Official WA CRM\nMandiri: 0987654321 a.n. PT Official WA CRM",
-      },
-      {
-        id: "qr-tunggu",
-        shortcut: "/tunggu",
-        title: "Konfirmasi Mohon Tunggu",
-        body: "Mohon tunggu sebentar ya kak, tim kami sedang mengecek data Anda.",
-      },
-    ];
-  }
-
-  const canManageQuickReplies = $derived(
-    ["SUPER_ADMIN", "ADMINISTRATOR", "SUPERVISOR"].includes(
-      authStore.role || "",
-    ),
-  );
-
-  function saveQuickReplies() {
-    if (typeof window !== "undefined") {
-      localStorage.setItem(
-        "wa_crm_quick_replies",
-        JSON.stringify(customQuickReplies),
-      );
-    }
-  }
-
-  function handleSaveQr() {
-    if (!canManageQuickReplies) {
-      alert(
-        "Hanya Supervisor & Admin yang dapat menambah atau mengedit template balas cepat.",
-      );
-      return;
-    }
-
-    if (!newQrShortcut.trim() || !newQrTitle.trim() || !newQrBody.trim()) {
-      alert("Harap isi shortcut, judul, dan isi balasan cepat.");
-      return;
-    }
-
-    let shortcutClean = newQrShortcut.trim();
-    if (!shortcutClean.startsWith("/")) {
-      shortcutClean = "/" + shortcutClean;
-    }
-
-    if (editingQrId) {
-      customQuickReplies = customQuickReplies.map((q) =>
-        q.id === editingQrId
-          ? {
-              ...q,
-              shortcut: shortcutClean,
-              title: newQrTitle.trim(),
-              body: newQrBody.trim(),
-            }
-          : q,
-      );
-      editingQrId = null;
-    } else {
-      customQuickReplies.push({
-        id: "qr-" + Date.now(),
-        shortcut: shortcutClean,
-        title: newQrTitle.trim(),
-        body: newQrBody.trim(),
-      });
-    }
-
-    saveQuickReplies();
-    newQrShortcut = "";
-    newQrTitle = "";
-    newQrBody = "";
-  }
-
-  function editQr(qr: QuickReplyItem) {
-    if (!canManageQuickReplies) return;
-    editingQrId = qr.id;
-    newQrShortcut = qr.shortcut;
-    newQrTitle = qr.title;
-    newQrBody = qr.body;
-  }
-
-  function deleteQr(id: string) {
-    if (!canManageQuickReplies) return;
-    if (!confirm("Hapus balasan cepat ini?")) return;
-    customQuickReplies = customQuickReplies.filter((q) => q.id !== id);
-    saveQuickReplies();
-  }
-
-  function resetDefaultQr() {
-    if (!canManageQuickReplies) return;
-    if (!confirm("Kembalikan ke daftar balasan cepat bawaan awal?")) return;
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("wa_crm_quick_replies");
-    }
-    loadQuickReplies();
+  /** Team-wide quick replies from the server (typed with "/" in the composer). */
+  async function loadQuickReplies() {
+    const res = await fetchQuickReplies();
+    if (!res.error) customQuickReplies = res.items;
   }
 
   function isUserNearBottom(): boolean {

@@ -34,6 +34,13 @@ export interface ChatbotRule {
   action: 'REPLY' | 'HANDOFF_HUMAN' | 'HANDOVER_AI';
 }
 
+export interface QuickReply {
+  id: string;
+  shortcut: string;
+  title: string;
+  body: string;
+}
+
 export interface ChatbotConfig {
   /** Keyword menu on/off (default off for configs saved before the menu ran in production) */
   enabled?: boolean;
@@ -72,6 +79,8 @@ export const organizations = mysqlTable('organizations', {
   operatingHours: json('operating_hours').$type<OperatingHoursConfig>(),
   aiAgentConfig: json('ai_agent_config').$type<AiAgentConfig>(),
   chatbotConfig: json('chatbot_config').$type<ChatbotConfig>(),
+  /** Team-wide quick replies (null = built-in defaults) */
+  quickReplies: json('quick_replies').$type<QuickReply[]>(),
   createdAt: datetime('created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: datetime('updated_at').default(sql`CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`).notNull(),
 });
