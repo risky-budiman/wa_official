@@ -3,6 +3,7 @@
   import { themeStore } from '$lib/stores/theme.svelte';
   import { channelStore } from '$lib/stores/channel.svelte';
   import { notificationStore } from '$lib/stores/notifications.svelte';
+  import NotificationBell from './NotificationBell.svelte';
   import { apiRequest } from '$lib/api/client';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
@@ -41,7 +42,6 @@
   const pageTitle = $derived(title || current?.item.name || 'WhatsApp CRM');
   const pageSubtitle = $derived(subtitle ?? current?.item.description);
 
-  let showNotifications = $state(false);
   let showSecurityModal = $state(false);
   let showWabaModal = $state(false);
   let showLoginStatusPrompt = $state(false);
@@ -49,7 +49,6 @@
   onMount(() => {
     channelStore.checkStatus();
     notificationStore.startPolling();
-    notificationStore.requestBrowserPermission();
 
     if (typeof window !== 'undefined' && authStore.isAuthenticated) {
       const prompted = sessionStorage.getItem('wa_crm_status_prompted');
@@ -158,97 +157,7 @@
       <ShieldCheck class="h-[18px] w-[18px]" />
     </button>
 
-    <!-- 🔔 Notification Bell (Clickable with Live Badge) -->
-    <div class="relative">
-      <button
-        onclick={() => (showNotifications = !showNotifications)}
-        class="ui-icon-btn"
-        title="Notifikasi"
-        aria-label="Notifikasi"
-      >
-        <Bell class="h-[18px] w-[18px]" />
-        {#if notificationStore.unreadCount > 0}
-          <span class="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white ring-2 ring-white dark:ring-slate-900">
-            {notificationStore.unreadCount > 9 ? '9+' : notificationStore.unreadCount}
-          </span>
-        {/if}
-      </button>
-
-      <!-- Notification Dropdown Popover -->
-      {#if showNotifications}
-        <div class="absolute right-0 top-12 w-80 sm:w-96 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-150">
-          <div class="p-3.5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-950/60">
-            <div class="flex items-center gap-2">
-              <h4 class="text-xs font-bold text-slate-900 dark:text-white">Pemberitahuan Pesan</h4>
-              {#if notificationStore.unreadCount > 0}
-                <span class="px-1.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 text-[10px] font-bold">
-                  {notificationStore.unreadCount} baru
-                </span>
-              {/if}
-            </div>
-            
-            <div class="flex items-center gap-2">
-              <!-- Suara Notifikasi Toggle -->
-              <button
-                onclick={() => notificationStore.toggleSound()}
-                class="p-1 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-800 dark:hover:text-white transition"
-                title={notificationStore.soundEnabled ? 'Suara Aktif (Klik untuk mute)' : 'Suara Mute (Klik untuk aktifkan)'}
-              >
-                {#if notificationStore.soundEnabled}
-                  <Volume2 class="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                {:else}
-                  <VolumeX class="w-3.5 h-3.5 text-slate-400" />
-                {/if}
-              </button>
-
-              {#if notificationStore.unreadCount > 0}
-                <button
-                  onclick={() => notificationStore.markAllAsRead()}
-                  class="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
-                >
-                  Tandai Dibaca
-                </button>
-              {/if}
-            </div>
-          </div>
-
-          <div class="max-h-80 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/60">
-            {#if notificationStore.items.length === 0}
-              <div class="p-6 text-center text-xs text-slate-400">
-                <Bell class="w-8 h-8 mx-auto mb-2 opacity-30 text-slate-400" />
-                <p>Belum ada notifikasi pesan baru.</p>
-              </div>
-            {:else}
-              {#each notificationStore.items as n}
-                <button
-                  onclick={() => {
-                    notificationStore.markAsRead(n.id);
-                    showNotifications = false;
-                    goto('/inbox');
-                  }}
-                  class="w-full text-left p-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition cursor-pointer {n.unread ? 'bg-emerald-50/30 dark:bg-emerald-950/20' : ''}"
-                >
-                  <div class="flex items-start justify-between gap-2 mb-1">
-                    <span class="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                      {#if n.type === 'chat'}
-                        <MessageSquare class="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                      {:else if n.type === 'collab'}
-                        <UserCheck class="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 shrink-0" />
-                      {:else}
-                        <Radio class="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
-                      {/if}
-                      <span class="truncate">{n.title}</span>
-                    </span>
-                    <span class="text-[10px] text-slate-400 shrink-0">{n.time}</span>
-                  </div>
-                  <p class="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed truncate">{n.desc}</p>
-                </button>
-              {/each}
-            {/if}
-          </div>
-        </div>
-      {/if}
-    </div>
+    <NotificationBell />
   </div>
 </header>
 

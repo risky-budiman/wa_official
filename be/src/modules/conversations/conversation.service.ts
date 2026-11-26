@@ -94,6 +94,16 @@ export class ConversationService {
         phoneId: phoneNumbers.id,
         displayPhoneNumber: phoneNumbers.displayPhoneNumber,
         verifiedName: phoneNumbers.verifiedName,
+        // Who spoke last (customer vs. our side) — drives notifications and the unread state
+        lastSenderType: sql<string | null>`(
+          SELECT m.sender_type FROM messages m
+          WHERE m.conversation_id = ${conversations.id} AND COALESCE(m.is_internal_note, 0) = 0
+          ORDER BY m.created_at DESC LIMIT 1
+        )`,
+        unreadCount: sql<number>`(
+          SELECT COUNT(*) FROM messages m
+          WHERE m.conversation_id = ${conversations.id} AND m.direction = 'INBOUND' AND m.status <> 'READ'
+        )`,
       })
       .from(conversations)
       .leftJoin(contacts, eq(conversations.contactId, contacts.id))
@@ -149,6 +159,8 @@ export class ConversationService {
         windowExpiresAt: item.windowExpiresAt,
         lastMessagePreview: item.lastMessagePreview,
         lastMessageAt: item.lastMessageAt,
+        lastMessageFromCustomer: item.lastSenderType === 'CONTACT',
+        unreadCount: Number(item.unreadCount || 0),
         createdAt: item.createdAt,
         contact: {
           id: item.contactId,

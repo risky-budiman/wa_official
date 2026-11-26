@@ -2,7 +2,8 @@
   import { authStore } from "$lib/stores/auth.svelte";
   import { notificationStore } from "$lib/stores/notifications.svelte";
   import { apiRequest } from "$lib/api/client";
-  import { onMount } from "svelte";
+  import { onMount, tick, untrack } from "svelte";
+  import Alert from "$lib/components/ui/Alert.svelte";
   import {
     Search,
     Send,
@@ -54,6 +55,12 @@
   let selectedConvId = $state<string | null>(null);
   let isInternalNote = $state(false);
   let messageText = $state("");
+  /** Unsent text per conversation — switching chats never carries text to another customer */
+  const drafts = new Map<string, string>();
+  let sendError = $state<string | null>(null);
+  let isSending = $state(false);
+  /** WhatsApp text messages are limited to 4096 characters */
+  const MAX_MESSAGE_LENGTH = 4096;
   let searchQuery = $state("");
   let isLoading = $state(false);
   let isActionLoading = $state(false);
@@ -616,19 +623,6 @@
                 messageList[messageList.length - 1].status));
 
         if (isDiff || forceScroll) {
-          // If new inbound customer message arrived in active chat
-          if (sorted.length > prevCount && prevCount > 0) {
-            const latestMsg = sorted[sorted.length - 1];
-            if (latestMsg.senderType === "CONTACT") {
-              notificationStore.playChime();
-              notificationStore.triggerDesktopNotification(
-                `Pesan Baru: ${selectedConv?.contact.name || "Pelanggan"}`,
-                latestMsg.body,
-                convId,
-              );
-            }
-          }
-
           messageList = sorted;
           if (forceScroll) {
             scrollToBottom(true, false);
@@ -692,10 +686,38 @@
     }
   }
 
+  // A notification was clicked: open that chat once it is in the list
+  $effect(() => {
+    const wanted = notificationStore.pendingOpen;
+    if (!wanted || !conversationList.some((c) => c.id === wanted)) return;
+    notificationStore.pendingOpen = null;
+    untrack(() => selectConversation(wanted));
+  });
+
   function selectConversation(convId: string) {
+    if (convId === selectedConvId) return;
+    if (selectedConvId) {
+      if (messageText.trim()) drafts.set(selectedConvId, messageText);
+      else drafts.delete(selectedConvId);
+    }
+    // Restore this chat's own draft; never carry text, attachments or note mode to another customer
+    messageText = drafts.get(convId) || "";
+    pendingAttachment = null;
+    if (fileInputRef) fileInputRef.value = "";
+    isInternalNote = false;
+    showSlashMenu = false;
+    showEmojiPicker = false;
+    sendError = null;
     selectedConvId = convId;
+    notificationStore.setActiveConversation(convId);
     loadMessages(convId, true);
-    focusMessageInput();
+    tick().then(() => {
+      if (messageInputRef) {
+        messageInputRef.value = messageText;
+        autoResizeTextarea(messageInputRef);
+      }
+      focusMessageInput();
+    });
   }
 
   async function claimConversation(convIdToClaim?: string) {
@@ -928,8 +950,15 @@
   }
 
   async function sendMessage() {
-    if ((!messageText.trim() && !pendingAttachment) || !selectedConvId || isUploadingMedia) return;
+    if ((!messageText.trim() && !pendingAttachment) || !selectedConvId || isUploadingMedia || isSending) return;
     showSlashMenu = false;
+    sendError = null;
+    const targetConvId = selectedConvId;
+
+    if (messageText.trim().length > MAX_MESSAGE_LENGTH) {
+      sendError = `Pesan terlalu panjang (${messageText.trim().length.toLocaleString("id-ID")} karakter). Batas WhatsApp ${MAX_MESSAGE_LENGTH.toLocaleString("id-ID")} karakter.`;
+      return;
+    }
 
     if (!isInternalNote && selectedConv) {
       const effExpires = selectedConv.windowExpiresAt
@@ -938,9 +967,7 @@
           ? new Date(selectedConv.lastMessageAt).getTime() + 24 * 60 * 60 * 1000
           : 0;
       if (effExpires && effExpires - Date.now() <= 0) {
-        alert(
-          "Sesi 24 Jam Meta telah kadaluarsa (>24 Jam). Pesan balasan biasa tidak dapat dikirim.",
-        );
+        sendError = "Sesi 24 jam sudah habis. Balas dengan template WhatsApp.";
         return;
       }
     }
@@ -982,7 +1009,7 @@
         }
 
         if (!uploadRes.ok || !uploadData.success) {
-          alert(`Gagal mengunggah file: ${uploadData.error || "Terjadi kesalahan pada server"}`);
+          sendError = `Gagal mengunggah file: ${uploadData.error || "Terjadi kesalahan pada server"}`;
           isUploadingMedia = false;
           return;
         }
@@ -992,7 +1019,7 @@
         messageTypeToSend = uploadData.category;
         filenameToSend = currentAttachment.filename;
       } catch (err: any) {
-        alert(`Gagal mengunggah file: ${err.message || "Koneksi terputus"}`);
+        sendError = `Gagal mengunggah file: ${err.message || "Koneksi terputus"}`;
         isUploadingMedia = false;
         return;
       } finally {
@@ -1002,31 +1029,75 @@
 
     const textToSend = messageText.trim();
     messageText = "";
+    drafts.delete(targetConvId);
     resetTextareaHeight();
     showEmojiPicker = false;
     pendingAttachment = null;
     if (fileInputRef) fileInputRef.value = "";
     focusMessageInput();
 
+    // Show the message right away; it is replaced by the server copy (or removed on failure)
+    const tempId = `tmp-${Date.now()}`;
+    if (textToSend && !currentAttachment) {
+      messageList.push({
+        id: tempId,
+        senderType: isInternalNote ? (authStore.role || "AGENT") : "AGENT",
+        senderId: authStore.user?.id || null,
+        senderName: authStore.user?.fullName || null,
+        messageType: "text",
+        body: textToSend,
+        isInternalNote,
+        status: "PENDING",
+        createdAt: new Date().toISOString(),
+      } as MessageItem);
+      scrollToBottom(true);
+    }
+    const restoreOnFailure = (error: string) => {
+      messageList = messageList.filter((m) => m.id !== tempId);
+      if (textToSend) {
+        if (selectedConvId === targetConvId && !messageText.trim()) {
+          messageText = textToSend;
+          tick().then(() => {
+            if (messageInputRef) {
+              messageInputRef.value = messageText;
+              autoResizeTextarea(messageInputRef);
+            }
+          });
+        } else if (!drafts.get(targetConvId)) {
+          drafts.set(targetConvId, textToSend);
+        }
+      }
+      sendError = error;
+    };
+    const replaceTemp = (real: MessageItem) => {
+      const idx = messageList.findIndex((m) => m.id === tempId);
+      if (idx >= 0) messageList[idx] = real;
+      else if (!messageList.some((m) => m.id === real.id)) messageList.push(real);
+    };
+
+    isSending = true;
     if (isInternalNote) {
       const noteBody = textToSend || (currentAttachment ? `[File] ${currentAttachment.filename}` : "Catatan");
       const res = await apiRequest("/messages/internal-note", {
         method: "POST",
         body: JSON.stringify({
-          conversationId: selectedConvId,
+          conversationId: targetConvId,
           body: noteBody,
         }),
       });
+      isSending = false;
       if (res.success && res.note) {
-        messageList.push(res.note);
+        if (selectedConvId === targetConvId) replaceTemp(res.note);
         scrollToBottom(true);
         focusMessageInput();
+      } else {
+        restoreOnFailure(res.error || "Catatan gagal disimpan. Coba lagi.");
       }
     } else {
       const res = await apiRequest("/messages/send", {
         method: "POST",
         body: JSON.stringify({
-          conversationId: selectedConvId,
+          conversationId: targetConvId,
           messageType: messageTypeToSend,
           body: textToSend || (currentAttachment && currentAttachment.category !== "IMAGE" ? `[${currentAttachment.category}] ${currentAttachment.filename}` : ""),
           mediaUrl: mediaUrlToSend,
@@ -1034,17 +1105,18 @@
           filename: filenameToSend,
         }),
       });
+      isSending = false;
       if (res.success && res.message) {
-        messageList.push(res.message);
+        if (selectedConvId === targetConvId) replaceTemp(res.message);
         scrollToBottom(true);
         focusMessageInput();
-        const conv = conversationList.find((c) => c.id === selectedConvId);
+        const conv = conversationList.find((c) => c.id === targetConvId);
         if (conv) {
           conv.lastMessagePreview = textToSend || (currentAttachment ? `[${currentAttachment.category}]` : "");
           conv.status = "OPEN";
         }
-      } else if (res.error) {
-        alert(`Gagal mengirim pesan: ${res.error}`);
+      } else {
+        restoreOnFailure(`Pesan gagal terkirim: ${res.error || "periksa koneksi lalu coba lagi"}. Teks dikembalikan ke kolom ketik.`);
       }
     }
   }
@@ -1085,6 +1157,7 @@
 
     return () => {
       clearInterval(refreshTimer);
+      notificationStore.setActiveConversation(null);
     };
   });
 </script>
@@ -1398,8 +1471,10 @@
             class="ui-icon-btn -ml-1 md:hidden"
             aria-label="Kembali ke daftar percakapan"
             onclick={() => {
+              if (selectedConvId && messageText.trim()) drafts.set(selectedConvId, messageText);
               selectedConvId = null;
               messageList = [];
+              notificationStore.setActiveConversation(null);
             }}
           >
             <ChevronLeft class="h-5 w-5" />
@@ -1567,6 +1642,9 @@
       <div
         class="space-y-2 border-t border-slate-200 bg-white px-3 py-3 sm:px-4 dark:border-slate-800 dark:bg-slate-900"
       >
+        {#if sendError}
+          <Alert tone="error" message={sendError} ondismiss={() => (sendError = null)} />
+        {/if}
         {#if selectedConv.status === "RESOLVED"}
           <div class="flex items-center gap-3 rounded-xl bg-slate-50 px-4 py-3 text-sm ring-1 ring-inset ring-slate-200 dark:bg-slate-800/60 dark:ring-slate-700">
             <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-slate-500 shadow-sm dark:bg-slate-900 dark:text-slate-400">
@@ -1857,7 +1935,7 @@
               <button
                 type="button"
                 onclick={sendMessage}
-                disabled={isUploadingMedia}
+                disabled={isUploadingMedia || isSending}
                 class="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-xl transition disabled:opacity-60
                   {isInternalNote
                     ? 'bg-amber-500 text-slate-950 hover:bg-amber-400'
@@ -1872,9 +1950,16 @@
                 {/if}
               </button>
             </div>
-            <p class="hidden px-1 text-[11px] text-slate-400 sm:block dark:text-slate-500">
-              <kbd class="font-sans font-semibold">Enter</kbd> kirim · <kbd class="font-sans font-semibold">Shift + Enter</kbd> baris baru · <kbd class="font-sans font-semibold">/</kbd> balas cepat
-            </p>
+            <div class="flex items-center justify-between gap-3 px-1 text-[11px] text-slate-400 dark:text-slate-500">
+              <p class="hidden sm:block">
+                <kbd class="font-sans font-semibold">Enter</kbd> kirim · <kbd class="font-sans font-semibold">Shift + Enter</kbd> baris baru · <kbd class="font-sans font-semibold">/</kbd> balas cepat
+              </p>
+              {#if messageText.length > MAX_MESSAGE_LENGTH - 500}
+                <span class="ml-auto tabular-nums {messageText.length > MAX_MESSAGE_LENGTH ? 'font-semibold text-rose-600' : ''}">
+                  {messageText.length.toLocaleString("id-ID")} / {MAX_MESSAGE_LENGTH.toLocaleString("id-ID")}
+                </span>
+              {/if}
+            </div>
           {/if}
         {/if}
       </div>

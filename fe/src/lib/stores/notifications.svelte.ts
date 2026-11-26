@@ -1,53 +1,100 @@
 // ===========================================
-// Real-time Notification Store (Sound & Desktop Alerts)
+// Notifications — new customer messages (sound, desktop, unread badge)
 // ===========================================
+//
+// One source of truth for "a customer wrote to us":
+//  - only messages FROM THE CUSTOMER notify (not our replies, bot replies or broadcasts)
+//  - grouped per conversation ("3 pesan baru")
+//  - nothing fires for the conversation you are looking at while the tab is visible
+//  - keeps polling (slower) while the tab is in the background so desktop alerts still arrive
 
 import { apiRequest } from '$lib/api/client';
+import { goto } from '$app/navigation';
 
 export interface NotificationItem {
   id: string;
-  title: string;
-  desc: string;
-  time: string;
+  conversationId: string;
+  contactName: string;
+  preview: string;
+  /** Messages received since the notification was last read */
+  count: number;
   unread: boolean;
-  type: 'chat' | 'collab' | 'queue' | 'system';
-  conversationId?: string;
-  createdAt: string;
+  /** ISO time of the newest message */
+  at: string;
+  kind: 'message' | 'queue';
 }
+
+const FOREGROUND_MS = 6000;
+const BACKGROUND_MS = 15000;
+const SOUND_KEY = 'wa_crm_sound_enabled';
+const DESKTOP_KEY = 'wa_crm_desktop_notif';
 
 export class NotificationStore {
   items = $state<NotificationItem[]>([]);
-  soundEnabled = $state<boolean>(true);
-  permissionRequested = $state<boolean>(false);
-  private lastKnownMessageIds = new Set<string>();
-  private pollInterval: any = null;
+  soundEnabled = $state(true);
+  /** User preference for desktop pop-ups (browser permission is separate) */
+  desktopEnabled = $state(true);
+  permission = $state<NotificationPermission | 'unsupported'>('default');
+  /** Conversation currently open in the Inbox (no alerts for it while visible) */
+  activeConversationId = $state<string | null>(null);
+  /** Conversation the Inbox should open next (set by clicking a notification) */
+  pendingOpen = $state<string | null>(null);
+
+  private lastSeen = new Map<string, string>();
+  private initialized = false;
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  private running = false;
 
   get unreadCount(): number {
     return this.items.filter((n) => n.unread).length;
   }
 
   constructor() {
-    if (typeof window !== 'undefined') {
-      const savedSound = localStorage.getItem('wa_crm_sound_enabled');
-      if (savedSound !== null) {
-        this.soundEnabled = savedSound === 'true';
-      }
+    if (typeof window === 'undefined') return;
+    try {
+      const s = localStorage.getItem(SOUND_KEY);
+      if (s !== null) this.soundEnabled = s === 'true';
+      const d = localStorage.getItem(DESKTOP_KEY);
+      if (d !== null) this.desktopEnabled = d === 'true';
+    } catch {
+      /* storage unavailable */
     }
+    this.permission = 'Notification' in window ? Notification.permission : 'unsupported';
   }
 
   toggleSound() {
     this.soundEnabled = !this.soundEnabled;
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('wa_crm_sound_enabled', String(this.soundEnabled));
+    try {
+      localStorage.setItem(SOUND_KEY, String(this.soundEnabled));
+    } catch {
+      /* ignore */
+    }
+    if (this.soundEnabled) this.playChime();
+  }
+
+  toggleDesktop() {
+    this.desktopEnabled = !this.desktopEnabled;
+    try {
+      localStorage.setItem(DESKTOP_KEY, String(this.desktopEnabled));
+    } catch {
+      /* ignore */
     }
   }
 
+  /** Must be called from a click: browsers only show the permission prompt after a user gesture. */
   async requestBrowserPermission() {
-    if (typeof window !== 'undefined' && 'Notification' in window) {
-      this.permissionRequested = true;
-      if (Notification.permission === 'default') {
-        await Notification.requestPermission();
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      this.permission = 'unsupported';
+      return;
+    }
+    if (Notification.permission === 'default') {
+      try {
+        this.permission = await Notification.requestPermission();
+      } catch {
+        this.permission = Notification.permission;
       }
+    } else {
+      this.permission = Notification.permission;
     }
   }
 
@@ -59,118 +106,129 @@ export class NotificationStore {
       const ctx = new AudioCtx();
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-
       osc.connect(gain);
       gain.connect(ctx.destination);
-
-      // Sweet two-tone WhatsApp chime (D5 -> A5)
       osc.type = 'sine';
-      osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
-      osc.frequency.setValueAtTime(880.0, ctx.currentTime + 0.08); // A5
-
-      gain.gain.setValueAtTime(0.18, ctx.currentTime);
+      osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+      osc.frequency.setValueAtTime(880.0, ctx.currentTime + 0.08);
+      gain.gain.setValueAtTime(0.16, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.35);
-
       osc.start(ctx.currentTime);
       osc.stop(ctx.currentTime + 0.35);
-    } catch (e) {
-      // AudioContext might be blocked until user interacts with the page
+      osc.onended = () => ctx.close().catch(() => {});
+    } catch {
+      /* audio blocked until the user interacts with the page */
     }
   }
 
-  triggerDesktopNotification(title: string, body: string, conversationId?: string) {
-    if (typeof window === 'undefined' || !('Notification' in window)) return;
-
-    if (Notification.permission === 'granted') {
-      try {
-        const notif = new Notification(title, {
-          body,
-          icon: '/favicon.png',
-          badge: '/favicon.png',
-          tag: conversationId || 'wa-crm-notif',
-        });
-        notif.onclick = () => {
-          window.focus();
-          notif.close();
-        };
-      } catch (err) {
-        console.warn('Desktop notification failed:', err);
-      }
+  private desktopAlert(item: NotificationItem) {
+    if (!this.desktopEnabled || typeof window === 'undefined' || !('Notification' in window)) return;
+    if (Notification.permission !== 'granted') return;
+    try {
+      const n = new Notification(item.contactName, {
+        body: item.count > 1 ? `${item.count} pesan baru · ${item.preview}` : item.preview,
+        icon: '/favicon.png',
+        tag: `conv-${item.conversationId}`, // replaces the previous pop-up for the same chat
+      });
+      n.onclick = () => {
+        window.focus();
+        this.open(item);
+        n.close();
+      };
+    } catch {
+      /* some browsers only allow notifications from a service worker */
     }
   }
 
-  addNotification(item: Omit<NotificationItem, 'id' | 'createdAt' | 'unread'> & { time?: string }) {
-    const newItem: NotificationItem = {
-      id: 'notif-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
-      unread: true,
-      createdAt: new Date().toISOString(),
-      time: item.time || 'Baru saja',
-      title: item.title,
-      desc: item.desc,
-      type: item.type,
-      conversationId: item.conversationId,
-    };
-
-    this.items = [newItem, ...this.items.slice(0, 49)];
-    this.playChime();
-    this.triggerDesktopNotification(item.title, item.desc, item.conversationId);
+  /** Open the conversation in the Inbox and mark its notification read. */
+  open(item: NotificationItem) {
+    this.markConversationRead(item.conversationId);
+    this.pendingOpen = item.conversationId;
+    if (typeof window !== 'undefined' && window.location.pathname !== '/inbox') goto('/inbox');
   }
 
   markAllAsRead() {
-    this.items = this.items.map((n) => ({ ...n, unread: false }));
+    this.items = this.items.map((n) => ({ ...n, unread: false, count: 0 }));
   }
 
-  markAsRead(id: string) {
-    this.items = this.items.map((n) => (n.id === id ? { ...n, unread: false } : n));
+  markConversationRead(conversationId: string) {
+    this.items = this.items.map((n) => (n.conversationId === conversationId ? { ...n, unread: false, count: 0 } : n));
   }
 
   clearAll() {
     this.items = [];
   }
 
-  async pollRecentActivities() {
-    try {
-      const res = await apiRequest<{ items: any[] }>('/conversations');
-      if (res && res.success && Array.isArray(res.items)) {
-        for (const conv of res.items) {
-          const msgKey = `${conv.id}:${conv.lastMessageAt}`;
-          if (!this.lastKnownMessageIds.has(msgKey)) {
-            const isFirstLoad = this.lastKnownMessageIds.size === 0;
-            this.lastKnownMessageIds.add(msgKey);
-            
-            // If new incoming message or unassigned chat within last 15 minutes, trigger chime & notification
-            const diffMs = Date.now() - new Date(conv.lastMessageAt).getTime();
-            if (!isFirstLoad && diffMs < 15 * 60 * 1000) {
-              this.addNotification({
-                title: `Pesan Masuk: ${conv.contact?.name || 'Pelanggan'}`,
-                desc: conv.lastMessagePreview || 'Pesan baru dari pelanggan',
-                time: new Date(conv.lastMessageAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                type: conv.status === 'UNASSIGNED' ? 'queue' : 'chat',
-                conversationId: conv.id,
-              });
-            }
-          }
-        }
-      }
-    } catch (e) {
-      // Ignore background fetch error
-    }
+  /** The Inbox tells us which chat is open; its notification is cleared. */
+  setActiveConversation(id: string | null) {
+    this.activeConversationId = id;
+    if (id) this.markConversationRead(id);
   }
 
-  startPolling(intervalMs = 6000) {
-    if (this.pollInterval || typeof window === 'undefined') return;
-    this.pollRecentActivities();
-    this.pollInterval = setInterval(() => {
-      if (document.hidden) return;
-      this.pollRecentActivities();
-    }, intervalMs);
+  private async poll() {
+    const res = await apiRequest<{ items: any[] }>('/conversations');
+    if (!res.success || !Array.isArray(res.items)) return;
+
+    const firstRun = !this.initialized;
+    this.initialized = true;
+    const fresh: NotificationItem[] = [];
+
+    for (const conv of res.items) {
+      if (!conv?.id || !conv.lastMessageAt) continue;
+      const stamp = String(conv.lastMessageAt);
+      const previous = this.lastSeen.get(conv.id);
+      this.lastSeen.set(conv.id, stamp);
+
+      // First load only remembers where we are — no burst of old alerts
+      if (firstRun || previous === stamp) continue;
+      if (!conv.lastMessageFromCustomer) continue;
+      if (conv.status === 'RESOLVED') continue;
+
+      const viewingIt = conv.id === this.activeConversationId && !document.hidden;
+      if (viewingIt) continue;
+
+      const existing = this.items.find((n) => n.conversationId === conv.id);
+      const item: NotificationItem = {
+        id: existing?.id || `n-${conv.id}`,
+        conversationId: conv.id,
+        contactName: conv.contact?.name || 'Pelanggan',
+        preview: conv.lastMessagePreview || 'Pesan baru',
+        count: (existing?.unread ? existing.count : 0) + 1,
+        unread: true,
+        at: stamp,
+        kind: !conv.assignedUser ? 'queue' : 'message',
+      };
+      fresh.push(item);
+    }
+
+    if (fresh.length === 0) return;
+    const freshIds = new Set(fresh.map((f) => f.conversationId));
+    this.items = [...fresh, ...this.items.filter((n) => !freshIds.has(n.conversationId))].slice(0, 50);
+    this.playChime();
+    for (const item of fresh.slice(0, 3)) this.desktopAlert(item);
+  }
+
+  startPolling() {
+    if (this.running || typeof window === 'undefined') return;
+    this.running = true;
+    const tick = async () => {
+      if (!this.running) return;
+      try {
+        await this.poll();
+      } catch {
+        /* network hiccup — try again next tick */
+      }
+      this.timer = setTimeout(tick, document.hidden ? BACKGROUND_MS : FOREGROUND_MS);
+    };
+    tick();
   }
 
   stopPolling() {
-    if (this.pollInterval) {
-      clearInterval(this.pollInterval);
-      this.pollInterval = null;
-    }
+    this.running = false;
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = null;
+    this.initialized = false;
+    this.lastSeen.clear();
   }
 }
 
