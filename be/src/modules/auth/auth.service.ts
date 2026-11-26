@@ -121,6 +121,8 @@ export class AuthService {
    */
   static async login(body: LoginBody) {
     const portalType = body.portalType || 'TENANT';
+    // Emails are stored lower-case; "  Budi@Contoh.com " must still log in
+    body = { ...body, email: String(body.email || '').trim().toLowerCase() };
 
     // 1. Platform Portal Login -> Query super_admins table
     if (portalType === 'PLATFORM') {

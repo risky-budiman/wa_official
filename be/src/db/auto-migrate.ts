@@ -132,6 +132,44 @@ export async function autoMigrateSchema(): Promise<void> {
       console.warn('⚠️ Broadcast recovery notice:', err?.message || err);
     }
 
+    // 8. broadcast_campaigns: audience tag, variables and last error (scheduled broadcasts)
+    for (const [col, ddl] of [
+      ['audience_tag', sql`ALTER TABLE broadcast_campaigns ADD COLUMN audience_tag VARCHAR(60) NULL`],
+      ['variables', sql`ALTER TABLE broadcast_campaigns ADD COLUMN variables JSON NULL`],
+      ['last_error', sql`ALTER TABLE broadcast_campaigns ADD COLUMN last_error VARCHAR(500) NULL`],
+    ] as const) {
+      try {
+        const cols = rowsOf(
+          await db.execute(sql`
+            SELECT COLUMN_NAME FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'broadcast_campaigns' AND COLUMN_NAME = ${col}
+          `)
+        );
+        if (cols.length === 0) {
+          await db.execute(ddl);
+          console.log(`🧩 broadcast_campaigns.${col} ditambahkan.`);
+        }
+      } catch (err: any) {
+        console.warn(`⚠️ broadcast_campaigns.${col} migration notice:`, err?.message || err);
+      }
+    }
+    // The status enum must contain SCHEDULED (older databases were created without it)
+    try {
+      const rows = rowsOf(
+        await db.execute(sql`
+          SELECT COLUMN_TYPE AS t FROM information_schema.COLUMNS
+          WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'broadcast_campaigns' AND COLUMN_NAME = 'status'
+        `)
+      );
+      const type = String((rows[0] as any)?.t || (rows[0] as any)?.COLUMN_TYPE || '');
+      if (type && !type.includes("'SCHEDULED'")) {
+        await db.execute(sql`ALTER TABLE broadcast_campaigns MODIFY COLUMN status ENUM('DRAFT','SCHEDULED','PROCESSING','COMPLETED','FAILED') DEFAULT 'DRAFT'`);
+        console.log('🧩 broadcast_campaigns.status kini mendukung SCHEDULED.');
+      }
+    } catch (err: any) {
+      console.warn('⚠️ broadcast_campaigns.status migration notice:', err?.message || err);
+    }
+
     // 7. organizations.quick_replies (team-wide quick replies; were only in each browser)
     try {
       const cols = rowsOf(

@@ -25,6 +25,8 @@ export interface NotificationItem {
 }
 
 const FOREGROUND_MS = 6000;
+/** While a page (the Inbox) shows the conversation list, poll a bit faster */
+const SUBSCRIBED_MS = 4000;
 const BACKGROUND_MS = 15000;
 const SOUND_KEY = 'wa_crm_sound_enabled';
 const DESKTOP_KEY = 'wa_crm_desktop_notif';
@@ -44,6 +46,8 @@ export class NotificationStore {
   private initialized = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private running = false;
+  /** Pages that want every fresh /conversations result (one request feeds bell + Inbox) */
+  private listeners = new Set<(items: any[]) => void>();
 
   get unreadCount(): number {
     return this.items.filter((n) => n.unread).length;
@@ -165,9 +169,32 @@ export class NotificationStore {
     if (id) this.markConversationRead(id);
   }
 
+  /** Receive every conversation list this store fetches. Returns an unsubscribe function. */
+  subscribe(cb: (items: any[]) => void) {
+    this.listeners.add(cb);
+    return () => {
+      this.listeners.delete(cb);
+    };
+  }
+
+  /** Fetch now (e.g. right after the user changed something) instead of waiting for the next tick. */
+  refreshNow() {
+    if (!this.running) return;
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = null;
+    this.tick();
+  }
+
   private async poll() {
     const res = await apiRequest<{ items: any[] }>('/conversations');
     if (!res.success || !Array.isArray(res.items)) return;
+    for (const cb of this.listeners) {
+      try {
+        cb(res.items);
+      } catch {
+        /* a listener error must not stop notifications */
+      }
+    }
 
     const firstRun = !this.initialized;
     this.initialized = true;
@@ -208,19 +235,27 @@ export class NotificationStore {
     for (const item of fresh.slice(0, 3)) this.desktopAlert(item);
   }
 
+  private polling = false;
+  private tick = async () => {
+    if (!this.running || this.polling) return;
+    this.polling = true;
+    try {
+      await this.poll();
+    } catch {
+      /* network hiccup — try again next tick */
+    } finally {
+      this.polling = false;
+    }
+    if (!this.running) return;
+    if (this.timer) clearTimeout(this.timer);
+    const wait = document.hidden ? BACKGROUND_MS : this.listeners.size > 0 ? SUBSCRIBED_MS : FOREGROUND_MS;
+    this.timer = setTimeout(this.tick, wait);
+  };
+
   startPolling() {
     if (this.running || typeof window === 'undefined') return;
     this.running = true;
-    const tick = async () => {
-      if (!this.running) return;
-      try {
-        await this.poll();
-      } catch {
-        /* network hiccup — try again next tick */
-      }
-      this.timer = setTimeout(tick, document.hidden ? BACKGROUND_MS : FOREGROUND_MS);
-    };
-    tick();
+    this.tick();
   }
 
   stopPolling() {

@@ -2,7 +2,7 @@
 // Schema: broadcast_campaigns (Kampanye Broadcast)
 // ===========================================
 
-import { mysqlTable, varchar, datetime, mysqlEnum, int } from 'drizzle-orm/mysql-core';
+import { mysqlTable, varchar, datetime, mysqlEnum, int, json } from 'drizzle-orm/mysql-core';
 import { sql } from 'drizzle-orm';
 import { organizations } from './organizations';
 import { users } from './users';
@@ -31,6 +31,12 @@ export const broadcastCampaigns = mysqlTable('broadcast_campaigns', {
   readCount: int('read_count').default(0),
   failedCount: int('failed_count').default(0),
   scheduledAt: datetime('scheduled_at'),
+  /** Only contacts with this tag (null = all contacts) */
+  audienceTag: varchar('audience_tag', { length: 60 }),
+  /** How template variables are filled (see services/template-params) */
+  variables: json('variables').$type<Record<string, unknown>>(),
+  /** Why a campaign could not be sent (e.g. scheduled send found no token) */
+  lastError: varchar('last_error', { length: 500 }),
   createdAt: datetime('created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 

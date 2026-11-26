@@ -9,7 +9,10 @@ import { Radio, Plus, CheckCircle, Clock, Users, Send, X, AlertCircle, Sparkles,
 interface CampaignItem {
   id: string;
   name: string;
-  status: 'COMPLETED' | 'PROCESSING' | 'DRAFT' | 'FAILED';
+  status: 'COMPLETED' | 'PROCESSING' | 'DRAFT' | 'FAILED' | 'SCHEDULED';
+  scheduledAt?: string | null;
+  audienceTag?: string | null;
+  lastError?: string | null;
   totalRecipients: number;
   sentCount: number;
   deliveredCount: number;
@@ -72,6 +75,20 @@ let bodyChoices = $state<VarChoice[]>([]);
 let buttonValues = $state<Record<string, string>>({});
 let headerMediaUrl = $state('');
 let targetTag = $state('');
+// Send now or at a chosen time (local time of this browser)
+let sendMode = $state<'now' | 'later'>('now');
+let scheduleLocal = $state('');
+
+function toLocalInput(d: Date) {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+const minSchedule = $derived(toLocalInput(new Date(Date.now() + 5 * 60 * 1000)));
+const maxSchedule = $derived(toLocalInput(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)));
+function formatWhen(iso?: string | null) {
+  if (!iso) return '';
+  return new Date(iso).toLocaleString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
 let tagOptions = $state<{ tag: string; count: number }[]>([]);
 let totalContacts = $state(0);
 let preparedFor = '';
@@ -140,6 +157,8 @@ async function loadTags() {
 function openCreate() {
   errorMessage = null;
   targetTag = '';
+  sendMode = 'now';
+  scheduleLocal = toLocalInput(new Date(Date.now() + 60 * 60 * 1000));
   if (!approvedTemplates.some((t) => t.id === selectedTemplateId)) selectedTemplateId = approvedTemplates[0]?.id || '';
   preparedFor = '';
   showModal = true;
@@ -218,7 +237,20 @@ async function createCampaign(e: Event) {
     errorMessage = 'Tidak ada kontak penerima untuk target ini.';
     return;
   }
-  if (!confirm(`Kirim "${selectedTemplate?.name}" ke ${recipientCount.toLocaleString('id-ID')} kontak${targetTag ? ` bertag "${targetTag}"` : ''}? Pesan yang sudah terkirim tidak bisa ditarik.`)) return;
+  let scheduledIso: string | undefined;
+  if (sendMode === 'later') {
+    const at = new Date(scheduleLocal);
+    if (!scheduleLocal || Number.isNaN(at.getTime()) || at.getTime() < Date.now() + 2 * 60 * 1000) {
+      errorMessage = 'Pilih waktu jadwal minimal beberapa menit dari sekarang.';
+      return;
+    }
+    scheduledIso = at.toISOString();
+  }
+  const audience = `${recipientCount.toLocaleString('id-ID')} kontak${targetTag ? ` bertag "${targetTag}"` : ''}`;
+  const question = scheduledIso
+    ? `Jadwalkan "${selectedTemplate?.name}" ke ${audience} pada ${formatWhen(scheduledIso)}? Anda bisa membatalkannya sebelum waktu itu.`
+    : `Kirim "${selectedTemplate?.name}" ke ${audience} sekarang? Pesan yang sudah terkirim tidak bisa ditarik.`;
+  if (!confirm(question)) return;
 
   isSubmitting = true;
   const res = await apiRequest('/broadcast', {
@@ -228,6 +260,7 @@ async function createCampaign(e: Event) {
       templateId: selectedTemplateId,
       tag: targetTag || undefined,
       variables: variablesPayload(),
+      scheduledAt: scheduledIso,
     }),
   });
   isSubmitting = false;
@@ -242,7 +275,14 @@ async function createCampaign(e: Event) {
 }
 
 async function deleteCampaign(id: string) {
-  if (!confirm('Apakah Anda yakin ingin menghapus data kampanye ini?')) return;
+  const c = campaignList.find((x) => x.id === id);
+  const question =
+    c?.status === 'SCHEDULED'
+      ? 'Batalkan broadcast terjadwal ini? Tidak ada pesan yang akan dikirim.'
+      : c?.status === 'PROCESSING'
+        ? 'Hentikan broadcast yang sedang berjalan? Pesan yang sudah terkirim tidak bisa ditarik.'
+        : 'Hapus riwayat kampanye ini?';
+  if (!confirm(question)) return;
   const res = await apiRequest(`/broadcast/${id}`, { method: 'DELETE' });
   if (res.success) {
     if (selectedCampaign?.id === id) selectedCampaign = null;
@@ -254,7 +294,7 @@ onMount(() => {
   loadData();
   // Auto poll every 2.5 seconds to track real-time broadcast progress
   pollTimer = setInterval(() => {
-    const hasProcessing = campaignList.some((c) => c.status === 'PROCESSING');
+    const hasProcessing = campaignList.some((c) => c.status === 'PROCESSING' || (c.status === 'SCHEDULED' && c.scheduledAt && new Date(c.scheduledAt).getTime() <= Date.now() + 60000));
     if (hasProcessing) {
       loadData(false);
     }
@@ -340,8 +380,13 @@ onDestroy(() => {
                       ✓ Selesai ({c.sentCount}/{c.totalRecipients})
                     </span>
                   {:else if c.status === 'FAILED'}
-                    <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+                    <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300 border border-rose-200 dark:border-rose-800" title={c.lastError || ''}>
                       ✕ Gagal
+                    </span>
+                    {#if c.lastError}<p class="mt-1 max-w-[14rem] text-[10px] leading-snug text-rose-600 dark:text-rose-300">{c.lastError}</p>{/if}
+                  {:else if c.status === 'SCHEDULED'}
+                    <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 dark:bg-sky-950 text-sky-800 dark:text-sky-300 border border-sky-200 dark:border-sky-800">
+                      <Clock class="w-3 h-3" /> Terjadwal · {formatWhen(c.scheduledAt)}
                     </span>
                   {:else}
                     <div class="space-y-1">
@@ -366,7 +411,7 @@ onDestroy(() => {
                       deleteCampaign(c.id);
                     }}
                     class="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition cursor-pointer"
-                    title="Hapus riwayat kampanye ini"
+                    title={c.status === 'SCHEDULED' ? 'Batalkan jadwal' : c.status === 'PROCESSING' ? 'Hentikan broadcast' : 'Hapus riwayat kampanye ini'}
                   >
                     <Trash2 class="w-4 h-4" />
                   </button>
@@ -399,7 +444,7 @@ onDestroy(() => {
         <div class="flex items-center justify-between text-xs">
           <span class="font-bold text-slate-700 dark:text-slate-300">Status Pengiriman:</span>
           <span class="font-mono font-bold {selectedCampaign.status === 'COMPLETED' ? 'text-emerald-600' : selectedCampaign.status === 'FAILED' ? 'text-rose-600' : 'text-amber-500'}">
-            {selectedCampaign.status === 'COMPLETED' ? '✓ SELESAI' : selectedCampaign.status === 'FAILED' ? '✕ GAGAL' : '⏳ SEDANG DIPROSES'}
+            {selectedCampaign.status === 'COMPLETED' ? '✓ SELESAI' : selectedCampaign.status === 'FAILED' ? '✕ GAGAL' : selectedCampaign.status === 'SCHEDULED' ? `⏰ TERJADWAL ${formatWhen(selectedCampaign.scheduledAt)}` : '⏳ SEDANG DIPROSES'}
           </span>
         </div>
 
@@ -552,6 +597,29 @@ onDestroy(() => {
           </div>
         {/if}
 
+        <fieldset class="space-y-2">
+          <legend class="mb-1 text-xs font-semibold text-slate-700 dark:text-slate-300">Waktu kirim</legend>
+          <div class="grid grid-cols-2 gap-2">
+            <label class="flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-xs {sendMode === 'now' ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40' : 'border-slate-200 dark:border-slate-700'}">
+              <input type="radio" bind:group={sendMode} value="now" class="accent-emerald-600" /> Kirim sekarang
+            </label>
+            <label class="flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-xs {sendMode === 'later' ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40' : 'border-slate-200 dark:border-slate-700'}">
+              <input type="radio" bind:group={sendMode} value="later" class="accent-emerald-600" /> Jadwalkan
+            </label>
+          </div>
+          {#if sendMode === 'later'}
+            <input
+              type="datetime-local"
+              bind:value={scheduleLocal}
+              min={minSchedule}
+              max={maxSchedule}
+              aria-label="Tanggal dan jam kirim"
+              class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
+            />
+            <p class="text-[11px] text-slate-500">Waktu sesuai zona waktu perangkat Anda. Penerima & isi template dihitung ulang saat jadwal tiba.</p>
+          {/if}
+        </fieldset>
+
         <div class="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-[11px] text-emerald-800 dark:text-emerald-300">
           💡 Akan dikirim ke <strong>{recipientCount.toLocaleString('id-ID')}</strong> kontak{targetTag ? ` bertag "${targetTag}"` : ''}, dengan pembatasan kecepatan sesuai aturan Meta.
         </div>
@@ -569,7 +637,7 @@ onDestroy(() => {
             disabled={isSubmitting || !selectedTemplate}
             class="py-2 px-5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xs cursor-pointer"
           >
-            {isSubmitting ? 'Mengirim...' : 'Mulai Broadcast'}
+            {isSubmitting ? 'Memproses...' : sendMode === 'later' ? 'Jadwalkan Broadcast' : 'Mulai Broadcast'}
           </button>
         </div>
       </form>

@@ -161,7 +161,8 @@ class AuthStore {
   }) {
     const res = await apiRequest('/auth/login', {
       method: 'POST',
-      body: JSON.stringify(body)
+      // A pasted e-mail often carries spaces; capitals are fine (normalised on the server)
+      body: JSON.stringify({ ...body, email: (body.email || '').trim() })
     });
 
     if (res.success && res.token && res.user) {

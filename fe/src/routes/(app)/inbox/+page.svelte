@@ -567,6 +567,32 @@
     }),
   );
 
+  /** Apply a fresh conversation list (from our own load or the shared notification poll). */
+  function applyConversations(items: ConversationItem[]) {
+    // Shallow diffing to prevent unnecessary Svelte reactive DOM re-renders
+    const isDifferent =
+      conversationList.length !== items.length ||
+      conversationList.some((c, idx) => {
+        const n = items[idx];
+        return (
+          !n ||
+          c.id !== n.id ||
+          c.status !== n.status ||
+          c.lastMessageAt !== n.lastMessageAt ||
+          c.lastMessagePreview !== n.lastMessagePreview ||
+          c.assignedUser?.id !== n.assignedUser?.id
+        );
+      });
+    if (isDifferent) conversationList = items;
+
+    // If a previously selected conversation no longer exists, reset selection
+    if (selectedConvId && !items.some((c) => c.id === selectedConvId)) {
+      selectedConvId = null;
+      messageList = [];
+      notificationStore.setActiveConversation(null);
+    }
+  }
+
   async function loadConversations(isSilent = false) {
     if (!isSilent && conversationList.length === 0) {
       isLoading = true;
@@ -575,31 +601,7 @@
       const res = await apiRequest<{ items: ConversationItem[] }>(
         "/conversations",
       );
-      if (res && res.success && Array.isArray(res.items)) {
-        // Shallow diffing to prevent unnecessary Svelte reactive DOM re-renders
-        const isDifferent =
-          conversationList.length !== res.items.length ||
-          conversationList.some((c, idx) => {
-            const n = res.items[idx];
-            return (
-              !n ||
-              c.id !== n.id ||
-              c.status !== n.status ||
-              c.lastMessageAt !== n.lastMessageAt ||
-              c.assignedUser?.id !== n.assignedUser?.id
-            );
-          });
-
-        if (isDifferent) {
-          conversationList = res.items;
-        }
-
-        // If a previously selected conversation no longer exists, reset selection
-        if (selectedConvId && !res.items.some((c) => c.id === selectedConvId)) {
-          selectedConvId = null;
-          messageList = [];
-        }
-      }
+      if (res && res.success && Array.isArray(res.items)) applyConversations(res.items);
     } catch (err) {
       console.error("Failed to load conversations:", err);
     } finally {
@@ -1150,7 +1152,6 @@
       try {
         await Promise.all([
           loadQueueStats(),
-          loadConversations(true),
           selectedConvId
             ? loadMessages(selectedConvId, false)
             : Promise.resolve(),
@@ -1162,8 +1163,12 @@
       }
     }, 4000);
 
+    // The conversation list comes from the shared notification poll (one request for bell + Inbox)
+    const unsubscribe = notificationStore.subscribe((items) => applyConversations(items as ConversationItem[]));
+
     return () => {
       clearInterval(refreshTimer);
+      unsubscribe();
       notificationStore.setActiveConversation(null);
     };
   });

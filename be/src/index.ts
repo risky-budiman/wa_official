@@ -10,7 +10,7 @@ import { authRoutes } from './modules/auth/auth.routes';
 import { conversationRoutes } from './modules/conversations/conversation.routes';
 import { messageRoutes } from './modules/messages/message.routes';
 import { templateRoutes } from './modules/templates/template.routes';
-import { broadcastRoutes } from './modules/broadcast/broadcast.routes';
+import { broadcastRoutes, BroadcastService } from './modules/broadcast/broadcast.routes';
 import { userRoutes } from './modules/users/user.routes';
 import { analyticsRoutes } from './modules/analytics/analytics.routes';
 import { settingsRoutes } from './modules/settings/settings.routes';
@@ -34,6 +34,7 @@ startWebhookWorker().catch((err) => console.error('❌ Webhook worker gagal star
 
 // Start Inactivity Auto-Resolve Background Worker
 AutoResolveService.startWorker(60000);
+BroadcastService.startScheduler(30000);
 
 const app = new Elysia()
   // ─── Global Plugins ────────────────────────

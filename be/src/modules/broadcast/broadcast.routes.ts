@@ -35,6 +35,8 @@ export class BroadcastService {
         readCount: broadcastCampaigns.readCount,
         failedCount: broadcastCampaigns.failedCount,
         scheduledAt: broadcastCampaigns.scheduledAt,
+        audienceTag: broadcastCampaigns.audienceTag,
+        lastError: broadcastCampaigns.lastError,
         createdAt: broadcastCampaigns.createdAt,
         template: {
           id: broadcastCampaigns.templateId,
@@ -121,7 +123,7 @@ export class BroadcastService {
       monthStart.setUTCHours(0, 0, 0, 0);
       const [usage] = await db
         .select({
-          used: sql<number>`COALESCE(SUM(CASE WHEN ${broadcastCampaigns.status} = 'PROCESSING' THEN ${broadcastCampaigns.totalRecipients} ELSE ${broadcastCampaigns.sentCount} END), 0)`,
+          used: sql<number>`COALESCE(SUM(CASE WHEN ${broadcastCampaigns.status} IN ('PROCESSING', 'SCHEDULED') THEN ${broadcastCampaigns.totalRecipients} ELSE ${broadcastCampaigns.sentCount} END), 0)`,
         })
         .from(broadcastCampaigns)
         .where(and(eq(broadcastCampaigns.organizationId, orgId), gte(broadcastCampaigns.createdAt, monthStart)));
@@ -138,7 +140,17 @@ export class BroadcastService {
     const campaignId = nanoid();
     const totalRecipients = contactList.length;
 
-    // 4. Insert Initial Campaign Record (Starts with 0 counts)
+    // 4. When: now, or at a scheduled time (1 minute … 30 days ahead)
+    let scheduledAt: Date | null = null;
+    if (body.scheduledAt) {
+      const at = new Date(body.scheduledAt);
+      if (Number.isNaN(at.getTime())) throw new Error('Waktu jadwal tidak valid.');
+      const ahead = at.getTime() - Date.now();
+      if (ahead > 30 * 24 * 60 * 60 * 1000) throw new Error('Jadwal maksimal 30 hari ke depan.');
+      if (ahead < -60 * 1000) throw new Error('Waktu jadwal sudah lewat.');
+      if (ahead > 60 * 1000) scheduledAt = at;
+    }
+
     await db.insert(broadcastCampaigns).values({
       id: campaignId,
       organizationId: orgId,
@@ -146,122 +158,184 @@ export class BroadcastService {
       templateId: body.templateId,
       templateName: tmpl.name,
       name: body.name,
-      status: 'PROCESSING',
+      status: scheduledAt ? 'SCHEDULED' : 'PROCESSING',
       totalRecipients,
       sentCount: 0,
       deliveredCount: 0,
       readCount: 0,
       failedCount: 0,
-      scheduledAt: body.scheduledAt ? new Date(body.scheduledAt) : null,
-    });
+      scheduledAt,
+      audienceTag: tag || null,
+      variables: (body.variables || {}) as any,
+    } as any);
 
-    // 5. Asynchronously execute real dispatch loop
-    (async () => {
-      let sentSuccess = 0;
-      let failed = 0;
+    if (!scheduledAt) {
+      BroadcastService.dispatch(campaignId).catch((err) => console.error('Broadcast dispatch error:', err?.message || err));
+    }
+    return { id: campaignId, name: body.name, totalRecipients, status: scheduledAt ? 'SCHEDULED' : 'PROCESSING', scheduledAt };
+  }
 
-      for (const contact of contactList) {
-        if (!contact.waId) {
-          failed++;
-          continue;
+  /** Mark a campaign that could not start as FAILED, with the reason. */
+  private static async failCampaign(campaignId: string, reason: string) {
+    await db
+      .update(broadcastCampaigns)
+      .set({ status: 'FAILED', lastError: reason.slice(0, 500) } as any)
+      .where(eq(broadcastCampaigns.id, campaignId));
+    console.warn(`⚠️ Broadcast ${campaignId} gagal dimulai: ${reason}`);
+  }
+
+  /**
+   * Send a campaign (status PROCESSING). Everything is re-read at send time, so a scheduled
+   * campaign uses the template, credentials and contacts as they are when it fires.
+   */
+  static async dispatch(campaignId: string) {
+    const [camp] = await db.select().from(broadcastCampaigns).where(eq(broadcastCampaigns.id, campaignId)).limit(1);
+    if (!camp || camp.status !== 'PROCESSING') return;
+    const orgId = camp.organizationId;
+
+    const [tmpl] = camp.templateId
+      ? await db.select().from(messageTemplates).where(eq(messageTemplates.id, camp.templateId)).limit(1)
+      : [];
+    if (!tmpl) return this.failCampaign(campaignId, 'Template sudah dihapus.');
+    if (tmpl.status !== 'APPROVED') return this.failCampaign(campaignId, `Template berstatus ${tmpl.status}.`);
+
+    const variables = (camp as any).variables as BroadcastVariables | undefined;
+    const needs = analyzeTemplate(tmpl.components);
+    const missing = missingVariables(needs, variables);
+    if (missing.length) return this.failCampaign(campaignId, `Template berubah; isian kurang: ${missing.join(', ')}.`);
+
+    const [org] = await db.select().from(organizations).where(eq(organizations.id, orgId)).limit(1);
+    const phone = await getActivePhone(orgId);
+    const activeToken = orgMetaToken(org?.accessToken);
+    const activePhoneNumberId = phone?.phoneNumberId || platformPhoneNumberId() || '';
+    if (!activePhoneNumberId || !phone?.id) return this.failCampaign(campaignId, 'Nomor WhatsApp organisasi belum terhubung.');
+
+    const tag = ((camp as any).audienceTag || '').trim();
+    const contactList = await db
+      .select({ id: contacts.id, waId: contacts.waId, name: contacts.name })
+      .from(contacts)
+      .where(
+        and(
+          eq(contacts.organizationId, orgId),
+          tag ? sql`JSON_UNQUOTE(JSON_EXTRACT(${contacts.customAttributes}, '$.tag')) = ${tag}` : sql`1 = 1`
+        )
+      );
+    if (contactList.length === 0) return this.failCampaign(campaignId, tag ? `Tidak ada kontak dengan tag "${tag}".` : 'Tidak ada kontak.');
+    await db.update(broadcastCampaigns).set({ totalRecipients: contactList.length }).where(eq(broadcastCampaigns.id, campaignId));
+
+    let sentSuccess = 0;
+    let failed = 0;
+    let index = 0;
+    for (const contact of contactList) {
+      // Deleting a running campaign stops it (checked every 20 recipients)
+      if (index++ % 20 === 0 && index > 1) {
+        const [still] = await db.select({ status: broadcastCampaigns.status }).from(broadcastCampaigns).where(eq(broadcastCampaigns.id, campaignId)).limit(1);
+        if (!still || still.status !== 'PROCESSING') {
+          console.log(`⏹️ Broadcast ${campaignId} dihentikan (${sentSuccess} terkirim).`);
+          return;
         }
+      }
+      if (!contact.waId) {
+        failed++;
+        continue;
+      }
+      try {
+        // A contact saved without a name has its number as name — greet generically instead
+        const displayName = contact.name && contact.name !== contact.waId ? contact.name : '';
+        const componentsPayload = buildComponents(needs, variables, displayName);
 
-        try {
-          // A contact saved without a name has its number as name — greet generically instead
-          const displayName = contact.name && contact.name !== contact.waId ? contact.name : '';
-          const componentsPayload = buildComponents(needs, body.variables, displayName);
+        const metaRes = await MetaApiService.sendTemplateMessage(
+          {
+            phoneNumberId: activePhoneNumberId,
+            recipientWaId: contact.waId,
+            templateName: tmpl.name,
+            languageCode: tmpl.language || 'id',
+            components: componentsPayload.length > 0 ? componentsPayload : undefined,
+          },
+          activeToken
+        );
+        const wamid = metaRes?.messages?.[0]?.id || `wamid.BCAST_${nanoid()}`;
 
-          console.log(`🚀 Mengirim broadcast "${body.name}" template "${tmpl.name}" ke ${contact.waId}...`);
-
-          // Send template message to WhatsApp Cloud API
-          const metaRes = await MetaApiService.sendTemplateMessage(
-            {
-              phoneNumberId: activePhoneNumberId,
-              recipientWaId: contact.waId,
-              templateName: tmpl.name,
-              languageCode: tmpl.language || 'id',
-              components: componentsPayload.length > 0 ? componentsPayload : undefined,
-            },
-            activeToken
-          );
-
-          const wamid = metaRes?.messages?.[0]?.id || `wamid.BCAST_${nanoid()}`;
-          const dbPhoneId = phone?.id || phone?.phoneNumberId || platformPhoneNumberId();
-
-          // Find or create conversation for this contact
-          let [conv] = await db
-            .select()
-            .from(conversations)
-            .where(and(eq(conversations.organizationId, orgId), eq(conversations.contactId, contact.id)))
-            .limit(1);
-
-          if (!conv) {
-            const convId = nanoid();
-            await db.insert(conversations).values({
-              id: convId,
-              organizationId: orgId,
-              contactId: contact.id,
-              phoneNumberId: dbPhoneId,
-              status: 'OPEN',
-              lastMessagePreview: `[Broadcast] ${tmpl.name}`,
-              lastMessageAt: new Date(),
-            });
-            conv = { id: convId } as any;
-          } else {
-            await db
-              .update(conversations)
-              .set({
-                lastMessagePreview: `[Broadcast] ${tmpl.name}`,
-                lastMessageAt: new Date(),
-              })
-              .where(eq(conversations.id, conv.id));
-          }
-
-          // Record outbound template message in database
-          await db.insert(messages).values({
-            id: nanoid(),
-            conversationId: conv.id,
-            wamId: wamid,
-            direction: 'OUTBOUND',
-            senderType: 'SYSTEM',
-            senderId: userId,
-            messageType: 'template',
-            body: `[Broadcast: ${body.name}] Template: ${tmpl.name}`,
-            status: 'SENT',
-            campaignId,
+        let [conv] = await db
+          .select()
+          .from(conversations)
+          .where(and(eq(conversations.organizationId, orgId), eq(conversations.contactId, contact.id)))
+          .limit(1);
+        if (!conv) {
+          const convId = nanoid();
+          await db.insert(conversations).values({
+            id: convId,
+            organizationId: orgId,
+            contactId: contact.id,
+            phoneNumberId: phone.id,
+            status: 'OPEN',
+            lastMessagePreview: `[Broadcast] ${tmpl.name}`,
+            lastMessageAt: new Date(),
           });
-
-          sentSuccess++;
-        } catch (err: any) {
-          console.error(`⚠️ Broadcast dispatch gagal ke ${contact.waId}:`, err?.message || err);
-          failed++;
+          conv = { id: convId } as any;
+        } else {
+          await db
+            .update(conversations)
+            .set({ lastMessagePreview: `[Broadcast] ${tmpl.name}`, lastMessageAt: new Date() })
+            .where(eq(conversations.id, conv.id));
         }
 
-        // Update progress in database
-        await db
-          .update(broadcastCampaigns)
-          .set({
-            sentCount: sentSuccess,
-            failedCount: failed,
-          })
-          .where(eq(broadcastCampaigns.id, campaignId));
-
-        // Throttle 100ms per contact
-        await new Promise((r) => setTimeout(r, 100));
+        await db.insert(messages).values({
+          id: nanoid(),
+          conversationId: conv.id,
+          wamId: wamid,
+          direction: 'OUTBOUND',
+          senderType: 'SYSTEM',
+          senderId: camp.createdById,
+          messageType: 'template',
+          body: `[Broadcast: ${camp.name}] Template: ${tmpl.name}`,
+          status: 'SENT',
+          campaignId,
+        });
+        sentSuccess++;
+      } catch (err: any) {
+        console.error(`⚠️ Broadcast dispatch gagal ke ${contact.waId}:`, err?.message || err);
+        failed++;
+        if (failed === 1 && sentSuccess === 0) {
+          await db.update(broadcastCampaigns).set({ lastError: String(err?.message || err).slice(0, 500) } as any).where(eq(broadcastCampaigns.id, campaignId));
+        }
       }
 
-      // Mark final status
-      await db
-        .update(broadcastCampaigns)
-        .set({
-          status: sentSuccess > 0 ? 'COMPLETED' : 'FAILED',
-          sentCount: sentSuccess,
-          failedCount: failed,
-        })
-        .where(eq(broadcastCampaigns.id, campaignId));
-    })();
+      await db.update(broadcastCampaigns).set({ sentCount: sentSuccess, failedCount: failed }).where(eq(broadcastCampaigns.id, campaignId));
+      // Throttle 100ms per contact
+      await new Promise((r) => setTimeout(r, 100));
+    }
 
-    return { id: campaignId, name: body.name, totalRecipients, status: 'PROCESSING' };
+    await db
+      .update(broadcastCampaigns)
+      .set({ status: sentSuccess > 0 ? 'COMPLETED' : 'FAILED', sentCount: sentSuccess, failedCount: failed })
+      .where(eq(broadcastCampaigns.id, campaignId));
+  }
+
+  /** Start scheduled campaigns that are due. Each one is claimed atomically (safe with several workers). */
+  static async runScheduled() {
+    const due = await db
+      .select({ id: broadcastCampaigns.id })
+      .from(broadcastCampaigns)
+      .where(and(eq(broadcastCampaigns.status, 'SCHEDULED'), sql`${broadcastCampaigns.scheduledAt} <= NOW()`))
+      .limit(20);
+    for (const { id } of due) {
+      const res: any = await db
+        .update(broadcastCampaigns)
+        .set({ status: 'PROCESSING' })
+        .where(and(eq(broadcastCampaigns.id, id), eq(broadcastCampaigns.status, 'SCHEDULED')));
+      if (Number((Array.isArray(res) ? res[0] : res)?.affectedRows ?? 0) > 0) {
+        console.log(`⏰ Broadcast terjadwal ${id} dimulai.`);
+        this.dispatch(id).catch((err) => console.error('Scheduled broadcast error:', err?.message || err));
+      }
+    }
+  }
+
+  static startScheduler(intervalMs = 30000) {
+    const tick = () => this.runScheduled().catch((err) => console.warn('Broadcast scheduler:', err?.message || err));
+    tick();
+    setInterval(tick, intervalMs);
+    console.log('⏰ Broadcast Scheduler active (Every 30s)');
   }
 
   static async delete(orgId: string, campaignId: string) {
