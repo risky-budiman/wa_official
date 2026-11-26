@@ -49,17 +49,43 @@ const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
  * X-Real-IP / X-Forwarded-For are only trusted when the request comes from the local
  * reverse proxy (nginx on the same host); otherwise they could be spoofed by the client.
  */
+const normalizeIp = (ip: string) => ip.trim().replace(/^::ffff:/, '');
+
+/**
+ * Extra reverse proxies in front of the local nginx (e.g. a separate edge proxy server).
+ * TRUSTED_PROXIES="10.90.10.5,10.90." — exact IPs, or prefixes ending in "." / ":".
+ * Without it every visitor would share the edge proxy's IP and its rate limits.
+ */
+function trustedProxies(): string[] {
+  return (process.env.TRUSTED_PROXIES || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+const isTrustedProxy = (ip: string, list: string[]) =>
+  LOOPBACK.has(ip) || list.some((t) => (t.endsWith('.') || t.endsWith(':') ? ip.startsWith(t) : ip === t));
+
 export function getClientIp(request: Request, server: any): string {
   let socketIp = '';
   try {
-    socketIp = server?.requestIP?.(request)?.address || '';
+    socketIp = normalizeIp(server?.requestIP?.(request)?.address || '');
   } catch (_) {}
 
+  // Forwarding headers are only believed when the request came through our local proxy
   if (!socketIp || LOOPBACK.has(socketIp)) {
-    const realIp = request.headers.get('x-real-ip');
-    if (realIp) return realIp.trim();
+    const trusted = trustedProxies();
     const fwd = request.headers.get('x-forwarded-for');
-    if (fwd) return fwd.split(',')[0].trim();
+    if (trusted.length > 0 && fwd) {
+      // Walk from the nearest hop outwards, skipping proxies we trust; the first other address is the client
+      const hops = fwd.split(',').map(normalizeIp).filter(Boolean);
+      for (let i = hops.length - 1; i >= 0; i--) {
+        if (!isTrustedProxy(hops[i], trusted)) return hops[i];
+      }
+    }
+    const realIp = request.headers.get('x-real-ip');
+    if (realIp && !(trusted.length > 0 && isTrustedProxy(normalizeIp(realIp), trusted))) return normalizeIp(realIp);
+    if (fwd) return normalizeIp(fwd.split(',')[0]);
+    if (realIp) return normalizeIp(realIp);
   }
   return socketIp || 'unknown';
 }
