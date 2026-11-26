@@ -4,6 +4,7 @@
 
 import { nanoid } from 'nanoid';
 import { env } from '../config/env';
+import { extensionForMime } from './inbound-message';
 
 export interface MetaSendTextParams {
   phoneNumberId: string;
@@ -527,17 +528,8 @@ export class MetaApiService {
       }
 
       const mimeType = (metaData.mime_type || 'image/jpeg').split(';')[0].trim();
-      let ext = 'bin';
-      if (mimeType.includes('jpeg') || mimeType.includes('jpg')) ext = 'jpg';
-      else if (mimeType.includes('png')) ext = 'png';
-      else if (mimeType.includes('webp')) ext = 'webp';
-      else if (mimeType.includes('gif')) ext = 'gif';
-      else if (mimeType.includes('pdf')) ext = 'pdf';
-      else if (mimeType.includes('mp4')) ext = 'mp4';
-      else if (mimeType.includes('ogg') || mimeType.includes('opus')) ext = 'ogg';
-      else if (mimeType.includes('mp3') || mimeType.includes('mpeg')) ext = 'mp3';
-      else if (mimeType.includes('msword') || mimeType.includes('document')) ext = 'docx';
-      else if (mimeType.includes('sheet') || mimeType.includes('excel')) ext = 'xlsx';
+      // e.g. audio/mp4 (voice note) → .m4a, not a video
+      const ext = extensionForMime(mimeType);
 
       // Random suffix so customer media URLs cannot be guessed from the Meta media ID
       const safeMediaId = String(mediaId).replace(/[^a-zA-Z0-9_-]/g, '');

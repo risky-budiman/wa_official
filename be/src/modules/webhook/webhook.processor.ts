@@ -18,6 +18,7 @@ import {
   broadcastCampaigns
 } from '../../db/schema';
 import { ChatbotService } from '../../services/chatbot.service';
+import { describeInbound } from '../../services/inbound-message';
 import { MetaApiService } from '../../services/meta-api.service';
 import { env } from '../../config/env';
 import type { MetaWebhookBody } from './webhook.types';
@@ -281,6 +282,8 @@ export class WebhookProcessor {
             let messageBody = '';
             let mediaUrl: string | null = null;
             let mediaMimeType: string | null = null;
+            // Text, template-button / menu replies, location, contact cards, reactions …
+            const described = describeInbound(msg);
 
             if (msg.type === 'text' && msg.text) {
               messageBody = msg.text.body;
@@ -336,7 +339,7 @@ export class WebhookProcessor {
                 }
               }
             } else {
-              messageBody = `[${msg.type.toUpperCase()}]`;
+              messageBody = described.body;
             }
 
             // 2c. Find Active Conversation (Exclude RESOLVED tickets so new customer messages start a fresh session)
@@ -352,6 +355,12 @@ export class WebhookProcessor {
               )
               .orderBy(desc(conversations.createdAt))
               .limit(1);
+
+            // A reaction to an old message must not reopen a finished ticket
+            if (described.onlyInActiveConversation && !activeConv) {
+              console.log(`↩️ Reaksi dari ${customerWaId} diabaikan (tidak ada percakapan aktif).`);
+              continue;
+            }
 
             let convId = activeConv?.id;
             let currentAssignedAgentId: string | null = null;
@@ -457,7 +466,7 @@ export class WebhookProcessor {
 
                 // 2d. Automatic reply (keyword menu → AI → fixed message). ChatbotService checks the
                 //     master switch, working hours, and whether a human already owns the conversation.
-                if (!currentAssignedAgentId && msg.type === 'text') {
+                if (!currentAssignedAgentId && described.textLike && messageBody.trim()) {
                   ChatbotService.processInbound({
                     orgId,
                     convId: convId!,
