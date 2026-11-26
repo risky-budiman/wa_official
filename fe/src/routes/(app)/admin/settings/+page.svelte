@@ -585,7 +585,9 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
           config_id: esConfigId,
           response_type: 'code',
           override_default_response_type: true,
-          extras: { setup: {}, featureType: '', sessionInfoVersion: '3' },
+          // ES v4 must be named explicitly: without "version" Meta falls back to the retired
+          // v2/v3 flow and the popup only shows "Sorry, something went wrong".
+          extras: { setup: {}, sessionInfoVersion: '3', version: 'v4' },
         }
       );
       return;
