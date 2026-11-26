@@ -12,7 +12,23 @@ import { messages } from '../../db/schema/messages';
 import { contacts } from '../../db/schema/contacts';
 import { phoneNumbers } from '../../db/schema/phone-numbers';
 import { platformSettings } from '../../db/schema/settings';
-import { authPlugin, jwtConfig } from '../../middleware/auth';
+import { authPlugin, jwtConfig, invalidateAccountCache } from '../../middleware/auth';
+import { activityLogs } from '../../db/schema/activity-logs';
+
+/** Audit trail inside the tenant for sensitive platform actions (staff id kept in details). */
+async function auditTenant(orgId: string, action: string, staff: { id?: string; email?: string; role?: string } | null | undefined, details: Record<string, unknown> = {}) {
+  try {
+    await db.insert(activityLogs).values({
+      id: nanoid(),
+      organizationId: orgId,
+      userId: null,
+      action,
+      details: { ...details, byPlatformStaff: { id: staff?.id, email: staff?.email, role: staff?.role } },
+    } as any);
+  } catch (err: any) {
+    console.warn('audit log failed:', err?.message || err);
+  }
+}
 import { eq, desc, sql, and, lt, gt, isNull } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { jwt } from '@elysiajs/jwt';
@@ -575,7 +591,11 @@ export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
         return { success: false, error: 'Organisasi tidak ditemukan' };
       }
 
-      const daysToAdd = body.days || 30;
+      const daysToAdd = Math.round(body.days || 30);
+      if (daysToAdd < 1 || daysToAdd > 3650) {
+        set.status = 400;
+        return { success: false, error: 'Jumlah hari harus antara 1 dan 3650.' };
+      }
       const now = new Date();
       let baseDate = now;
 
@@ -613,7 +633,7 @@ export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
   )
 
   // ─── POST /super-admin/organizations/:id/impersonate (Login As Tenant Admin) ────────
-  .post('/organizations/:id/impersonate', async ({ params, jwt, set }) => {
+  .post('/organizations/:id/impersonate', async ({ params, jwt, set, user }) => {
     const [org] = await db.select().from(organizations).where(eq(organizations.id, params.id)).limit(1);
 
     if (!org) {
@@ -625,18 +645,24 @@ export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
     let [targetUser] = await db
       .select()
       .from(users)
-      .where(and(eq(users.organizationId, org.id), eq(users.role, 'ADMINISTRATOR')))
+      .where(and(eq(users.organizationId, org.id), eq(users.role, 'ADMINISTRATOR'), eq(users.status, 'ACTIVE')))
       .limit(1);
 
     if (!targetUser) {
-      // Fallback: any user in this org
-      [targetUser] = await db.select().from(users).where(eq(users.organizationId, org.id)).limit(1);
+      // Fallback: any ACTIVE tenant user
+      [targetUser] = await db
+        .select()
+        .from(users)
+        .where(and(eq(users.organizationId, org.id), eq(users.status, 'ACTIVE'), sql`${users.role} IN ('ADMINISTRATOR', 'SUPERVISOR', 'AGENT')`))
+        .limit(1);
     }
 
     if (!targetUser) {
       set.status = 400;
-      return { success: false, error: 'Tidak ada pengguna di dalam organisasi ini untuk di-impersonate.' };
+      return { success: false, error: 'Tidak ada pengguna aktif di organisasi ini untuk di-impersonate.' };
     }
+
+    await auditTenant(org.id, 'PLATFORM_IMPERSONATE', user, { asUserId: targetUser.id, asEmail: targetUser.email });
 
     // Generate JWT token for target tenant admin
     const token = await jwt.sign({
@@ -667,7 +693,7 @@ export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
   // ─── POST /super-admin/organizations/:id/reset-admin-password ────────
   .post(
     '/organizations/:id/reset-admin-password',
-    async ({ params, body, set }) => {
+    async ({ params, body, set, user }) => {
       const [org] = await db.select().from(organizations).where(eq(organizations.id, params.id)).limit(1);
 
       if (!org) {
@@ -709,6 +735,8 @@ export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
       });
 
       await db.update(users).set({ passwordHash: newHash }).where(eq(users.id, targetUser.id));
+      invalidateAccountCache(targetUser.id);
+      await auditTenant(org.id, 'PLATFORM_RESET_PASSWORD', user, { targetUserId: targetUser.id, targetEmail: targetUser.email });
 
       return {
         success: true,
@@ -1587,7 +1615,7 @@ export const superAdminRoutes = new Elysia({ prefix: '/super-admin' })
       const currentBranch = branchOut.trim();
 
       // 1. Tarik pembaruan kode terbaru dari origin
-      const { stdout, stderr } = await execAsync(`${git} pull origin ${currentBranch}`, {
+      const { stdout, stderr } = await execAsync(`${git} pull --ff-only origin ${currentBranch}`, {
         cwd: repoDir,
         timeout: 60000,
       });

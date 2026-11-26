@@ -5,9 +5,35 @@
 import { Elysia, t } from 'elysia';
 import { db } from '../../config/database';
 import { contacts, conversations, messages } from '../../db/schema';
-import { eq, and, or, like, desc, sql } from 'drizzle-orm';
+import { eq, and, or, like, desc, sql, inArray } from 'drizzle-orm';
 import { authPlugin } from '../../middleware/auth';
 import { nanoid } from 'nanoid';
+
+const canManageContacts = (role?: string) => role === 'ADMINISTRATOR' || role === 'SUPERVISOR';
+
+/**
+ * Normalise a WhatsApp number to international digits (62812…).
+ * Accepts +62 812-…, 0812…, 812…; returns null when it cannot be a phone number.
+ */
+export function normalizeWaId(raw: unknown): string | null {
+  let d = String(raw ?? '').replace(/\D/g, '');
+  if (d.startsWith('00')) d = d.slice(2);
+  if (d.startsWith('0')) d = '62' + d.slice(1);
+  else if (d.startsWith('8')) d = '62' + d;
+  return d.length >= 8 && d.length <= 15 ? d : null;
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Merge custom attributes; a null / empty value removes the key (e.g. clearing a tag). */
+function mergeAttributes(current: unknown, patch: Record<string, any>) {
+  const out: Record<string, any> = { ...((current as Record<string, any>) || {}) };
+  for (const [k, v] of Object.entries(patch || {})) {
+    if (v === null || v === undefined || v === '') delete out[k];
+    else out[k] = v;
+  }
+  return out;
+}
 
 export const contactRoutes = new Elysia({ prefix: '/contacts' })
   .use(authPlugin)
@@ -83,6 +109,141 @@ export const contactRoutes = new Elysia({ prefix: '/contacts' })
     }
   )
 
+  // ─── GET /contacts/export ─── (all contacts; the browser builds the CSV)
+  .get('/export', async ({ user, set }) => {
+    if (!user) {
+      set.status = 401;
+      return { success: false, error: 'Unauthorized' };
+    }
+    if (!canManageContacts(user.role)) {
+      set.status = 403;
+      return { success: false, error: 'Ekspor kontak hanya untuk Admin/Supervisor' };
+    }
+    const rows = await db
+      .select({
+        waId: contacts.waId,
+        name: contacts.name,
+        email: contacts.email,
+        customAttributes: contacts.customAttributes,
+        createdAt: contacts.createdAt,
+      })
+      .from(contacts)
+      .where(eq(contacts.organizationId, user.orgId))
+      .orderBy(desc(contacts.createdAt))
+      .limit(100000);
+    return { success: true, contacts: rows };
+  })
+
+  // ─── POST /contacts/import ───
+  // rows: [{ waId, name?, email?, tag? }] — new numbers are added; existing ones are
+  // updated only when updateExisting is true. Invalid rows are reported, never half-saved.
+  .post(
+    '/import',
+    async ({ user, body, set }) => {
+      if (!user) {
+        set.status = 401;
+        return { success: false, error: 'Unauthorized' };
+      }
+      if (!canManageContacts(user.role)) {
+        set.status = 403;
+        return { success: false, error: 'Impor kontak hanya untuk Admin/Supervisor' };
+      }
+      const rows = body.rows || [];
+      if (rows.length === 0) {
+        set.status = 400;
+        return { success: false, error: 'File tidak berisi baris kontak' };
+      }
+      if (rows.length > 5000) {
+        set.status = 400;
+        return { success: false, error: 'Maksimal 5.000 kontak per impor. Pecah file menjadi beberapa bagian.' };
+      }
+
+      const errors: { row: number; reason: string }[] = [];
+      const byWaId = new Map<string, { name: string | null; email: string | null; tag: string | null }>();
+      rows.forEach((raw: any, i: number) => {
+        const rowNo = i + 2; // +1 header, +1 human counting
+        const waId = normalizeWaId(raw?.waId);
+        if (!waId) {
+          errors.push({ row: rowNo, reason: `Nomor "${String(raw?.waId ?? '').slice(0, 30)}" tidak valid` });
+          return;
+        }
+        const email = String(raw?.email ?? '').trim();
+        if (email && !EMAIL_RE.test(email)) {
+          errors.push({ row: rowNo, reason: `Email "${email.slice(0, 60)}" tidak valid` });
+          return;
+        }
+        byWaId.set(waId, {
+          name: String(raw?.name ?? '').trim().slice(0, 255) || null,
+          email: email ? email.slice(0, 255) : null,
+          tag: String(raw?.tag ?? '').trim().slice(0, 60) || null,
+        });
+      });
+
+      const waIds = [...byWaId.keys()];
+      const existing = new Map<string, { id: string; customAttributes: unknown }>();
+      for (let i = 0; i < waIds.length; i += 500) {
+        const chunk = waIds.slice(i, i + 500);
+        const found = await db
+          .select({ id: contacts.id, waId: contacts.waId, customAttributes: contacts.customAttributes })
+          .from(contacts)
+          .where(and(eq(contacts.organizationId, user.orgId), inArray(contacts.waId, chunk)));
+        for (const f of found) existing.set(f.waId, { id: f.id, customAttributes: f.customAttributes });
+      }
+
+      let created = 0;
+      let updated = 0;
+      let skipped = 0;
+      const toInsert: any[] = [];
+      for (const [waId, v] of byWaId) {
+        const ex = existing.get(waId);
+        if (ex) {
+          if (!body.updateExisting) {
+            skipped++;
+            continue;
+          }
+          const patch: Record<string, any> = {};
+          if (v.name) patch.name = v.name;
+          if (v.email) patch.email = v.email;
+          if (v.tag) patch.customAttributes = mergeAttributes(ex.customAttributes, { tag: v.tag });
+          if (Object.keys(patch).length) {
+            await db.update(contacts).set(patch).where(eq(contacts.id, ex.id));
+            updated++;
+          } else skipped++;
+        } else {
+          toInsert.push({
+            id: nanoid(),
+            organizationId: user.orgId,
+            waId,
+            name: v.name || waId,
+            email: v.email,
+            customAttributes: v.tag ? { tag: v.tag } : {},
+          });
+        }
+      }
+      for (let i = 0; i < toInsert.length; i += 500) {
+        const chunk = toInsert.slice(i, i + 500);
+        await db.insert(contacts).values(chunk);
+        created += chunk.length;
+      }
+
+      return {
+        success: true,
+        created,
+        updated,
+        skipped,
+        duplicatesInFile: rows.length - errors.length - byWaId.size,
+        errors: errors.slice(0, 100),
+        errorCount: errors.length,
+      };
+    },
+    {
+      body: t.Object({
+        rows: t.Array(t.Any()),
+        updateExisting: t.Optional(t.Boolean()),
+      }),
+    }
+  )
+
   // ─── GET /contacts/:id ───
   // Get contact details with conversation stats
   .get('/:id', async ({ user, params, set }) => {
@@ -143,14 +304,14 @@ export const contactRoutes = new Elysia({ prefix: '/contacts' })
       }
 
       const orgId = user.orgId;
-      let cleanWaId = body.waId.replace(/\D/g, ''); // Keep only numbers
-      if (cleanWaId.startsWith('0')) {
-        cleanWaId = '62' + cleanWaId.slice(1);
-      }
-
+      const cleanWaId = normalizeWaId(body.waId);
       if (!cleanWaId) {
         set.status = 400;
-        return { success: false, error: 'Nomor WhatsApp wajib diisi' };
+        return { success: false, error: 'Nomor WhatsApp tidak valid. Contoh: 0812xxxxxxx atau +62 812xxxxxxx.' };
+      }
+      if (body.email?.trim() && !EMAIL_RE.test(body.email.trim())) {
+        set.status = 400;
+        return { success: false, error: 'Format email tidak valid' };
       }
 
       try {
@@ -178,7 +339,7 @@ export const contactRoutes = new Elysia({ prefix: '/contacts' })
           waId: cleanWaId,
           name: body.name?.trim() || cleanWaId,
           email: body.email?.trim() || null,
-          customAttributes: body.customAttributes || {},
+          customAttributes: mergeAttributes({}, body.customAttributes || {}),
         });
 
         const [createdContact] = await db
@@ -235,13 +396,20 @@ export const contactRoutes = new Elysia({ prefix: '/contacts' })
         }
 
         const updatePayload: Record<string, any> = {};
-        if (body.name !== undefined) updatePayload.name = body.name.trim();
-        if (body.email !== undefined) updatePayload.email = body.email ? body.email.trim() : null;
-        if (body.customAttributes !== undefined) {
-          updatePayload.customAttributes = {
-            ...(contact.customAttributes as Record<string, any> || {}),
-            ...body.customAttributes,
-          };
+        if (body.name !== undefined && body.name !== null) updatePayload.name = body.name.trim() || contact.waId;
+        if (body.email !== undefined) {
+          const email = (body.email || '').trim();
+          if (email && !EMAIL_RE.test(email)) {
+            set.status = 400;
+            return { success: false, error: 'Format email tidak valid' };
+          }
+          updatePayload.email = email || null;
+        }
+        if (body.customAttributes !== undefined && body.customAttributes !== null) {
+          updatePayload.customAttributes = mergeAttributes(contact.customAttributes, body.customAttributes);
+        }
+        if (Object.keys(updatePayload).length === 0) {
+          return { success: true, contact, message: 'Tidak ada perubahan' };
         }
 
         await db
@@ -267,8 +435,8 @@ export const contactRoutes = new Elysia({ prefix: '/contacts' })
     },
     {
       body: t.Object({
-        name: t.Optional(t.String()),
-        email: t.Optional(t.String()),
+        name: t.Optional(t.Union([t.String(), t.Null()])),
+        email: t.Optional(t.Union([t.String(), t.Null()])),
         customAttributes: t.Optional(t.Any()),
       }),
     }

@@ -112,10 +112,7 @@ export const externalRoutes = new Elysia({ prefix: '/external' })
       const [org] = await db.select().from(organizations).where(eq(organizations.id, orgId)).limit(1);
       const phone = await getActivePhone(orgId);
 
-      const activeToken =
-        org?.accessToken && !org.accessToken.startsWith('EAAGm0PX4ZCBO')
-          ? org.accessToken
-          : orgMetaToken(null);
+      const activeToken = orgMetaToken(org?.accessToken);
       const activePhoneNumberId = phone?.phoneNumberId || platformPhoneNumberId() || '';
       const dbPhoneId = phone?.id || phone?.phoneNumberId || platformPhoneNumberId() || 'default';
 
@@ -154,21 +151,19 @@ export const externalRoutes = new Elysia({ prefix: '/external' })
             text: String(val),
           })),
         });
-      } else if (Array.isArray(tmpl.components)) {
-        // Fallback auto-inject if body has variables
-        const bodyComp = tmpl.components.find((c: any) => (c.type || '').toUpperCase() === 'BODY');
-        if (bodyComp && typeof (bodyComp as any).text === 'string') {
-          const matches = (bodyComp as any).text.match(/\{\{\d+\}\}/g);
-          if (matches && matches.length > 0) {
-            componentsPayload.push({
-              type: 'body',
-              parameters: matches.map((_: any, idx: number) => ({
-                type: 'text',
-                text: idx === 0 ? (contact.name || 'Pelanggan') : 'Spesial',
-              })),
-            });
-          }
-        }
+      }
+
+      // 🔒 Never invent values for template variables — a customer would receive "Spesial"/"order"
+      const tmplComps: any[] = Array.isArray(tmpl.components) ? (tmpl.components as any[]) : [];
+      const bodyText = String(tmplComps.find((c) => (c.type || '').toUpperCase() === 'BODY')?.text || '');
+      const bodyVars = new Set(bodyText.match(/\{\{\s*[\w.]+\s*\}\}/g) || []).size;
+      const givenBody = body.bodyParameters?.length || 0;
+      if (bodyVars !== givenBody) {
+        set.status = 400;
+        return {
+          success: false,
+          error: `Template "${tmpl.name}" membutuhkan ${bodyVars} bodyParameters, diterima ${givenBody}.`,
+        };
       }
 
       // Header Parameters
@@ -195,20 +190,16 @@ export const externalRoutes = new Elysia({ prefix: '/external' })
             });
           }
         }
-      } else if (Array.isArray(tmpl.components)) {
-        // Auto-inject dynamic URL buttons only if the template URL has {{1}} variable
-        const btnComp = tmpl.components.find((c: any) => (c.type || '').toUpperCase() === 'BUTTONS');
-        if (btnComp && Array.isArray(btnComp.buttons)) {
-          btnComp.buttons.forEach((btn: any, btnIndex: number) => {
-            if ((btn.type || '').toUpperCase() === 'URL' && btn.url && btn.url.includes('{{1}}')) {
-              componentsPayload.push({
-                type: 'button',
-                sub_type: 'url',
-                index: String(btnIndex),
-                parameters: [{ type: 'text', text: 'order' }],
-              });
-            }
-          });
+      } else {
+        const dynamicButtons = (tmplComps.find((c) => (c.type || '').toUpperCase() === 'BUTTONS')?.buttons || []).filter(
+          (btn: any) => (btn.type || '').toUpperCase() === 'URL' && String(btn.url || '').includes('{{')
+        );
+        if (dynamicButtons.length > 0) {
+          set.status = 400;
+          return {
+            success: false,
+            error: `Template "${tmpl.name}" punya tombol URL dinamis — kirim buttonParameters (index & parameter).`,
+          };
         }
       }
 
@@ -332,10 +323,7 @@ export const externalRoutes = new Elysia({ prefix: '/external' })
       const [org] = await db.select().from(organizations).where(eq(organizations.id, orgId)).limit(1);
       const phone = await getActivePhone(orgId);
 
-      const activeToken =
-        org?.accessToken && !org.accessToken.startsWith('EAAGm0PX4ZCBO')
-          ? org.accessToken
-          : orgMetaToken(null);
+      const activeToken = orgMetaToken(org?.accessToken);
       const activePhoneNumberId = phone?.phoneNumberId || platformPhoneNumberId() || '';
       const dbPhoneId = phone?.id || phone?.phoneNumberId || platformPhoneNumberId() || 'default';
 
@@ -360,6 +348,23 @@ export const externalRoutes = new Elysia({ prefix: '/external' })
           name: targetNumber,
         });
         contact = { id: contactId, waId: targetNumber, name: targetNumber } as any;
+      }
+
+      // Free text is only delivered inside the 24-hour window that opens when the customer writes.
+      // Outside it Meta accepts the call and drops the message later — refuse up front instead.
+      const [openConv] = await db
+        .select({ windowExpiresAt: conversations.windowExpiresAt })
+        .from(conversations)
+        .where(and(eq(conversations.organizationId, orgId), eq(conversations.contactId, contact.id)))
+        .orderBy(desc(conversations.lastMessageAt))
+        .limit(1);
+      if (!openConv?.windowExpiresAt || new Date(openConv.windowExpiresAt).getTime() <= Date.now()) {
+        set.status = 409;
+        return {
+          success: false,
+          error: 'Di luar jendela 24 jam (pelanggan belum mengirim pesan dalam 24 jam terakhir). Gunakan /external/messages/send-template.',
+          code: 'OUTSIDE_24H_WINDOW',
+        };
       }
 
       try {
@@ -473,7 +478,9 @@ export const externalRoutes = new Elysia({ prefix: '/external' })
           .set({
             name: body.name || existing.name,
             email: body.email !== undefined ? body.email : existing.email,
-            customAttributes: body.customAttributes || existing.customAttributes,
+            customAttributes: body.customAttributes
+              ? { ...((existing.customAttributes as Record<string, unknown>) || {}), ...body.customAttributes }
+              : existing.customAttributes,
             updatedAt: new Date(),
           })
           .where(eq(contacts.id, existing.id));

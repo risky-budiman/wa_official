@@ -32,7 +32,7 @@ export class AnalyticsService {
       .where(
         and(
           eq(conversations.organizationId, orgId),
-          eq(conversations.status, 'OPEN')
+          sql`${conversations.status} <> 'RESOLVED'`
         )
       );
 
@@ -53,7 +53,7 @@ export class AnalyticsService {
           eq(conversations.status, 'RESOLVED')
         )
       )
-      .where(eq(users.organizationId, orgId))
+      .where(and(eq(users.organizationId, orgId), sql`${users.role} IN ('ADMINISTRATOR', 'SUPERVISOR', 'AGENT')`))
       .groupBy(users.id, users.fullName, users.email, users.role)
       .orderBy(desc(sql`COUNT(${conversations.id})`));
 
@@ -65,8 +65,8 @@ export class AnalyticsService {
                SELECT MIN(o.created_at) FROM messages o
                WHERE o.conversation_id = fi.cid
                  AND o.direction = 'OUTBOUND'
-                 AND o.is_internal_note = 0
-                 AND o.sender_type <> 'SYSTEM'
+                 AND COALESCE(o.is_internal_note, 0) = 0
+                 AND o.sender_type NOT IN ('SYSTEM', 'BOT')
                  AND o.created_at >= fi.first_in
              )) AS secs
       FROM (
@@ -136,6 +136,12 @@ export const analyticsRoutes = new Elysia({ prefix: '/analytics' })
     if (!user) {
       set.status = 401;
       return { success: false, error: 'Unauthorized' };
+    }
+
+    // The report lists every agent (with e-mail) — leads only, like the menu
+    if (!['ADMINISTRATOR', 'SUPERVISOR', 'SUPER_ADMIN'].includes(user.role)) {
+      set.status = 403;
+      return { success: false, error: 'Laporan hanya untuk Supervisor dan Administrator' };
     }
 
     const data = await AnalyticsService.getSlaMetrics(user.orgId);

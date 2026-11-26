@@ -13,6 +13,28 @@ import type { UserRole, UserStatus } from '../../db/schema/users';
 
 /** Roles that a tenant Administrator is allowed to assign */
 const TENANT_ROLES: string[] = ['ADMINISTRATOR', 'SUPERVISOR', 'AGENT'];
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Active administrators of the org other than `exceptUserId`. */
+async function otherActiveAdmins(orgId: string, exceptUserId: string) {
+  const [row] = await db
+    .select({ n: sql<number>`COUNT(*)` })
+    .from(users)
+    .where(and(eq(users.organizationId, orgId), eq(users.role, 'ADMINISTRATOR'), eq(users.status, 'ACTIVE'), sql`${users.id} <> ${exceptUserId}`));
+  return Number(row?.n || 0);
+}
+
+/** Give the chats a removed / deactivated agent was handling back to the queue. */
+async function releaseConversations(userId: string) {
+  await db.execute(sql`UPDATE conversations SET status = 'UNASSIGNED', assigned_user_id = NULL WHERE assigned_user_id = ${userId} AND status = 'OPEN'`);
+  await db.execute(sql`UPDATE conversations SET assigned_user_id = NULL WHERE assigned_user_id = ${userId}`);
+}
+
+async function assertTeamInOrg(orgId: string, teamId?: string | null) {
+  if (!teamId) return;
+  const [team] = await db.select({ id: teams.id }).from(teams).where(and(eq(teams.id, teamId), eq(teams.organizationId, orgId))).limit(1);
+  if (!team) throw new Error('Tim tidak ditemukan di organisasi ini.');
+}
 
 export class UserService {
   static async list(orgId: string) {
@@ -64,6 +86,7 @@ export class UserService {
     if (body.password && body.password.trim().length < 6) {
       throw new Error('Password minimal 6 karakter.');
     }
+    await assertTeamInOrg(orgId, body.teamId);
     const passwordHash = await hash(generatedPassword || body.password!.trim());
     const id = nanoid();
 
@@ -102,16 +125,53 @@ export class UserService {
       throw new Error('Role staf platform tidak dapat ditetapkan melalui menu staf tenant.');
     }
 
+    const [target] = await db
+      .select({ id: users.id, role: users.role, status: users.status })
+      .from(users)
+      .where(
+        and(
+          eq(users.id, userId),
+          eq(users.organizationId, orgId),
+          sql`${users.role} NOT IN ('SUPER_ADMIN', 'CO_SUPER_ADMIN', 'ADMIN_FINANCE', 'ADMIN_SUPPORT')`
+        )
+      )
+      .limit(1);
+    if (!target) throw new Error('Pengguna tidak ditemukan di organisasi ini');
+
+    // 🔒 Never leave the organisation without an active administrator
+    const losesAdmin =
+      target.role === 'ADMINISTRATOR' &&
+      target.status === 'ACTIVE' &&
+      ((body.role !== undefined && body.role !== 'ADMINISTRATOR') || (body.status !== undefined && body.status !== 'ACTIVE'));
+    if (losesAdmin && (await otherActiveAdmins(orgId, userId)) === 0) {
+      throw new Error('Ini Administrator aktif terakhir. Jadikan pengguna lain Administrator terlebih dahulu.');
+    }
+
     const updatePayload: Record<string, any> = {};
-    if (body.fullName !== undefined) updatePayload.fullName = body.fullName.trim();
-    if (body.email !== undefined) updatePayload.email = body.email.trim();
+    if (body.fullName !== undefined) {
+      if (body.fullName.trim().length < 2) throw new Error('Nama minimal 2 karakter.');
+      updatePayload.fullName = body.fullName.trim();
+    }
+    if (body.email !== undefined) {
+      const email = body.email.toLowerCase().trim();
+      if (!EMAIL_RE.test(email)) throw new Error('Format email tidak valid.');
+      const [taken] = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(and(eq(users.email, email), sql`${users.id} <> ${userId}`))
+        .limit(1);
+      if (taken) throw new Error(`Email "${email}" sudah digunakan oleh akun lain.`);
+      updatePayload.email = email;
+    }
+    if (body.teamId !== undefined) await assertTeamInOrg(orgId, body.teamId);
     if (body.role !== undefined) updatePayload.role = body.role;
     if (body.status !== undefined) updatePayload.status = body.status;
     if (body.isOnline !== undefined) updatePayload.isOnline = body.isOnline;
     if (body.maxActiveChats !== undefined) updatePayload.maxActiveChats = body.maxActiveChats;
     if (body.teamId !== undefined) updatePayload.teamId = body.teamId;
     if (body.password) {
-      updatePayload.passwordHash = await hash(body.password);
+      if (body.password.trim().length < 6) throw new Error('Password minimal 6 karakter.');
+      updatePayload.passwordHash = await hash(body.password.trim());
     }
 
     // Nothing to update (e.g. non-admin sent only ignored fields)
@@ -130,6 +190,10 @@ export class UserService {
         )
       );
 
+    if (body.status !== undefined && body.status !== 'ACTIVE') {
+      await releaseConversations(userId);
+    }
+
     invalidateAccountCache(userId);
     return { success: true };
   }
@@ -137,7 +201,7 @@ export class UserService {
   static async delete(orgId: string, userId: string) {
     // 🔒 Make sure the target user belongs to this organization BEFORE touching related data
     const [target] = await db
-      .select({ id: users.id })
+      .select({ id: users.id, role: users.role, status: users.status })
       .from(users)
       .where(
         and(
@@ -151,10 +215,13 @@ export class UserService {
     if (!target) {
       throw new Error('Pengguna tidak ditemukan di organisasi ini');
     }
+    if (target.role === 'ADMINISTRATOR' && target.status === 'ACTIVE' && (await otherActiveAdmins(orgId, userId)) === 0) {
+      throw new Error('Ini Administrator aktif terakhir dan tidak dapat dihapus.');
+    }
 
-    // 1. Clean up dependent foreign keys safely before deleting user
+    // 1. Clean up dependent foreign keys safely before deleting user (open chats go back to the queue)
     try {
-      await db.execute(sql`UPDATE conversations SET assigned_user_id = NULL WHERE assigned_user_id = ${userId}`);
+      await releaseConversations(userId);
     } catch (_) {}
     try {
       await db.execute(sql`DELETE FROM conversation_participants WHERE user_id = ${userId}`);
@@ -301,10 +368,14 @@ export const userRoutes = new Elysia({ prefix: '/users' })
       return { success: false, error: 'Hanya Administrator yang dapat menghapus pengguna' };
     }
 
+    if (params.id === user.id) {
+      set.status = 400;
+      return { success: false, error: 'Anda tidak dapat menghapus akun Anda sendiri.' };
+    }
     try {
       await UserService.delete(user.orgId, params.id);
     } catch (err: any) {
-      set.status = 404;
+      set.status = /tidak ditemukan/.test(err.message) ? 404 : 400;
       return { success: false, error: err.message };
     }
     return { success: true };

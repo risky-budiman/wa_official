@@ -91,10 +91,19 @@
   // Attachment State
   let showAttachmentMenu = $state(false);
   // Must match the server whitelist in be/src/modules/media/media.routes.ts (WhatsApp-supported types)
-  const ACCEPT_IMAGE = ".jpg,.jpeg,.png,.webp,.gif";
+  // Only what WhatsApp Cloud API accepts (GIF/WebP go as documents — not valid WhatsApp images)
+  const ACCEPT_IMAGE = ".jpg,.jpeg,.png";
   const ACCEPT_VIDEO = ".mp4,.3gp";
   const ACCEPT_AUDIO = ".mp3,.ogg,.opus,.aac,.amr,.m4a";
-  const ACCEPT_DOCUMENT = ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.csv";
+  const ACCEPT_DOCUMENT = ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.gif,.webp";
+  /** WhatsApp size limits per kind (documents capped by our upload limit) */
+  const MEDIA_LIMIT_MB = { IMAGE: 5, VIDEO: 16, AUDIO: 16, DOCUMENT: 50 } as const;
+  function categoryForExt(ext: string): "IMAGE" | "DOCUMENT" | "VIDEO" | "AUDIO" {
+    if (["jpg", "jpeg", "png"].includes(ext)) return "IMAGE";
+    if (["mp4", "3gp"].includes(ext)) return "VIDEO";
+    if (["mp3", "ogg", "opus", "aac", "amr", "m4a"].includes(ext)) return "AUDIO";
+    return "DOCUMENT";
+  }
   const ALLOWED_UPLOAD_EXT = new Set(
     [ACCEPT_IMAGE, ACCEPT_VIDEO, ACCEPT_AUDIO, ACCEPT_DOCUMENT].join(",").split(",").map((e) => e.slice(1)),
   );
@@ -128,22 +137,20 @@
     // Validate before uploading so the user gets a clear message immediately
     const ext = (file.name.split(".").pop() || "").toLowerCase();
     if (!file.name.includes(".") || !ALLOWED_UPLOAD_EXT.has(ext)) {
-      alert(`Tipe file .${ext || "?"} tidak didukung WhatsApp. Gunakan gambar (JPG/PNG), video (MP4), audio (MP3/OGG/AAC/M4A), PDF, atau dokumen Office.`);
+      sendError = `Tipe file .${ext || "?"} tidak didukung WhatsApp. Gunakan JPG/PNG, MP4, MP3/OGG/AAC/M4A, PDF, TXT, atau dokumen Office.`;
       input.value = "";
       return;
     }
-    if (file.size > MAX_UPLOAD_BYTES) {
-      alert(`Ukuran file ${formatFileSize(file.size)} melebihi batas 50 MB.`);
+    const category = categoryForExt(ext);
+    const limitMb = MEDIA_LIMIT_MB[category];
+    if (file.size > limitMb * 1024 * 1024 || file.size > MAX_UPLOAD_BYTES) {
+      const label = { IMAGE: "Gambar", VIDEO: "Video", AUDIO: "Audio", DOCUMENT: "Dokumen" }[category];
+      sendError = `${label} ${formatFileSize(file.size)} terlalu besar. Batas WhatsApp untuk ${label.toLowerCase()} adalah ${limitMb} MB.`;
       input.value = "";
       return;
     }
-
+    sendError = null;
     const mimeType = file.type || "application/octet-stream";
-    let category: "IMAGE" | "DOCUMENT" | "VIDEO" | "AUDIO" = "DOCUMENT";
-
-    if (mimeType.startsWith("image/")) category = "IMAGE";
-    else if (mimeType.startsWith("video/")) category = "VIDEO";
-    else if (mimeType.startsWith("audio/")) category = "AUDIO";
 
     let previewUrl: string | undefined;
     if (category === "IMAGE") {

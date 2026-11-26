@@ -24,8 +24,12 @@
     RefreshCw,
     Sparkles,
     Zap,
-    Send
+    Send,
+    Upload,
+    Download,
+    FileSpreadsheet
   } from 'lucide-svelte';
+  import { parseCsv, buildCsv, downloadText } from '$lib/utils/csv';
   import SendSingleTemplateModal from '$lib/components/templates/SendSingleTemplateModal.svelte';
 
   interface ContactItem {
@@ -176,10 +180,8 @@
       body: JSON.stringify({
         name: editName.trim() || undefined,
         email: editEmail.trim() || null,
-        customAttributes: {
-          ...(selectedContact.customAttributes || {}),
-          tag: editTag.trim() || undefined,
-        },
+        // null removes the tag on the server
+        customAttributes: { tag: editTag.trim() || null },
       }),
     });
 
@@ -209,6 +211,128 @@
     } else {
       errorMsg = res.error || 'Gagal menghapus kontak';
     }
+  }
+
+  // ─── Import / export (Admin & Supervisor) ───
+  const canManage = $derived(authStore.role === 'ADMINISTRATOR' || authStore.role === 'SUPERVISOR');
+  let showImportModal = $state(false);
+  let importFileName = $state('');
+  let importRows = $state<{ waId: string; name: string; email: string; tag: string }[]>([]);
+  let importError = $state<string | null>(null);
+  let importUpdateExisting = $state(false);
+  let isImporting = $state(false);
+  let isExporting = $state(false);
+  let importResult = $state<{
+    created: number;
+    updated: number;
+    skipped: number;
+    duplicatesInFile: number;
+    errorCount: number;
+    errors: { row: number; reason: string }[];
+  } | null>(null);
+
+  const HEADER_ALIASES: Record<string, 'waId' | 'name' | 'email' | 'tag'> = {
+    nomor: 'waId', nomor_whatsapp: 'waId', no: 'waId', no_hp: 'waId', hp: 'waId', telepon: 'waId', phone: 'waId',
+    whatsapp: 'waId', wa: 'waId', wa_id: 'waId', waid: 'waId', nomor_wa: 'waId', no_wa: 'waId', number: 'waId',
+    nama: 'name', name: 'name', nama_lengkap: 'name',
+    email: 'email', 'e-mail': 'email', surel: 'email',
+    tag: 'tag', label: 'tag', kategori: 'tag',
+  };
+
+  function openImport() {
+    importFileName = '';
+    importRows = [];
+    importError = null;
+    importResult = null;
+    importUpdateExisting = false;
+    showImportModal = true;
+  }
+
+  async function handleImportFile(e: Event) {
+    const input = e.target as HTMLInputElement;
+    const file = input.files?.[0];
+    importRows = [];
+    importError = null;
+    importResult = null;
+    if (!file) return;
+    importFileName = file.name;
+    if (!/\.(csv|txt)$/i.test(file.name)) {
+      importError = 'Gunakan file .csv. Dari Excel: File → Save As → CSV (UTF-8).';
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      importError = 'File terlalu besar (maksimal 5 MB).';
+      return;
+    }
+    const table = parseCsv(await file.text());
+    if (table.length < 2) {
+      importError = 'File kosong atau hanya berisi judul kolom.';
+      return;
+    }
+    const header = table[0].map((h) => h.trim().toLowerCase().replace(/\s+/g, '_'));
+    const cols = header.map((h) => HEADER_ALIASES[h]);
+    if (!cols.includes('waId')) {
+      importError = 'Kolom nomor tidak ditemukan. Baris pertama harus berisi judul kolom, misalnya: nomor_whatsapp, nama, email, tag.';
+      return;
+    }
+    importRows = table.slice(1).map((cells) => {
+      const row = { waId: '', name: '', email: '', tag: '' };
+      cells.forEach((c, i) => {
+        const key = cols[i];
+        if (key) row[key] = c.trim();
+      });
+      return row;
+    });
+    if (importRows.length > 5000) {
+      importError = `File berisi ${importRows.length.toLocaleString('id-ID')} baris. Maksimal 5.000 per impor.`;
+      importRows = [];
+    }
+  }
+
+  async function submitImport() {
+    if (importRows.length === 0) return;
+    isImporting = true;
+    importError = null;
+    const res = await apiRequest<any>('/contacts/import', {
+      method: 'POST',
+      body: JSON.stringify({ rows: importRows, updateExisting: importUpdateExisting }),
+    });
+    isImporting = false;
+    if (!res.success) {
+      importError = res.error || 'Impor gagal';
+      return;
+    }
+    importResult = res as any;
+    importRows = [];
+    await loadContacts(1);
+  }
+
+  function downloadTemplate() {
+    downloadText(
+      'template-impor-kontak.csv',
+      buildCsv(['nomor_whatsapp', 'nama', 'email', 'tag'], [['081234567890', 'Budi Santoso', 'budi@contoh.com', 'VIP']])
+    );
+  }
+
+  async function exportContacts() {
+    isExporting = true;
+    const res = await apiRequest<any>('/contacts/export');
+    isExporting = false;
+    if (!res.success) {
+      errorMsg = res.error || 'Gagal mengekspor kontak';
+      return;
+    }
+    const list: any[] = res.contacts || [];
+    const stamp = new Date().toISOString().slice(0, 10);
+    downloadText(
+      `kontak-${stamp}.csv`,
+      buildCsv(
+        ['nomor_whatsapp', 'nama', 'email', 'tag', 'dibuat'],
+        list.map((c) => [c.waId, c.name || '', c.email || '', c.customAttributes?.tag || '', c.createdAt ? new Date(c.createdAt).toLocaleString('id-ID') : ''])
+      )
+    );
+    successMsg = `${list.length.toLocaleString('id-ID')} kontak diekspor.`;
+    setTimeout(() => (successMsg = null), 4000);
   }
 
   function formatWaId(waId: string) {
@@ -249,6 +373,16 @@
       <button onclick={() => loadContacts(currentPage)} class="ui-btn-secondary px-2.5" title="Muat ulang" aria-label="Muat ulang">
         <RefreshCw class="h-4 w-4 {isLoading ? 'animate-spin' : ''}" />
       </button>
+      {#if canManage}
+        <button onclick={exportContacts} class="ui-btn-secondary" disabled={isExporting}>
+          <Download class="h-4 w-4" />
+          {isExporting ? 'Mengekspor…' : 'Ekspor'}
+        </button>
+        <button onclick={openImport} class="ui-btn-secondary">
+          <Upload class="h-4 w-4" />
+          Impor CSV
+        </button>
+      {/if}
       <button onclick={() => (showAddModal = true)} class="ui-btn-primary">
         <Plus class="h-4 w-4" />
         Tambah Kontak
@@ -613,6 +747,86 @@
           </button>
         </div>
       </form>
+    </div>
+  </div>
+{/if}
+
+<!-- Modal Impor Kontak -->
+{#if showImportModal}
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Impor kontak">
+    <div class="w-full max-w-lg space-y-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
+      <div class="flex items-start justify-between gap-3">
+        <div class="flex items-center gap-3">
+          <span class="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400"><FileSpreadsheet class="h-5 w-5" /></span>
+          <div>
+            <h3 class="text-base font-semibold text-slate-900 dark:text-white">Impor kontak dari CSV</h3>
+            <p class="text-xs text-slate-500 dark:text-slate-400">Maksimal 5.000 kontak per file.</p>
+          </div>
+        </div>
+        <button type="button" class="ui-icon-btn" aria-label="Tutup" onclick={() => (showImportModal = false)}><X class="h-4 w-4" /></button>
+      </div>
+
+      {#if importResult}
+        <div class="space-y-3">
+          <div class="grid grid-cols-3 gap-2 text-center">
+            <div class="rounded-xl bg-emerald-50 p-3 dark:bg-emerald-500/10"><p class="text-xl font-semibold text-emerald-700 dark:text-emerald-300">{importResult.created}</p><p class="text-[11px] text-slate-500">Ditambahkan</p></div>
+            <div class="rounded-xl bg-sky-50 p-3 dark:bg-sky-500/10"><p class="text-xl font-semibold text-sky-700 dark:text-sky-300">{importResult.updated}</p><p class="text-[11px] text-slate-500">Diperbarui</p></div>
+            <div class="rounded-xl bg-slate-100 p-3 dark:bg-slate-800"><p class="text-xl font-semibold text-slate-700 dark:text-slate-200">{importResult.skipped + importResult.duplicatesInFile}</p><p class="text-[11px] text-slate-500">Dilewati</p></div>
+          </div>
+          {#if importResult.errorCount > 0}
+            <div class="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+              <p class="mb-1 font-semibold">{importResult.errorCount} baris tidak diimpor:</p>
+              <ul class="max-h-32 space-y-0.5 overflow-y-auto">
+                {#each importResult.errors as er}<li>Baris {er.row}: {er.reason}</li>{/each}
+              </ul>
+            </div>
+          {/if}
+          <div class="flex justify-end"><button type="button" class="ui-btn-primary" onclick={() => (showImportModal = false)}>Selesai</button></div>
+        </div>
+      {:else}
+        <ol class="space-y-1 text-xs text-slate-600 dark:text-slate-300">
+          <li>1. Baris pertama berisi judul kolom: <code class="rounded bg-slate-100 px-1 dark:bg-slate-800">nomor_whatsapp</code> (wajib), <code class="rounded bg-slate-100 px-1 dark:bg-slate-800">nama</code>, <code class="rounded bg-slate-100 px-1 dark:bg-slate-800">email</code>, <code class="rounded bg-slate-100 px-1 dark:bg-slate-800">tag</code>.</li>
+          <li>2. Nomor boleh ditulis 0812…, 812… atau +62 812….</li>
+          <li>3. Dari Excel: <em>File → Save As → CSV UTF-8</em>.</li>
+        </ol>
+        <button type="button" onclick={downloadTemplate} class="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 hover:underline dark:text-emerald-400">
+          <Download class="h-3.5 w-3.5" /> Unduh template CSV
+        </button>
+
+        <label class="flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed border-slate-200 p-6 text-center hover:border-emerald-400 dark:border-slate-700">
+          <Upload class="h-6 w-6 text-slate-400" />
+          <span class="text-sm font-medium text-slate-700 dark:text-slate-200">{importFileName || 'Pilih file CSV'}</span>
+          <span class="text-xs text-slate-500">{importRows.length > 0 ? `${importRows.length.toLocaleString('id-ID')} baris siap diimpor` : 'Klik untuk memilih file'}</span>
+          <input type="file" accept=".csv,text/csv" class="sr-only" onchange={handleImportFile} />
+        </label>
+
+        {#if importRows.length > 0}
+          <div class="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-slate-50 text-slate-500 dark:bg-slate-800/60"><tr><th class="px-3 py-2">Nomor</th><th class="px-3 py-2">Nama</th><th class="px-3 py-2">Tag</th></tr></thead>
+              <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+                {#each importRows.slice(0, 4) as row}
+                  <tr><td class="px-3 py-1.5 font-mono">{row.waId}</td><td class="px-3 py-1.5">{row.name}</td><td class="px-3 py-1.5">{row.tag}</td></tr>
+                {/each}
+              </tbody>
+            </table>
+            {#if importRows.length > 4}<p class="bg-slate-50 px-3 py-1.5 text-[11px] text-slate-500 dark:bg-slate-800/60">+ {(importRows.length - 4).toLocaleString('id-ID')} baris lainnya</p>{/if}
+          </div>
+          <label class="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+            <input type="checkbox" bind:checked={importUpdateExisting} class="rounded" />
+            Perbarui nama/email/tag kontak yang nomornya sudah ada
+          </label>
+        {/if}
+
+        {#if importError}<Alert tone="error" message={importError} />{/if}
+
+        <div class="flex justify-end gap-2">
+          <button type="button" class="ui-btn-secondary" onclick={() => (showImportModal = false)}>Batal</button>
+          <button type="button" class="ui-btn-primary" disabled={importRows.length === 0 || isImporting} onclick={submitImport}>
+            {isImporting ? 'Mengimpor…' : `Impor ${importRows.length ? importRows.length.toLocaleString('id-ID') + ' kontak' : ''}`}
+          </button>
+        </div>
+      {/if}
     </div>
   </div>
 {/if}

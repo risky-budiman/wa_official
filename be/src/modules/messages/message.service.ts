@@ -118,9 +118,22 @@ export class MessageService {
       .where(eq(organizations.id, conv.organizationId))
       .limit(1);
 
-    const activeToken = org?.accessToken && !org.accessToken.startsWith('EAAGm0PX4ZCBO')
-      ? org.accessToken
-      : orgMetaToken(null);
+    const activeToken = orgMetaToken(org?.accessToken);
+
+    // Media: the client sends "[DOCUMENT] file.pdf" when there is no caption. That label is
+    // internal — never send it to the customer as a caption.
+    const mediaKind = (messageType || '').toLowerCase();
+    const isMedia = !!body.mediaUrl && ['image', 'document', 'video', 'audio'].includes(mediaKind);
+    const placeholder = /^\[(DOCUMENT|VIDEO|AUDIO|IMAGE)\]\s*/i;
+    const rawText = (body.body || '').trim();
+    const caption = isMedia && !placeholder.test(rawText) ? rawText : '';
+    const fileLabel = body.filename || rawText.replace(placeholder, '') || '';
+    // Stored body: the caption, or for documents the file name (shown on the file card)
+    const storedBody = isMedia ? caption || (mediaKind === 'document' ? fileLabel : '') : body.body;
+    const preview = !isMedia
+      ? body.body
+      : caption ||
+        (mediaKind === 'image' ? '📷 Foto' : mediaKind === 'video' ? '🎬 Video' : mediaKind === 'audio' ? '🎵 Audio' : `📄 ${fileLabel || 'Dokumen'}`);
 
     // Send via Meta API
     if (messageType === 'template' && body.templateName) {
@@ -139,14 +152,14 @@ export class MessageService {
         components: body.templateComponents,
       }, activeToken);
       wamId = metaRes.messages?.[0]?.id || null;
-    } else if (body.mediaUrl && ['image', 'document', 'video', 'audio'].includes((messageType || '').toLowerCase())) {
+    } else if (isMedia) {
       const metaRes = await MetaApiService.sendMediaMessage({
         phoneNumberId: phone.phoneNumberId,
         recipientWaId: conv.contact.waId,
         type: (messageType || 'document').toLowerCase() as 'image' | 'document' | 'video' | 'audio',
-        mediaUrl: body.mediaUrl,
-        caption: body.body || undefined,
-        filename: body.filename || undefined,
+        mediaUrl: body.mediaUrl as string,
+        caption: caption || undefined,
+        filename: mediaKind === 'document' ? fileLabel || undefined : undefined,
       }, activeToken);
       wamId = metaRes.messages?.[0]?.id || null;
     } else {
@@ -172,7 +185,7 @@ export class MessageService {
       senderType,
       senderId: user.id,
       messageType,
-      body: body.body,
+      body: storedBody,
       mediaUrl: body.mediaUrl,
       mediaMimeType: body.mediaMimeType,
       isInternalNote: false,
@@ -184,7 +197,7 @@ export class MessageService {
     await db
       .update(conversations)
       .set({
-        lastMessagePreview: body.body,
+        lastMessagePreview: preview,
         lastMessageAt: new Date(),
         status: 'OPEN',
       })
@@ -198,7 +211,7 @@ export class MessageService {
       senderType: user.role,
       senderId: user.id,
       messageType,
-      body: body.body,
+      body: storedBody,
       mediaUrl: body.mediaUrl,
       mediaMimeType: body.mediaMimeType,
       isInternalNote: false,
