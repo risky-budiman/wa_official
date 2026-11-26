@@ -3,6 +3,7 @@
 // ===========================================
 
 import type { OperatingHoursConfig } from '../db/schema/organizations';
+import { geminiMemory, rankGeminiModels, isRetiredModelError } from './gemini-models';
 
 /** Default Claude model for the auto-responder (current Opus). */
 export const DEFAULT_CLAUDE_MODEL = 'claude-opus-5-5';
@@ -114,6 +115,9 @@ export class AiAgentService {
    * Dynamically fetch list of supported Gemini models for this specific API key
    */
   static async getAvailableGeminiModels(apiKey: string): Promise<string[]> {
+    // The list rarely changes — ask Google at most once an hour per key
+    const cached = geminiMemory.cachedList(apiKey);
+    if (cached) return cached;
     try {
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
       const data = await res.json();
@@ -122,7 +126,8 @@ export class AiAgentService {
           .filter((m: any) => Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'))
           .map((m: any) => m.name.replace(/^models\//, ''));
         if (supported.length > 0) {
-          console.log(`🤖 Discovered ${supported.length} available Gemini models for API Key:`, supported.slice(0, 4).join(', '));
+          console.log(`🤖 Discovered ${supported.length} available Gemini models; preferred order:`, rankGeminiModels(supported).slice(0, 4).join(', '));
+          geminiMemory.storeList(apiKey, supported);
           return supported;
         }
       }
@@ -150,19 +155,8 @@ export class AiAgentService {
     const userModel = params.model ? params.model.replace(/^models\//, '') : '';
     const availableModels = await this.getAvailableGeminiModels(apiKey);
 
-    // Build prioritized list of models to try
-    const modelsToTry: string[] = [];
-    if (userModel && availableModels.includes(userModel)) {
-      modelsToTry.push(userModel);
-    }
-
-    // Flash models first (fastest & cost-effective)
-    const flashModels = availableModels.filter((m) => m.includes('flash') && !m.includes('image') && !m.includes('tts'));
-    modelsToTry.push(...flashModels);
-    modelsToTry.push(...availableModels);
-
-    // Deduplicate
-    const uniqueModels = Array.from(new Set(modelsToTry));
+    // Chosen model → last model that worked → newest stable flash …; retired models skipped; max 4 tries
+    const uniqueModels = geminiMemory.plan(apiKey, availableModels, userModel || undefined);
 
     const contents: any[] = [];
 
@@ -215,12 +209,15 @@ export class AiAgentService {
         if (data?.error) {
           lastError = data.error.message || JSON.stringify(data.error);
           console.warn(`⚠️ Gemini model ${m} returned error:`, lastError);
+          // Retired for this key → skip it for a day instead of retrying on every message
+          if (isRetiredModelError(lastError)) geminiMemory.retire(apiKey, m);
           continue; // Try next model in list
         }
 
         const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text;
         if (reply) {
           console.log(`✨ Gemini successfully replied using model [${m}]`);
+          geminiMemory.remember(apiKey, m);
           return reply.trim();
         }
       } catch (err: any) {
