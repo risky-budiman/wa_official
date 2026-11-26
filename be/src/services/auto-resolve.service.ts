@@ -11,9 +11,11 @@ export class AutoResolveService {
   /**
    * Scan and resolve open conversations where the customer has been inactive past the configured threshold.
    */
-  static async runAutoResolveCycle() {
+  static async runAutoResolveCycle(onlyOrgId?: string) {
     try {
-      const orgList = await db.select().from(organizations);
+      const orgList = onlyOrgId
+        ? await db.select().from(organizations).where(eq(organizations.id, onlyOrgId))
+        : await db.select().from(organizations);
 
       for (const org of orgList) {
         const hours = org.autoResolveHours ?? 3;
@@ -21,7 +23,9 @@ export class AutoResolveService {
 
         const cutoffTime = new Date(Date.now() - hours * 60 * 60 * 1000);
 
-        // Find active (OPEN or PENDING) conversations where lastMessageAt is older than cutoffTime
+        // Find active conversations that are waiting on the CUSTOMER (our side spoke last) and have been
+        // quiet past the threshold. Never close a chat where the customer is the one waiting for an answer,
+        // nor one the chatbot handed to a human (PENDING without an agent).
         const inactiveConversations = await db
           .select({
             id: conversations.id,
@@ -34,7 +38,11 @@ export class AutoResolveService {
             and(
               eq(conversations.organizationId, org.id),
               sql`${conversations.status} IN ('OPEN', 'PENDING')`,
-              lt(conversations.lastMessageAt, cutoffTime)
+              lt(conversations.lastMessageAt, cutoffTime),
+              sql`NOT (${conversations.status} = 'PENDING' AND ${conversations.assignedUserId} IS NULL)`,
+              sql`(SELECT m.direction FROM messages m
+                   WHERE m.conversation_id = ${conversations.id} AND m.is_internal_note = 0
+                   ORDER BY m.created_at DESC LIMIT 1) = 'OUTBOUND'`
             )
           );
 
@@ -53,7 +61,7 @@ export class AutoResolveService {
             senderId: null,
             direction: 'OUTBOUND',
             messageType: 'text',
-            body: `⏱️ Obrolan otomatis diselesaikan (Auto-Resolved) karena tidak ada respon selama ${hours} jam.`,
+            body: `⏱️ Obrolan otomatis diselesaikan (Auto-Resolved) karena pelanggan tidak membalas selama ${hours} jam.`,
             isInternalNote: true,
             status: 'SENT',
           });
