@@ -26,8 +26,11 @@ export class MetaApiService {
   /**
    * Send text message to WhatsApp Cloud API
    */
-  static async sendTextMessage(params: MetaSendTextParams, accessToken = env.META_ACCESS_TOKEN) {
+  static async sendTextMessage(params: MetaSendTextParams, accessToken = '') {
     if (!accessToken || !params.phoneNumberId) {
+      if (env.NODE_ENV === 'production') {
+        throw new Error('Nomor WhatsApp organisasi belum terhubung (token / Phone Number ID kosong). Hubungkan di Pengaturan → Saluran WhatsApp.');
+      }
       console.warn('⚠️ Meta access token or phone number ID missing. Message simulated.');
       return {
         messages: [{ id: `wamid.SIMULATED_${Date.now()}` }]
@@ -73,9 +76,12 @@ export class MetaApiService {
       caption?: string;
       filename?: string;
     },
-    accessToken = env.META_ACCESS_TOKEN
+    accessToken = ''
   ) {
     if (!accessToken || !params.phoneNumberId) {
+      if (env.NODE_ENV === 'production') {
+        throw new Error('Nomor WhatsApp organisasi belum terhubung (token / Phone Number ID kosong). Hubungkan di Pengaturan → Saluran WhatsApp.');
+      }
       console.warn('⚠️ Meta access token or phone number ID missing. Media message simulated.');
       return {
         messages: [{ id: `wamid.SIMULATED_MEDIA_${Date.now()}` }]
@@ -142,8 +148,11 @@ export class MetaApiService {
   /**
    * Send approved template message (e.g. when 24-hr window expired)
    */
-  static async sendTemplateMessage(params: MetaSendTemplateParams, accessToken = env.META_ACCESS_TOKEN) {
+  static async sendTemplateMessage(params: MetaSendTemplateParams, accessToken = '') {
     if (!accessToken || !params.phoneNumberId) {
+      if (env.NODE_ENV === 'production') {
+        throw new Error('Nomor WhatsApp organisasi belum terhubung (token / Phone Number ID kosong). Hubungkan di Pengaturan → Saluran WhatsApp.');
+      }
       console.warn('⚠️ Meta access token or phone number ID missing. Template simulated.');
       return {
         messages: [{ id: `wamid.SIMULATED_${Date.now()}` }]
@@ -522,7 +531,7 @@ export class MetaApiService {
    */
   static async downloadMedia(
     mediaId: string,
-    accessToken = env.META_ACCESS_TOKEN
+    accessToken = ''
   ): Promise<{ localUrl: string; mimeType: string; filename: string } | null> {
     if (!mediaId || !accessToken) return null;
 

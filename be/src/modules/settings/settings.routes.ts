@@ -21,6 +21,7 @@ import {
   pickMetaPhone,
   PhoneNumberInUseError,
 } from '../../services/phone-number.service';
+import { orgMetaToken, platformPhoneNumberId } from '../../services/meta-credentials';
 
 /**
  * Make `targetPhoneId` the organization's active number. Old numbers are archived (never deleted),
@@ -44,7 +45,7 @@ async function safeUpsertPhoneNumber(
 
 /** Token the organization uses to talk to Meta (its own, else the platform token). */
 function resolveOrgToken(orgToken?: string | null) {
-  return orgToken && !orgToken.startsWith('EAAGm0PX4ZCBO') ? orgToken : env.META_ACCESS_TOKEN;
+  return orgMetaToken(orgToken);
 }
 
 type NumberContext = { wabaId: string; token: string; number?: any };
@@ -279,9 +280,9 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
 
     const activeToken = org?.accessToken && !org.accessToken.startsWith('EAAGm0PX4ZCBO')
       ? org.accessToken
-      : env.META_ACCESS_TOKEN;
+      : orgMetaToken(null);
 
-    const activePhoneNumberId = phone?.phoneNumberId || env.META_PHONE_NUMBER_ID;
+    const activePhoneNumberId = phone?.phoneNumberId || platformPhoneNumberId();
 
     let metaPhoneDetails: any = null;
     if (activeToken && activePhoneNumberId) {
@@ -427,7 +428,7 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
     // Token and WABA resolution for tenant organization
     let activeAccessToken = org?.accessToken && !org.accessToken.startsWith('EAAGm0PX4ZCBO')
       ? org.accessToken
-      : env.META_ACCESS_TOKEN;
+      : orgMetaToken(null);
 
     let activeWabaId = org?.wabaId || '';
 

@@ -13,6 +13,7 @@ import { rbacPlugin } from '../../middleware/rbac';
 import { MetaApiService } from '../../services/meta-api.service';
 import type { TemplateCategory, TemplateStatus } from '../../db/schema/message-templates';
 import { getActivePhone } from '../../services/phone-number.service';
+import { orgMetaToken, platformPhoneNumberId, platformWabaId } from '../../services/meta-credentials';
 
 /** Thrown when a template cannot be deleted because an active broadcast still uses it. */
 export class TemplateInUseError extends Error {
@@ -43,16 +44,16 @@ export class TemplateService {
 
     const activeToken = org?.accessToken && !org.accessToken.startsWith('EAAGm0PX4ZCBO')
       ? org.accessToken
-      : env.META_ACCESS_TOKEN;
+      : orgMetaToken(null);
 
     let activeWabaId = org?.wabaId && org.wabaId.length > 8
       ? org.wabaId
-      : env.META_WABA_ID;
+      : platformWabaId();
 
     // Fallback: Resolve WABA ID from Phone Number ID if token is available
-    if (activeToken && (!activeWabaId || activeWabaId === '1386698372551547') && env.META_PHONE_NUMBER_ID) {
+    if (activeToken && (!activeWabaId || activeWabaId === '1386698372551547') && platformPhoneNumberId()) {
       try {
-        const resolvedWaba = await MetaApiService.fetchWabaIdFromPhoneNumberId(env.META_PHONE_NUMBER_ID, activeToken);
+        const resolvedWaba = await MetaApiService.fetchWabaIdFromPhoneNumberId(platformPhoneNumberId(), activeToken);
         if (resolvedWaba) {
           activeWabaId = resolvedWaba;
           if (orgId) {
@@ -236,16 +237,16 @@ export class TemplateService {
 
     const activeToken = org?.accessToken && !org.accessToken.startsWith('EAAGm0PX4ZCBO')
       ? org.accessToken
-      : env.META_ACCESS_TOKEN;
+      : orgMetaToken(null);
 
     let activeWabaId = org?.wabaId && org.wabaId.length > 8
       ? org.wabaId
-      : env.META_WABA_ID;
+      : platformWabaId();
 
     // Fallback: Resolve WABA ID from Phone Number ID if token is available
-    if (activeToken && (!activeWabaId || activeWabaId === '1386698372551547') && env.META_PHONE_NUMBER_ID) {
+    if (activeToken && (!activeWabaId || activeWabaId === '1386698372551547') && platformPhoneNumberId()) {
       try {
-        const resolvedWaba = await MetaApiService.fetchWabaIdFromPhoneNumberId(env.META_PHONE_NUMBER_ID, activeToken);
+        const resolvedWaba = await MetaApiService.fetchWabaIdFromPhoneNumberId(platformPhoneNumberId(), activeToken);
         if (resolvedWaba) {
           activeWabaId = resolvedWaba;
         }
@@ -334,7 +335,7 @@ export class TemplateService {
 
     const activeToken = org?.accessToken && !org.accessToken.startsWith('EAAGm0PX4ZCBO')
       ? org.accessToken
-      : env.META_ACCESS_TOKEN;
+      : orgMetaToken(null);
 
     let templateStatus: TemplateStatus = existing.status || 'APPROVED';
     const formattedComponents = TemplateService.formatMetaComponents(body.components);
@@ -532,16 +533,16 @@ export class TemplateService {
 
       const activeToken = org?.accessToken && !org.accessToken.startsWith('EAAGm0PX4ZCBO')
         ? org.accessToken
-        : env.META_ACCESS_TOKEN;
+        : orgMetaToken(null);
 
       let activeWabaId = org?.wabaId && org.wabaId.length > 8
         ? org.wabaId
-        : env.META_WABA_ID;
+        : platformWabaId();
 
       // Fallback: Resolve WABA ID from Phone Number ID if token is available
-      if (activeToken && (!activeWabaId || activeWabaId === '1386698372551547') && env.META_PHONE_NUMBER_ID) {
+      if (activeToken && (!activeWabaId || activeWabaId === '1386698372551547') && platformPhoneNumberId()) {
         try {
-          const resolvedWaba = await MetaApiService.fetchWabaIdFromPhoneNumberId(env.META_PHONE_NUMBER_ID, activeToken);
+          const resolvedWaba = await MetaApiService.fetchWabaIdFromPhoneNumberId(platformPhoneNumberId(), activeToken);
           if (resolvedWaba) {
             activeWabaId = resolvedWaba;
           }
@@ -758,7 +759,7 @@ export const templateRoutes = new Elysia({ prefix: '/templates' })
 
         // 2. Resolve Active Credentials & Phone Record
         const phone = await getActivePhone(user.orgId);
-        const activePhoneNumberId = phone?.phoneNumberId || env.META_PHONE_NUMBER_ID;
+        const activePhoneNumberId = phone?.phoneNumberId || platformPhoneNumberId();
 
         const [org] = await db
           .select({ accessToken: organizations.accessToken })
@@ -768,7 +769,7 @@ export const templateRoutes = new Elysia({ prefix: '/templates' })
 
         const activeAccessToken = org?.accessToken && !org.accessToken.startsWith('EAAGm0PX4ZCBO')
           ? org.accessToken
-          : env.META_ACCESS_TOKEN;
+          : orgMetaToken(null);
 
         // 3. Resolve Conversation
         const [existingConv] = await db

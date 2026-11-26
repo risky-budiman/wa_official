@@ -19,6 +19,7 @@ import {
 import { authPlugin } from '../../middleware/auth';
 import { MetaApiService } from '../../services/meta-api.service';
 import { getActivePhone } from '../../services/phone-number.service';
+import { orgMetaToken, platformPhoneNumberId } from '../../services/meta-credentials';
 
 export class BroadcastService {
   static async list(orgId: string) {
@@ -79,9 +80,9 @@ export class BroadcastService {
     const activeToken =
       org?.accessToken && !org.accessToken.startsWith('EAAGm0PX4ZCBO')
         ? org.accessToken
-        : env.META_ACCESS_TOKEN;
-    const activePhoneNumberId = phone?.phoneNumberId || env.META_PHONE_NUMBER_ID || '';
-    const dbPhoneId = phone?.id || phone?.phoneNumberId || env.META_PHONE_NUMBER_ID || 'default';
+        : orgMetaToken(null);
+    const activePhoneNumberId = phone?.phoneNumberId || platformPhoneNumberId() || '';
+    const dbPhoneId = phone?.id || phone?.phoneNumberId || platformPhoneNumberId() || 'default';
 
     if (!activePhoneNumberId) {
       throw new Error('Phone Number ID Meta tidak ditemukan. Pastikan akun WhatsApp Business sudah terhubung di menu Pengaturan.');
@@ -221,7 +222,7 @@ export class BroadcastService {
           );
 
           const wamid = metaRes?.messages?.[0]?.id || `wamid.BCAST_${nanoid()}`;
-          const dbPhoneId = phone?.id || phone?.phoneNumberId || env.META_PHONE_NUMBER_ID;
+          const dbPhoneId = phone?.id || phone?.phoneNumberId || platformPhoneNumberId();
 
           // Find or create conversation for this contact
           let [conv] = await db

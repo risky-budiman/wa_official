@@ -12,6 +12,7 @@ import { env } from '../../config/env';
 import type { JwtPayload } from '../../middleware/auth';
 import type { SendMessageBody, InternalNoteBody, GetMessagesQuery } from './message.types';
 import { getActivePhone, PHONE_STATUS_ARCHIVED } from '../../services/phone-number.service';
+import { orgMetaToken } from '../../services/meta-credentials';
 
 export class MessageService {
   /**
@@ -119,7 +120,7 @@ export class MessageService {
 
     const activeToken = org?.accessToken && !org.accessToken.startsWith('EAAGm0PX4ZCBO')
       ? org.accessToken
-      : env.META_ACCESS_TOKEN;
+      : orgMetaToken(null);
 
     // Send via Meta API
     if (messageType === 'template' && body.templateName) {

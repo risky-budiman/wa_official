@@ -20,6 +20,7 @@ import {
 import { apiKeyAuthPlugin } from '../../middleware/api-key-auth';
 import { MetaApiService } from '../../services/meta-api.service';
 import { getActivePhone } from '../../services/phone-number.service';
+import { orgMetaToken, platformPhoneNumberId } from '../../services/meta-credentials';
 
 /**
  * Map an external endpoint to the permission(s) it needs (any one of them is enough).
@@ -114,9 +115,9 @@ export const externalRoutes = new Elysia({ prefix: '/external' })
       const activeToken =
         org?.accessToken && !org.accessToken.startsWith('EAAGm0PX4ZCBO')
           ? org.accessToken
-          : env.META_ACCESS_TOKEN;
-      const activePhoneNumberId = phone?.phoneNumberId || env.META_PHONE_NUMBER_ID || '';
-      const dbPhoneId = phone?.id || phone?.phoneNumberId || env.META_PHONE_NUMBER_ID || 'default';
+          : orgMetaToken(null);
+      const activePhoneNumberId = phone?.phoneNumberId || platformPhoneNumberId() || '';
+      const dbPhoneId = phone?.id || phone?.phoneNumberId || platformPhoneNumberId() || 'default';
 
       if (!activePhoneNumberId) {
         set.status = 400;
@@ -334,9 +335,9 @@ export const externalRoutes = new Elysia({ prefix: '/external' })
       const activeToken =
         org?.accessToken && !org.accessToken.startsWith('EAAGm0PX4ZCBO')
           ? org.accessToken
-          : env.META_ACCESS_TOKEN;
-      const activePhoneNumberId = phone?.phoneNumberId || env.META_PHONE_NUMBER_ID || '';
-      const dbPhoneId = phone?.id || phone?.phoneNumberId || env.META_PHONE_NUMBER_ID || 'default';
+          : orgMetaToken(null);
+      const activePhoneNumberId = phone?.phoneNumberId || platformPhoneNumberId() || '';
+      const dbPhoneId = phone?.id || phone?.phoneNumberId || platformPhoneNumberId() || 'default';
 
       if (!activePhoneNumberId) {
         set.status = 400;

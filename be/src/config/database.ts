@@ -162,6 +162,25 @@ export async function testConnection(): Promise<void> {
         }
       } catch (_) {}
 
+      // Tenants that relied on the platform's Meta token stop sending once the fallback is off — say which ones
+      try {
+        if (process.env.META_PLATFORM_FALLBACK !== 'true') {
+          const [orgRows]: any = await connection.query(`
+            SELECT name FROM organizations
+            WHERE waba_id IS NOT NULL AND waba_id <> ''
+              AND (access_token IS NULL OR access_token = '' OR access_token LIKE 'EAAGm0PX4ZCBO%')
+          `);
+          if (Array.isArray(orgRows) && orgRows.length > 0) {
+            console.warn('');
+            console.warn('⚠️  Organisasi berikut punya WABA tetapi TIDAK punya token Meta sendiri, jadi tidak bisa mengirim pesan:');
+            for (const r of orgRows) console.warn(`   - ${r.name}`);
+            console.warn('   Hubungkan ulang di Pengaturan → Saluran WhatsApp (Login with Facebook / konfigurasi manual),');
+            console.warn('   atau set META_PLATFORM_FALLBACK=true bila organisasi ini memang memakai nomor platform.');
+            console.warn('');
+          }
+        }
+      } catch (_) {}
+
       // Cleanup users table: remove platform admins from users table so users table only contains tenant agents/admins
       await connection.query(`
         DELETE FROM users WHERE role IN ('SUPER_ADMIN', 'CO_SUPER_ADMIN', 'ADMIN_FINANCE', 'ADMIN_SUPPORT');

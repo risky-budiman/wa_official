@@ -19,6 +19,7 @@ import { AiAgentService } from './ai-agent.service';
 import { decideBotReply, normalizeBotSettings, fillTemplate, DEFAULT_STATIC_MESSAGE } from './bot-engine';
 import { getActivePhone, PHONE_STATUS_ARCHIVED } from './phone-number.service';
 import { env } from '../config/env';
+import { orgMetaToken } from './meta-credentials';
 
 export type BotHandledBy = 'GREETING' | 'RULE' | 'AI' | 'STATIC' | 'HUMAN_HANDOFF' | 'NONE';
 
@@ -204,7 +205,7 @@ export class ChatbotService {
     if (!phone || phone.status === PHONE_STATUS_ARCHIVED) {
       phone = (await getActivePhone(orgId)) || phone;
     }
-    const token = orgToken && !orgToken.startsWith('EAAGm0PX4ZCBO') ? orgToken : env.META_ACCESS_TOKEN;
+    const token = orgMetaToken(orgToken);
     return { phoneNumberId: phone?.phoneNumberId || '', token: token || '' };
   }
 

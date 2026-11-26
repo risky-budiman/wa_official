@@ -22,6 +22,7 @@ import { MetaApiService } from '../../services/meta-api.service';
 import { env } from '../../config/env';
 import type { MetaWebhookBody } from './webhook.types';
 import { notArchived } from '../../services/phone-number.service';
+import { orgMetaToken } from '../../services/meta-credentials';
 
 export class WebhookProcessor {
   /**
@@ -217,7 +218,7 @@ export class WebhookProcessor {
           .limit(1);
 
         const careHours = orgFull?.careWindowHours ?? 24;
-        const activeAccessToken = orgFull?.accessToken || env.META_ACCESS_TOKEN;
+        const activeAccessToken = orgMetaToken(orgFull?.accessToken);
         const windowExpiresAt = new Date(Date.now() + careHours * 60 * 60 * 1000); // Standard Meta 24-hr session window
 
         // 2. Handle Inbound Customer Messages
