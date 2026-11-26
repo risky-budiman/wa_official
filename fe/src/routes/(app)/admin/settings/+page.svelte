@@ -542,7 +542,12 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
   let isProcessingOAuth = false;
 
   // 🔵 Launch Meta Embedded Signup / Login with Facebook
-  async function connectWithFacebook() {
+  /**
+   * mode "new": Embedded Signup — create a WABA / register a NEW number in Meta's popup.
+   * mode "existing": plain Facebook Login — share a WABA whose number is already on the Cloud API
+   * (Embedded Signup does not let you pick numbers that are already registered).
+   */
+  async function connectWithFacebook(mode: 'new' | 'existing' = 'new') {
     fbSuccessMsg = null;
     fbErrorMsg = null;
     isProcessingOAuth = false;
@@ -563,7 +568,7 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
     }
 
     // Real WhatsApp Embedded Signup (Tech Provider): the customer can create/choose a WABA and number
-    if (esConfigId) {
+    if (esConfigId && mode === 'new') {
       try {
         await loadFacebookSdk(realAppId);
       } catch {
@@ -1026,10 +1031,29 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
               <Zap class="w-4 h-4 shrink-0 text-[#1877F2]" />
               <span>Integrasi otomatis via Meta Tech Provider. Pengguna tidak perlu memasukkan App ID manual.</span>
             </div>
-            <button onclick={connectWithFacebook} disabled={isConnectingFb} class="py-3 px-6 rounded-xl bg-[#1877F2] hover:bg-[#166fe5] text-white font-bold text-xs flex items-center gap-2.5 shadow-md transition cursor-pointer">
-              {#if isConnectingFb}<div class="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin"></div>{:else}<div class="w-4 h-4 rounded-full bg-white text-[#1877F2] flex items-center justify-center text-[11px] font-bold font-serif">f</div>{/if}
-              <span>Lanjutkan dengan Facebook</span>
-            </button>
+            {#if esConfigId}
+              <div class="grid gap-3 sm:grid-cols-2">
+                <button type="button" onclick={() => connectWithFacebook('existing')} disabled={isConnectingFb} class="flex flex-col items-start gap-1 rounded-xl border-2 border-[#1877F2] bg-[#1877F2] p-4 text-left text-white shadow-md transition hover:bg-[#166fe5] disabled:opacity-60 cursor-pointer">
+                  <span class="flex items-center gap-2 text-xs font-bold">
+                    {#if isConnectingFb}<span class="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin"></span>{:else}<span class="flex h-4 w-4 items-center justify-center rounded-full bg-white font-serif text-[11px] font-bold text-[#1877F2]">f</span>{/if}
+                    Hubungkan nomor yang sudah ada
+                  </span>
+                  <span class="text-[11px] leading-snug text-white/85">Nomor sudah aktif di WhatsApp Business Platform (pernah terhubung sebelumnya).</span>
+                </button>
+                <button type="button" onclick={() => connectWithFacebook('new')} disabled={isConnectingFb} class="flex flex-col items-start gap-1 rounded-xl border-2 border-[#1877F2]/40 bg-white p-4 text-left text-[#1877F2] transition hover:border-[#1877F2] disabled:opacity-60 dark:bg-slate-900 cursor-pointer">
+                  <span class="flex items-center gap-2 text-xs font-bold">
+                    <span class="flex h-4 w-4 items-center justify-center rounded-full bg-[#1877F2] font-serif text-[11px] font-bold text-white">f</span>
+                    Daftarkan nomor baru
+                  </span>
+                  <span class="text-[11px] leading-snug text-slate-500 dark:text-slate-400">Embedded Signup Meta: buat/pilih akun WhatsApp Business &amp; verifikasi nomor baru lewat OTP.</span>
+                </button>
+              </div>
+            {:else}
+              <button onclick={() => connectWithFacebook('existing')} disabled={isConnectingFb} class="py-3 px-6 rounded-xl bg-[#1877F2] hover:bg-[#166fe5] text-white font-bold text-xs flex items-center gap-2.5 shadow-md transition cursor-pointer">
+                {#if isConnectingFb}<div class="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin"></div>{:else}<div class="w-4 h-4 rounded-full bg-white text-[#1877F2] flex items-center justify-center text-[11px] font-bold font-serif">f</div>{/if}
+                <span>Lanjutkan dengan Facebook</span>
+              </button>
+            {/if}
           </div>
         {:else}
           <form onsubmit={handleManualSave} class="space-y-6">
