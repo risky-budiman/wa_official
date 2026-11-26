@@ -734,6 +734,92 @@ export const templateRoutes = new Elysia({ prefix: '/templates' })
           return { success: false, error: 'Nomor WhatsApp tujuan tidak valid' };
         }
 
+        // ── Template + parameters are validated BEFORE anything is created or sent ──
+        const [tmpl] = await db
+          .select()
+          .from(messageTemplates)
+          .where(and(eq(messageTemplates.organizationId, user.orgId), eq(messageTemplates.name, body.templateName)))
+          .limit(1);
+        if (!tmpl) {
+          set.status = 404;
+          return { success: false, error: `Template "${body.templateName}" tidak ditemukan. Sinkronkan template dari Meta terlebih dahulu.` };
+        }
+        if (tmpl.status !== 'APPROVED') {
+          set.status = 400;
+          return { success: false, error: `Template "${tmpl.name}" berstatus ${tmpl.status}. Hanya template APPROVED yang bisa dikirim.` };
+        }
+
+        const rawComponents: any[] = Array.isArray(tmpl.components) ? (tmpl.components as any[]) : [];
+        const sanitizedComponents: any[] = [];
+        const missing: string[] = [];
+        const clientComp = (type: string) => body.components?.find((c: any) => (c.type || '').toLowerCase() === type);
+        const filled = (v: unknown) => typeof v === 'string' && v.trim().length > 0;
+
+        // Header
+        const headerComp = rawComponents.find((c: any) => (c.type || '').toUpperCase() === 'HEADER');
+        if (headerComp) {
+          const headerFormat = (headerComp.format || '').toUpperCase();
+          const clientHeader = clientComp('header');
+          if (headerFormat === 'TEXT') {
+            const vars = new Set<string>((headerComp.text || '').match(/\{\{\d+\}\}/g) || []);
+            if (vars.size > 0) {
+              const params = (clientHeader?.parameters || []).slice(0, vars.size);
+              if (params.length < vars.size || !params.every((x: any) => filled(x?.text))) missing.push('variabel header');
+              else sanitizedComponents.push({ type: 'header', parameters: params.map((x: any) => ({ type: 'text', text: String(x.text).trim() })) });
+            }
+          } else if (['IMAGE', 'DOCUMENT', 'VIDEO'].includes(headerFormat)) {
+            const param = clientHeader?.parameters?.[0];
+            const link = param?.[headerFormat.toLowerCase()]?.link;
+            if (!filled(link)) missing.push(`URL ${headerFormat.toLowerCase()} untuk header`);
+            else sanitizedComponents.push(clientHeader);
+          }
+        }
+
+        // Body — one non-empty value per distinct {{n}}
+        const bodyComp = rawComponents.find((c: any) => (c.type || '').toUpperCase() === 'BODY');
+        // Used below to render the sent template text for the Inbox
+        const footerComp: any = rawComponents.find((c: any) => (c.type || '').toUpperCase() === 'FOOTER');
+        if (bodyComp) {
+          const varCount = new Set<string>((bodyComp.text || '').match(/\{\{\d+\}\}/g) || []).size;
+          if (varCount > 0) {
+            const params = (clientComp('body')?.parameters || []).slice(0, varCount);
+            const emptyIdx = Array.from({ length: varCount }, (_, i) => i).filter((i) => !filled(params[i]?.text));
+            if (emptyIdx.length) missing.push(`variabel isi ${emptyIdx.map((i) => `{{${i + 1}}}`).join(', ')}`);
+            else sanitizedComponents.push({ type: 'body', parameters: params.map((x: any) => ({ type: 'text', text: String(x.text).trim() })) });
+          }
+        }
+
+        // Buttons — dynamic URL suffix / coupon code come from the sender (or the template's own example code)
+        const btnComp = rawComponents.find((c: any) => (c.type || '').toUpperCase() === 'BUTTONS');
+        if (btnComp && Array.isArray(btnComp.buttons)) {
+          btnComp.buttons.forEach((btn: any, btnIndex: number) => {
+            const btnType = (btn.type || '').toUpperCase();
+            const client = body.components?.find(
+              (c: any) => (c.type || '').toLowerCase() === 'button' && String(c.index) === String(btnIndex)
+            );
+            const clientValue = client?.parameters?.[0]?.text ?? client?.parameters?.[0]?.coupon_code;
+            if (btnType === 'URL' && (btn.url || '').includes('{{')) {
+              if (!filled(clientValue)) missing.push(`isian tombol "${btn.text || 'URL'}"`);
+              else sanitizedComponents.push({ type: 'button', sub_type: 'url', index: String(btnIndex), parameters: [{ type: 'text', text: String(clientValue).trim() }] });
+            } else if (btnType === 'COPY_CODE') {
+              const code = filled(clientValue) ? String(clientValue).trim() : Array.isArray(btn.example) ? btn.example[0] : btn.example;
+              if (!filled(code)) missing.push(`kode kupon tombol "${btn.text || 'Salin kode'}"`);
+              else sanitizedComponents.push({ type: 'button', sub_type: 'copy_code', index: String(btnIndex), parameters: [{ type: 'coupon_code', coupon_code: String(code) }] });
+            }
+          });
+        }
+
+        if (missing.length) {
+          set.status = 400;
+          return { success: false, error: `Lengkapi dulu: ${missing.join('; ')}.` };
+        }
+
+        const phone = await getActivePhone(user.orgId);
+        if (!phone?.id) {
+          set.status = 400;
+          return { success: false, error: 'Nomor WhatsApp organisasi belum terhubung.' };
+        }
+
         // 1. Resolve Contact
         const [existingContact] = await db
           .select()
@@ -757,9 +843,8 @@ export const templateRoutes = new Elysia({ prefix: '/templates' })
           });
         }
 
-        // 2. Resolve Active Credentials & Phone Record
-        const phone = await getActivePhone(user.orgId);
-        const activePhoneNumberId = phone?.phoneNumberId || platformPhoneNumberId();
+        // 2. Resolve Active Credentials
+        const activePhoneNumberId = phone.phoneNumberId || platformPhoneNumberId();
 
         const [org] = await db
           .select({ accessToken: organizations.accessToken })
@@ -767,9 +852,7 @@ export const templateRoutes = new Elysia({ prefix: '/templates' })
           .where(eq(organizations.id, user.orgId))
           .limit(1);
 
-        const activeAccessToken = org?.accessToken && !org.accessToken.startsWith('EAAGm0PX4ZCBO')
-          ? org.accessToken
-          : orgMetaToken(null);
+        const activeAccessToken = orgMetaToken(org?.accessToken);
 
         // 3. Resolve Conversation
         const [existingConv] = await db
@@ -789,99 +872,12 @@ export const templateRoutes = new Elysia({ prefix: '/templates' })
           await db.insert(conversations).values({
             id: conversationId,
             organizationId: user.orgId,
-            phoneNumberId: phone?.id || nanoid(),
+            phoneNumberId: phone.id,
             contactId,
             status: 'OPEN',
             lastMessagePreview: `Template: ${body.templateName}`,
             lastMessageAt: new Date(),
           });
-        }
-
-        // 4. Look up Template Definition to ensure parameter counts match Meta's expectations
-        const [tmpl] = await db
-          .select()
-          .from(messageTemplates)
-          .where(
-            and(
-              eq(messageTemplates.organizationId, user.orgId),
-              eq(messageTemplates.name, body.templateName)
-            )
-          )
-          .limit(1);
-
-        const rawComponents: any[] = Array.isArray(tmpl?.components) ? tmpl.components : [];
-        let sanitizedComponents: any[] = [];
-
-        // 4a. Header parameter sanitization
-        const headerComp = rawComponents.find((c: any) => (c.type || '').toUpperCase() === 'HEADER');
-        if (headerComp) {
-          const headerFormat = (headerComp.format || '').toUpperCase();
-          const clientHeader = body.components?.find((c: any) => (c.type || '').toLowerCase() === 'header');
-
-          if (headerFormat === 'TEXT') {
-            const headerMatches = (headerComp.text || '').match(/\{\{\d+\}\}/g) || [];
-            if (headerMatches.length > 0) {
-              const clientParams = clientHeader?.parameters || [];
-              sanitizedComponents.push({
-                type: 'header',
-                parameters: headerMatches.map((_: any, idx: number) => ({
-                  type: 'text',
-                  text: clientParams[idx]?.text || body.contactName || 'Pelanggan',
-                })),
-              });
-            }
-          } else if (['IMAGE', 'DOCUMENT', 'VIDEO'].includes(headerFormat)) {
-            if (clientHeader?.parameters && clientHeader.parameters.length > 0) {
-              sanitizedComponents.push(clientHeader);
-            }
-          }
-        }
-
-        // 4b. Body parameter sanitization
-        const bodyComp = rawComponents.find((c: any) => (c.type || '').toUpperCase() === 'BODY');
-        // Used below to render the sent template text for the Inbox (was never defined → crash after sending)
-        const footerComp: any = rawComponents.find((c: any) => (c.type || '').toUpperCase() === 'FOOTER');
-        if (bodyComp) {
-          const bodyMatches = (bodyComp.text || '').match(/\{\{\d+\}\}/g) || [];
-          if (bodyMatches.length > 0) {
-            const clientBody = body.components?.find((c: any) => (c.type || '').toLowerCase() === 'body');
-            const clientParams = clientBody?.parameters || [];
-            sanitizedComponents.push({
-              type: 'body',
-              parameters: bodyMatches.map((_: any, idx: number) => ({
-                type: 'text',
-                text: clientParams[idx]?.text || (idx === 0 ? (body.contactName || 'Pelanggan') : '-'),
-              })),
-            });
-          }
-        }
-
-        // 4c. Button parameter sanitization (e.g. dynamic URLs)
-        const btnComp = rawComponents.find((c: any) => (c.type || '').toUpperCase() === 'BUTTONS');
-        if (btnComp && Array.isArray(btnComp.buttons)) {
-          btnComp.buttons.forEach((btn: any, btnIndex: number) => {
-            const btnType = (btn.type || '').toUpperCase();
-            if (btnType === 'URL' && (btn.url || '').includes('{{')) {
-              sanitizedComponents.push({
-                type: 'button',
-                sub_type: 'url',
-                index: String(btnIndex),
-                parameters: [{ type: 'text', text: 'promo' }],
-              });
-            } else if (btnType === 'COPY_CODE') {
-              sanitizedComponents.push({
-                type: 'button',
-                sub_type: 'copy_code',
-                index: String(btnIndex),
-                parameters: [{ type: 'coupon_code', coupon_code: btn.example || 'PROMO2026' }],
-              });
-            }
-          });
-        }
-
-        // Fallback: If no template in DB or no components found in DB, use client's components
-        if (rawComponents.length === 0 && body.components && body.components.length > 0) {
-          sanitizedComponents = body.components;
         }
 
         // 5. Dispatch Template via Meta Cloud API
@@ -890,7 +886,7 @@ export const templateRoutes = new Elysia({ prefix: '/templates' })
             phoneNumberId: activePhoneNumberId,
             recipientWaId: targetNumber,
             templateName: body.templateName,
-            languageCode: body.languageCode || tmpl?.language || 'id',
+            languageCode: tmpl.language || body.languageCode || 'id',
             components: sanitizedComponents.length > 0 ? sanitizedComponents : undefined,
           },
           activeAccessToken

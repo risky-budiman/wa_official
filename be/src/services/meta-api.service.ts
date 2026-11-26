@@ -178,7 +178,7 @@ export class MetaApiService {
     }
 
     const url = `${this.baseUrl}/${params.phoneNumberId}/messages`;
-    let res = await fetch(url, {
+    const res = await fetch(url, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
@@ -193,36 +193,11 @@ export class MetaApiService {
       }),
     });
 
-    let data = await res.json();
+    const data = await res.json();
 
-    // Auto-heal retry: If Meta requires a URL button parameter that was missing
+    // (No "auto-heal": re-sending with an invented link parameter would show customers a fake URL)
     if (!res.ok && data.error?.error_data?.details?.includes('Button at index')) {
-      const match = data.error.error_data.details.match(/index (\d+)/);
-      const btnIdx = match ? match[1] : '0';
-      if (!templateObj.components) templateObj.components = [];
-      templateObj.components.push({
-        type: 'button',
-        sub_type: 'url',
-        index: btnIdx,
-        parameters: [{ type: 'text', text: 'promo' }],
-      });
-
-      console.log(`🔄 Auto-healing button parameter at index ${btnIdx} and retrying...`);
-      res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          messaging_product: 'whatsapp',
-          recipient_type: 'individual',
-          to: targetNumber,
-          type: 'template',
-          template: templateObj,
-        }),
-      });
-      data = await res.json();
+      throw new Error(`Template membutuhkan isian tombol link dinamis: ${data.error.error_data.details}`);
     }
 
     if (!res.ok) {

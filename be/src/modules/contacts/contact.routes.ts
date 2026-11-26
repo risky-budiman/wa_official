@@ -109,6 +109,27 @@ export const contactRoutes = new Elysia({ prefix: '/contacts' })
     }
   )
 
+  // ─── GET /contacts/tags ─── (tags in use + how many contacts each, for broadcast targeting)
+  .get('/tags', async ({ user, set }) => {
+    if (!user) {
+      set.status = 401;
+      return { success: false, error: 'Unauthorized' };
+    }
+    const rows: any = await db.execute(sql`
+      SELECT JSON_UNQUOTE(JSON_EXTRACT(custom_attributes, '$.tag')) AS tag, COUNT(*) AS n
+      FROM contacts
+      WHERE organization_id = ${user.orgId}
+        AND JSON_EXTRACT(custom_attributes, '$.tag') IS NOT NULL
+        AND JSON_UNQUOTE(JSON_EXTRACT(custom_attributes, '$.tag')) <> ''
+      GROUP BY tag
+      ORDER BY n DESC
+      LIMIT 200
+    `);
+    const list = (Array.isArray(rows) ? rows[0] : rows) || [];
+    const [{ total }] = await db.select({ total: sql<number>`COUNT(*)` }).from(contacts).where(eq(contacts.organizationId, user.orgId));
+    return { success: true, total: Number(total), tags: list.map((r: any) => ({ tag: r.tag, count: Number(r.n) })) };
+  })
+
   // ─── GET /contacts/export ─── (all contacts; the browser builds the CSV)
   .get('/export', async ({ user, set }) => {
     if (!user) {

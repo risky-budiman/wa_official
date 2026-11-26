@@ -41,7 +41,17 @@
   let bodyVars = $state<Record<string, string>>({});
   let headerVar = $state('');
   let headerMediaUrl = $state('');
+  /** Value for each dynamic URL button, keyed by button index */
+  let buttonVars = $state<Record<string, string>>({});
   let initializedForTemplateId = $state('');
+
+  /** URL buttons whose link ends with a variable, e.g. https://toko.id/order/{{1}} */
+  let dynamicUrlButtons = $derived.by(() => {
+    const btns: any[] = selectedTemplate?.components?.find((c: any) => c.type === 'BUTTONS')?.buttons || [];
+    return btns
+      .map((b: any, index: number) => ({ index, text: b.text || 'Tombol', url: b.url || '', type: (b.type || '').toUpperCase() }))
+      .filter((b) => b.type === 'URL' && b.url.includes('{{'));
+  });
 
   // Auto-sync initial phone and contact name on open
   $effect(() => {
@@ -118,6 +128,7 @@
       bodyVars = initialMap;
       headerVar = '';
       headerMediaUrl = '';
+      buttonVars = {};
     }
   });
 
@@ -155,6 +166,22 @@
       return;
     }
 
+    // Every variable needs a real value — never send "-" or a placeholder to a customer
+    const emptyBody = bodyVarIndices.filter((idx) => !(bodyVars[String(idx)] || '').trim());
+    const headerFormat = (headerComponent?.format || '').toUpperCase();
+    const headerMissing =
+      headerComponent && headerNeedsParam && (headerFormat === 'TEXT' ? !headerVar.trim() : !headerMediaUrl.trim());
+    const emptyButtons = dynamicUrlButtons.filter((b) => !(buttonVars[String(b.index)] || '').trim());
+    if (emptyBody.length || headerMissing || emptyButtons.length) {
+      const parts = [
+        ...(headerMissing ? ['header'] : []),
+        ...emptyBody.map((i) => `{{${i}}}`),
+        ...emptyButtons.map((b) => `tombol "${b.text}"`),
+      ];
+      errorMsg = `Lengkapi dulu: ${parts.join(', ')}.`;
+      return;
+    }
+
     isSending = true;
     successMsg = null;
     errorMsg = null;
@@ -188,11 +215,21 @@
       if (bodyVarIndices.length > 0) {
         const bodyParams = bodyVarIndices.map((idx) => ({
           type: 'text',
-          text: (bodyVars[String(idx)] || '').trim() || `-`,
+          text: (bodyVars[String(idx)] || '').trim(),
         }));
         formattedComponents.push({
           type: 'body',
           parameters: bodyParams,
+        });
+      }
+
+      // 3. Dynamic URL buttons
+      for (const b of dynamicUrlButtons) {
+        formattedComponents.push({
+          type: 'button',
+          sub_type: 'url',
+          index: String(b.index),
+          parameters: [{ type: 'text', text: (buttonVars[String(b.index)] || '').trim() }],
         });
       }
 
@@ -381,6 +418,26 @@
                     </div>
                   {/each}
                 </div>
+              </div>
+            {/if}
+
+            {#if dynamicUrlButtons.length > 0}
+              <div class="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-950/60 border border-slate-200 dark:border-slate-800 space-y-2.5">
+                <span class="text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">Tombol Link Dinamis</span>
+                {#each dynamicUrlButtons as b (b.index)}
+                  <div>
+                    <label for={`btn_${b.index}`} class="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                      {b.text} <span class="font-normal text-slate-400">— {b.url}</span>
+                    </label>
+                    <input
+                      id={`btn_${b.index}`}
+                      type="text"
+                      bind:value={buttonVars[String(b.index)]}
+                      placeholder="Bagian akhir link, mis. nomor pesanan"
+                      class="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-semibold focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+                {/each}
               </div>
             {/if}
 

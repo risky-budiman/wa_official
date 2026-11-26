@@ -29,7 +29,10 @@ interface TemplateOption {
   status: string;
   category?: string;
   language?: string;
+  components?: any[];
 }
+
+type VarChoice = { source: 'contact_name' | 'text'; value: string };
 
 interface MetaQuotaData {
   dailyLimit: number;
@@ -62,6 +65,96 @@ let newName = $state('');
 let selectedTemplateId = $state('');
 let isSubmitting = $state(false);
 let errorMessage = $state<string | null>(null);
+
+// ─── Template variables & audience ───
+let headerChoices = $state<VarChoice[]>([]);
+let bodyChoices = $state<VarChoice[]>([]);
+let buttonValues = $state<Record<string, string>>({});
+let headerMediaUrl = $state('');
+let targetTag = $state('');
+let tagOptions = $state<{ tag: string; count: number }[]>([]);
+let totalContacts = $state(0);
+let preparedFor = '';
+
+const approvedTemplates = $derived(templateOptions.filter((t) => t.status === 'APPROVED'));
+const selectedTemplate = $derived(approvedTemplates.find((t) => t.id === selectedTemplateId) || null);
+
+const distinctVars = (text: unknown) => new Set(String(text || '').match(/\{\{\s*\d+\s*\}\}/g) || []).size;
+const needs = $derived.by(() => {
+  const comps: any[] = selectedTemplate?.components || [];
+  const header = comps.find((c) => String(c?.type).toUpperCase() === 'HEADER');
+  const body = comps.find((c) => String(c?.type).toUpperCase() === 'BODY');
+  const btns: any[] = comps.find((c) => String(c?.type).toUpperCase() === 'BUTTONS')?.buttons || [];
+  const headerFormat = header ? String(header.format || 'TEXT').toUpperCase() : null;
+  return {
+    headerFormat,
+    headerText: header?.text || '',
+    bodyText: body?.text || '',
+    headerVars: headerFormat === 'TEXT' ? distinctVars(header?.text) : 0,
+    bodyVars: distinctVars(body?.text),
+    buttons: btns
+      .map((b: any, index: number) => {
+        const type = String(b?.type || '').toUpperCase();
+        if (type === 'URL' && String(b?.url || '').includes('{{')) return { index, kind: 'url', text: b.text || 'Link', hint: b.url };
+        if (type === 'COPY_CODE') {
+          const ex = Array.isArray(b.example) ? b.example[0] : b.example;
+          return { index, kind: 'copy_code', text: b.text || 'Salin kode', hint: ex ? `Kosongkan untuk memakai kode template: ${ex}` : 'Kode kupon' };
+        }
+        return null;
+      })
+      .filter(Boolean) as { index: number; kind: string; text: string; hint: string }[],
+  };
+});
+
+// Reset the variable form whenever another template is picked ({{1}} defaults to the contact's name)
+$effect(() => {
+  const id = selectedTemplate?.id || '';
+  if (id === preparedFor) return;
+  preparedFor = id;
+  const mk = (n: number): VarChoice[] => Array.from({ length: n }, (_, i) => ({ source: i === 0 ? 'contact_name' : 'text', value: '' }));
+  headerChoices = mk(needs.headerVars);
+  bodyChoices = mk(needs.bodyVars);
+  buttonValues = {};
+  headerMediaUrl = '';
+});
+
+const recipientCount = $derived(targetTag ? tagOptions.find((t) => t.tag === targetTag)?.count || 0 : totalContacts);
+
+const previewText = $derived.by(() => {
+  let text = needs.bodyText;
+  bodyChoices.forEach((c, i) => {
+    const val = c.source === 'contact_name' ? 'Budi' : c.value.trim() || `{{${i + 1}}}`;
+    text = text.split(`{{${i + 1}}}`).join(val);
+  });
+  return text;
+});
+
+async function loadTags() {
+  const res = await apiRequest<any>('/contacts/tags');
+  if (res.success) {
+    tagOptions = res.tags || [];
+    totalContacts = res.total || 0;
+  }
+}
+
+function openCreate() {
+  errorMessage = null;
+  targetTag = '';
+  if (!approvedTemplates.some((t) => t.id === selectedTemplateId)) selectedTemplateId = approvedTemplates[0]?.id || '';
+  preparedFor = '';
+  showModal = true;
+  loadTags();
+}
+
+function variablesPayload() {
+  const conv = (c: VarChoice) => (c.source === 'contact_name' ? { source: 'contact_name' } : { source: 'text', value: c.value.trim() });
+  return {
+    header: headerChoices.map(conv),
+    body: bodyChoices.map(conv),
+    buttons: Object.fromEntries(Object.entries(buttonValues).filter(([, v]) => v.trim()).map(([k, v]) => [k, v.trim()])),
+    headerMediaUrl: headerMediaUrl.trim() || undefined,
+  };
+}
 
 // Dynamic Stats Computed from Real Data
 let totalSentSum = $derived(campaignList.reduce((acc, c) => acc + (c.sentCount || 0), 0));
@@ -109,12 +202,32 @@ async function createCampaign(e: Event) {
   if (!newName.trim() || !selectedTemplateId) return;
 
   errorMessage = null;
+  // Same checks as the server, so the user sees what is missing before anything is sent
+  const missing: string[] = [];
+  if (needs.headerFormat && ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(needs.headerFormat) && !headerMediaUrl.trim()) missing.push('link media header');
+  headerChoices.forEach((c, i) => { if (c.source === 'text' && !c.value.trim()) missing.push(`header {{${i + 1}}}`); });
+  bodyChoices.forEach((c, i) => { if (c.source === 'text' && !c.value.trim()) missing.push(`{{${i + 1}}}`); });
+  needs.buttons.forEach((b) => {
+    if (b.kind === 'url' && !(buttonValues[String(b.index)] || '').trim()) missing.push(`tombol "${b.text}"`);
+  });
+  if (missing.length) {
+    errorMessage = `Lengkapi dulu: ${missing.join(', ')}.`;
+    return;
+  }
+  if (recipientCount === 0) {
+    errorMessage = 'Tidak ada kontak penerima untuk target ini.';
+    return;
+  }
+  if (!confirm(`Kirim "${selectedTemplate?.name}" ke ${recipientCount.toLocaleString('id-ID')} kontak${targetTag ? ` bertag "${targetTag}"` : ''}? Pesan yang sudah terkirim tidak bisa ditarik.`)) return;
+
   isSubmitting = true;
   const res = await apiRequest('/broadcast', {
     method: 'POST',
     body: JSON.stringify({
       name: newName.trim(),
       templateId: selectedTemplateId,
+      tag: targetTag || undefined,
+      variables: variablesPayload(),
     }),
   });
   isSubmitting = false;
@@ -164,7 +277,7 @@ onDestroy(() => {
         <RefreshCw class="h-4 w-4 {isRefreshing ? 'animate-spin' : ''}" />
         Segarkan
       </button>
-      <button onclick={() => (showModal = true)} class="ui-btn-primary">
+      <button onclick={openCreate} class="ui-btn-primary">
         <Plus class="h-4 w-4" />
         Buat Kampanye
       </button>
@@ -340,7 +453,7 @@ onDestroy(() => {
 <!-- Modal Create Campaign -->
 {#if showModal}
   <div class="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-    <div class="bg-white dark:bg-slate-900 w-full max-w-md rounded-2xl p-6 border border-slate-200 dark:border-slate-700 shadow-2xl space-y-4">
+    <div class="bg-white dark:bg-slate-900 w-full max-w-xl max-h-[92vh] overflow-y-auto rounded-2xl p-6 border border-slate-200 dark:border-slate-700 shadow-2xl space-y-4">
       <div class="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
         <h3 class="text-base font-bold text-slate-900 dark:text-white">Buat Kampanye Broadcast</h3>
         <button onclick={() => (showModal = false)} class="text-slate-400 hover:text-slate-600 dark:hover:text-white cursor-pointer">
@@ -362,20 +475,75 @@ onDestroy(() => {
         </div>
 
         <div>
-          <label for="template_select" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Pilih WhatsApp Template (Wajib Berstatus APPROVED)</label>
+          <label for="template_select" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Template WhatsApp (yang sudah disetujui Meta)</label>
           <select
             id="template_select"
             bind:value={selectedTemplateId}
             class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500 font-mono"
             required
           >
-            {#each templateOptions as t}
-              <option value={t.id}>
-                {t.name} {t.status === 'APPROVED' ? '✓ [APPROVED / Disetujui Meta]' : `⚠️ [${t.status || 'PENDING'}]`}
-              </option>
+            {#each approvedTemplates as t}
+              <option value={t.id}>{t.name} · {t.language || 'id'}</option>
+            {/each}
+          </select>
+          {#if approvedTemplates.length === 0}
+            <p class="mt-1 text-[11px] text-amber-700 dark:text-amber-300">Belum ada template yang disetujui. Buat / sinkronkan di menu Template WhatsApp.</p>
+          {/if}
+        </div>
+
+        <div>
+          <label for="target_tag" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Penerima</label>
+          <select id="target_tag" bind:value={targetTag} class="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500">
+            <option value="">Semua kontak ({totalContacts.toLocaleString('id-ID')})</option>
+            {#each tagOptions as t}
+              <option value={t.tag}>Tag "{t.tag}" ({t.count.toLocaleString('id-ID')})</option>
             {/each}
           </select>
         </div>
+
+        {#if selectedTemplate && (needs.headerFormat && needs.headerFormat !== 'TEXT' || needs.headerVars || needs.bodyVars || needs.buttons.length)}
+          <div class="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3.5 dark:border-slate-800 dark:bg-slate-950/50">
+            <p class="text-[11px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">Isian template</p>
+
+            {#if needs.headerFormat && ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(needs.headerFormat)}
+              <div>
+                <label for="hdr_media" class="mb-1 block text-[11px] font-semibold text-slate-600 dark:text-slate-400">Link {needs.headerFormat.toLowerCase()} header (https://…)</label>
+                <input id="hdr_media" type="url" bind:value={headerMediaUrl} placeholder="https://…" class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-900" />
+              </div>
+            {/if}
+
+            {#each [{ label: 'Header', list: headerChoices }, { label: 'Isi', list: bodyChoices }] as group}
+              {#each group.list as choice, i}
+                <div class="grid grid-cols-[auto_8.5rem_1fr] items-center gap-2">
+                  <span class="w-16 text-[11px] font-semibold text-slate-600 dark:text-slate-400">{group.label} &#123;&#123;{i + 1}&#125;&#125;</span>
+                  <select bind:value={choice.source} class="rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs dark:border-slate-700 dark:bg-slate-900" aria-label={`Sumber ${group.label} ${i + 1}`}>
+                    <option value="contact_name">Nama kontak</option>
+                    <option value="text">Teks tetap</option>
+                  </select>
+                  {#if choice.source === 'text'}
+                    <input bind:value={choice.value} placeholder="Isi untuk semua penerima" class="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-900" aria-label={`Nilai ${group.label} ${i + 1}`} />
+                  {:else}
+                    <span class="text-[11px] text-slate-500">Diisi nama masing-masing kontak</span>
+                  {/if}
+                </div>
+              {/each}
+            {/each}
+
+            {#each needs.buttons as b (b.index)}
+              <div>
+                <label for={`bc_btn_${b.index}`} class="mb-1 block text-[11px] font-semibold text-slate-600 dark:text-slate-400">Tombol "{b.text}" <span class="font-normal text-slate-400">— {b.hint}</span></label>
+                <input id={`bc_btn_${b.index}`} bind:value={buttonValues[String(b.index)]} placeholder={b.kind === 'url' ? 'Bagian akhir link' : 'Kode kupon'} class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-900" />
+              </div>
+            {/each}
+
+            {#if needs.bodyText}
+              <div class="rounded-lg bg-white p-3 text-xs whitespace-pre-line text-slate-700 shadow-sm dark:bg-slate-900 dark:text-slate-200">
+                <p class="mb-1 text-[10px] font-semibold uppercase text-slate-400">Pratinjau (contoh kontak "Budi")</p>
+                {previewText}
+              </div>
+            {/if}
+          </div>
+        {/if}
 
         {#if errorMessage}
           <div class="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 text-xs font-semibold text-rose-700 dark:text-rose-300 flex items-center gap-2">
@@ -385,7 +553,7 @@ onDestroy(() => {
         {/if}
 
         <div class="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-[11px] text-emerald-800 dark:text-emerald-300">
-          💡 Pesan akan dikirim ke seluruh kontak menggunakan sliding-window rate limit resmi Meta WhatsApp API.
+          💡 Akan dikirim ke <strong>{recipientCount.toLocaleString('id-ID')}</strong> kontak{targetTag ? ` bertag "${targetTag}"` : ''}, dengan pembatasan kecepatan sesuai aturan Meta.
         </div>
 
         <div class="flex justify-end gap-2 pt-2">
@@ -398,8 +566,8 @@ onDestroy(() => {
           </button>
           <button
             type="submit"
-            disabled={isSubmitting}
-            class="py-2 px-5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs cursor-pointer"
+            disabled={isSubmitting || !selectedTemplate}
+            class="py-2 px-5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xs cursor-pointer"
           >
             {isSubmitting ? 'Mengirim...' : 'Mulai Broadcast'}
           </button>

@@ -18,6 +18,7 @@ import {
 } from '../../db/schema';
 import { authPlugin } from '../../middleware/auth';
 import { MetaApiService } from '../../services/meta-api.service';
+import { analyzeTemplate, missingVariables, buildComponents, type BroadcastVariables } from '../../services/template-params';
 import { getActivePhone } from '../../services/phone-number.service';
 import { orgMetaToken, platformPhoneNumberId } from '../../services/meta-credentials';
 
@@ -54,6 +55,10 @@ export class BroadcastService {
       name: string;
       templateId: string;
       scheduledAt?: string;
+      /** How each template variable is filled (contact name or fixed text) */
+      variables?: BroadcastVariables;
+      /** Only contacts with this tag (empty = all contacts) */
+      tag?: string;
     }
   ) {
     // 1. Get Template
@@ -73,14 +78,18 @@ export class BroadcastService {
       );
     }
 
+    // 1b. Every variable must have a real value — never "Spesial Hari Ini" / "promo" / "PROMO2026"
+    const needs = analyzeTemplate(tmpl.components);
+    const missing = missingVariables(needs, body.variables);
+    if (missing.length) {
+      throw new Error(`Lengkapi isian template "${tmpl.name}": ${missing.join(', ')}.`);
+    }
+
     // 2. Get Organization & Phone
     const [org] = await db.select().from(organizations).where(eq(organizations.id, orgId)).limit(1);
     const phone = await getActivePhone(orgId);
 
-    const activeToken =
-      org?.accessToken && !org.accessToken.startsWith('EAAGm0PX4ZCBO')
-        ? org.accessToken
-        : orgMetaToken(null);
+    const activeToken = orgMetaToken(org?.accessToken);
     const activePhoneNumberId = phone?.phoneNumberId || platformPhoneNumberId() || '';
     const dbPhoneId = phone?.id || phone?.phoneNumberId || platformPhoneNumberId() || 'default';
 
@@ -89,13 +98,19 @@ export class BroadcastService {
     }
 
     // 3. Get Target Contacts
+    const tag = (body.tag || '').trim();
     const contactList = await db
       .select({ id: contacts.id, waId: contacts.waId, name: contacts.name })
       .from(contacts)
-      .where(eq(contacts.organizationId, orgId));
+      .where(
+        and(
+          eq(contacts.organizationId, orgId),
+          tag ? sql`JSON_UNQUOTE(JSON_EXTRACT(${contacts.customAttributes}, '$.tag')) = ${tag}` : sql`1 = 1`
+        )
+      );
 
     if (contactList.length === 0) {
-      throw new Error('Tidak ada kontak pelanggan di database untuk dikirimi broadcast.');
+      throw new Error(tag ? `Tidak ada kontak dengan tag "${tag}".` : 'Tidak ada kontak pelanggan di database untuk dikirimi broadcast.');
     }
 
     // 3b. Monthly broadcast quota of the organization's plan (0 / empty = unlimited)
@@ -122,81 +137,6 @@ export class BroadcastService {
 
     const campaignId = nanoid();
     const totalRecipients = contactList.length;
-
-    // Helper to dynamically build required Meta parameters (Header, Body, Buttons)
-    const buildComponentsPayload = (tmplComponents: any, contactName: string) => {
-      if (!Array.isArray(tmplComponents) || tmplComponents.length === 0) return [];
-      const result: any[] = [];
-
-      for (const comp of tmplComponents) {
-        const compType = (comp.type || '').toUpperCase();
-
-        // 1. Header with dynamic variable
-        if (compType === 'HEADER') {
-          const format = (comp.format || '').toUpperCase();
-          if (format === 'TEXT' && typeof comp.text === 'string') {
-            const headerMatches = comp.text.match(/\{\{\d+\}\}/g);
-            if (headerMatches && headerMatches.length > 0) {
-              result.push({
-                type: 'header',
-                parameters: headerMatches.map(() => ({
-                  type: 'text',
-                  text: contactName || 'Pelanggan',
-                })),
-              });
-            }
-          }
-        }
-
-        // 2. Body with dynamic variables
-        if (compType === 'BODY' && typeof comp.text === 'string') {
-          const bodyMatches = comp.text.match(/\{\{\d+\}\}/g);
-          if (bodyMatches && bodyMatches.length > 0) {
-            result.push({
-              type: 'body',
-              parameters: bodyMatches.map((_: any, idx: number) => ({
-                type: 'text',
-                text: idx === 0 ? (contactName || 'Pelanggan') : 'Spesial Hari Ini',
-              })),
-            });
-          }
-        }
-
-        // 3. Buttons (Dynamic URL / Copy Code)
-        if (compType === 'BUTTONS' && Array.isArray(comp.buttons)) {
-          comp.buttons.forEach((btn: any, btnIndex: number) => {
-            const btnType = (btn.type || '').toUpperCase();
-            if (btnType === 'URL') {
-              result.push({
-                type: 'button',
-                sub_type: 'url',
-                index: String(btnIndex),
-                parameters: [
-                  {
-                    type: 'text',
-                    text: 'promo',
-                  },
-                ],
-              });
-            } else if (btnType === 'COPY_CODE') {
-              result.push({
-                type: 'button',
-                sub_type: 'copy_code',
-                index: String(btnIndex),
-                parameters: [
-                  {
-                    type: 'coupon_code',
-                    coupon_code: 'PROMO2026',
-                  },
-                ],
-              });
-            }
-          });
-        }
-      }
-
-      return result;
-    };
 
     // 4. Insert Initial Campaign Record (Starts with 0 counts)
     await db.insert(broadcastCampaigns).values({
@@ -227,7 +167,9 @@ export class BroadcastService {
         }
 
         try {
-          const componentsPayload = buildComponentsPayload(tmpl.components, contact.name || 'Pelanggan');
+          // A contact saved without a name has its number as name — greet generically instead
+          const displayName = contact.name && contact.name !== contact.waId ? contact.name : '';
+          const componentsPayload = buildComponents(needs, body.variables, displayName);
 
           console.log(`🚀 Mengirim broadcast "${body.name}" template "${tmpl.name}" ke ${contact.waId}...`);
 
@@ -374,6 +316,15 @@ export const broadcastRoutes = new Elysia({ prefix: '/broadcast' })
         name: t.String({ minLength: 3 }),
         templateId: t.String(),
         scheduledAt: t.Optional(t.String()),
+        tag: t.Optional(t.String()),
+        variables: t.Optional(
+          t.Object({
+            header: t.Optional(t.Array(t.Any())),
+            body: t.Optional(t.Array(t.Any())),
+            buttons: t.Optional(t.Record(t.String(), t.String())),
+            headerMediaUrl: t.Optional(t.String()),
+          })
+        ),
       }),
     }
   )
