@@ -309,6 +309,7 @@
   }
 
   interface MessageItem {
+    errorDetails?: { code?: number; title?: string; message?: string; error_data?: { details?: string } } | null;
     id: string;
     senderType: string;
     senderId: string | null;
@@ -378,6 +379,34 @@
     if (diffDays < 7) return d.toLocaleDateString("id-ID", { weekday: "short" });
     return d.toLocaleDateString("id-ID", { day: "numeric", month: "short" });
   }
+  /** Why WhatsApp did not deliver a message, in words an agent can act on */
+  const META_FAIL_REASONS: Record<number, string> = {
+    131047: "Lewat 24 jam sejak pesan terakhir pelanggan. Kirim template WhatsApp.",
+    131026: "Nomor tidak bisa menerima pesan (tidak terdaftar di WhatsApp atau aplikasinya terlalu lama).",
+    131049: "Ditahan Meta untuk menjaga pengalaman pelanggan (batas pesan pemasaran). Coba lagi nanti.",
+    131050: "Pelanggan berhenti berlangganan pesan pemasaran.",
+    131051: "Jenis pesan ini tidak didukung.",
+    131052: "Media dari pelanggan gagal diunduh.",
+    131053: "File media gagal diunggah ke WhatsApp (format atau ukuran tidak didukung).",
+    131048: "Dibatasi karena terdeteksi spam. Kurangi pengiriman.",
+    131056: "Terlalu banyak pesan ke nomor ini dalam waktu singkat. Tunggu sebentar.",
+    131042: "Masalah pembayaran akun WhatsApp Business (cek metode pembayaran di Meta).",
+    131031: "Akun WhatsApp Business dikunci Meta.",
+    132000: "Jumlah variabel template tidak sesuai.",
+    132001: "Template tidak ada / belum disetujui untuk bahasa ini.",
+    132012: "Format variabel template tidak sesuai.",
+    132015: "Template dijeda Meta karena kualitas rendah.",
+    132016: "Template dinonaktifkan Meta.",
+    130472: "Nomor pelanggan sedang dalam eksperimen Meta; pesan pemasaran tidak dikirim.",
+    368: "Akun dibatasi sementara karena pelanggaran kebijakan.",
+  };
+  function failReason(msg: MessageItem): string {
+    const e = msg.errorDetails;
+    if (!e) return "Pesan gagal terkirim.";
+    const known = e.code ? META_FAIL_REASONS[e.code] : undefined;
+    return known || e.error_data?.details || e.message || e.title || "Pesan gagal terkirim.";
+  }
+
   const MEDIA_PLACEHOLDERS = ["[Foto/Gambar]", "[Gambar]", "[Foto]", "[Stiker]", "[Pesan Suara / Audio]", "[Video]", "[DOCUMENT]", "[IMAGE]"];
   /** Hide placeholder bodies like "[Gambar]" when the media itself is shown */
   function hasRenderableBody(msg: MessageItem): boolean {
@@ -1615,7 +1644,7 @@
                   <span>{timeLabel(msg.createdAt)}</span>
                   {#if !inbound}
                     {#if msg.status === "FAILED"}
-                      <span class="flex items-center gap-0.5 font-medium text-rose-500" title="Pesan gagal terkirim"><AlertTriangle class="h-3.5 w-3.5" /> Gagal</span>
+                      <span class="flex items-center gap-0.5 font-medium text-rose-500" title={failReason(msg)}><AlertTriangle class="h-3.5 w-3.5" /> Gagal</span>
                     {:else if msg.status === "READ"}
                       <CheckCheck class="h-3.5 w-3.5 text-sky-500" aria-label="Dibaca" />
                     {:else if msg.status === "DELIVERED"}
@@ -1627,6 +1656,9 @@
                     {/if}
                   {/if}
                 </div>
+                {#if !inbound && msg.status === "FAILED"}
+                  <p class="mt-1 max-w-xs text-right text-[11px] leading-snug text-rose-600 dark:text-rose-300">{failReason(msg)}</p>
+                {/if}
               </div>
             </div>
           {/if}

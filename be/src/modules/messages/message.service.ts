@@ -53,6 +53,8 @@ export class MessageService {
         mediaMimeType: messages.mediaMimeType,
         isInternalNote: messages.isInternalNote,
         status: messages.status,
+        // Meta's reason when status is FAILED (shown to the agent)
+        errorDetails: messages.errorDetails,
         createdAt: messages.createdAt,
       })
       .from(messages)
