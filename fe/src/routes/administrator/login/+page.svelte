@@ -3,21 +3,14 @@
   import { themeStore } from '$lib/stores/theme.svelte';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
-  import {
-    ShieldCheck,
-    Lock,
-    Mail,
-    ArrowRight,
-    AlertCircle,
-    Sun,
-    Moon,
-    Building2,
-  } from 'lucide-svelte';
+  import { ShieldCheck, Lock, Mail, ArrowRight, Sun, Moon, Eye, EyeOff, Building2 } from 'lucide-svelte';
+  import Alert from '$lib/components/ui/Alert.svelte';
 
   let email = $state('');
   let password = $state('');
   let isLoading = $state(false);
   let errorMsg = $state<string | null>(null);
+  let showPassword = $state(false);
 
   onMount(() => {
     // If already logged in as platform staff, redirect directly to dashboard
@@ -51,169 +44,83 @@
   }
 </script>
 
-<div
-  class="min-h-screen w-full flex items-center justify-center bg-slate-950 text-slate-100 p-4 relative overflow-hidden font-sans selection:bg-indigo-500 selection:text-white"
->
-  <!-- Background Glow & Grid -->
-  <div
-    class="absolute -top-40 -left-40 w-96 h-96 bg-indigo-600/20 rounded-full blur-3xl pointer-events-none"
-  ></div>
-  <div
-    class="absolute -bottom-40 -right-40 w-96 h-96 bg-purple-600/15 rounded-full blur-3xl pointer-events-none"
-  ></div>
-  <div
-    class="absolute inset-0 bg-[radial-gradient(#1e1b4b_1px,transparent_1px)] [background-size:24px_24px] opacity-25 pointer-events-none"
-  ></div>
+<svelte:head>
+  <title>Masuk Portal Admin · WhatsApp CRM</title>
+</svelte:head>
 
-  <!-- Floating Theme Switcher -->
-  <button
-    onclick={() => themeStore.toggle()}
-    class="absolute top-6 right-6 p-2.5 rounded-xl bg-slate-900/80 border border-slate-800 text-slate-300 shadow-md backdrop-blur transition cursor-pointer hover:bg-slate-800"
-    title="Ubah Tema"
-  >
-    {#if themeStore.current === 'dark'}
-      <Sun class="w-4 h-4 text-amber-400" />
-    {:else}
-      <Moon class="w-4 h-4 text-indigo-400" />
-    {/if}
+<div class="relative flex min-h-screen items-center justify-center bg-slate-50 px-4 py-12 dark:bg-slate-950">
+  <div class="pointer-events-none absolute inset-0 opacity-60 dark:opacity-40" style="background-image: radial-gradient(rgb(148 163 184 / 0.25) 1px, transparent 1px); background-size: 22px 22px;" aria-hidden="true"></div>
+
+  <button onclick={() => themeStore.toggle()} class="ui-icon-btn absolute top-4 right-4 sm:top-6 sm:right-6" title="Ubah tema" aria-label="Ubah tema">
+    {#if themeStore.current === 'dark'}<Sun class="h-5 w-5" />{:else}<Moon class="h-5 w-5" />{/if}
   </button>
 
-  <div class="w-full max-w-md relative z-10">
-    <!-- Header Logo & Badge -->
-    <div class="text-center mb-7">
-      <div
-        class="inline-flex w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-600 to-indigo-400 items-center justify-center shadow-xl shadow-indigo-500/25 text-white mb-3"
-      >
-        <ShieldCheck class="w-8 h-8 stroke-[2.2]" />
+  <div class="relative w-full max-w-sm">
+    <div class="mb-8 flex flex-col items-center text-center">
+      <div class="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-lg shadow-indigo-600/25 dark:bg-indigo-500">
+        <ShieldCheck class="h-6 w-6" />
       </div>
-      <div class="flex items-center justify-center gap-2 mb-1">
-        <h1 class="text-xl font-bold tracking-tight text-white">
-          SaaS Master Administrator
-        </h1>
-      </div>
-      <p class="text-xs text-slate-400 font-medium">
-        Pintu Masuk Terisolasi Khusus Super Admin & Tim Staf Platform
-      </p>
+      <h1 class="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Portal admin platform</h1>
+      <p class="mt-1.5 text-sm text-slate-500 dark:text-slate-400">Khusus pemilik platform dan staf (Super Admin, Finance, Support).</p>
     </div>
 
-    <!-- Login Card -->
-    <div
-      class="rounded-2xl p-7 bg-slate-900/90 border border-slate-800 shadow-2xl backdrop-blur-md space-y-5"
-    >
-      <div class="border-b border-slate-800/80 pb-4">
-        <div class="flex items-center justify-between">
-          <div>
-            <h2 class="text-base font-bold text-white">Autentikasi Eksekutif</h2>
-            <p class="text-[11px] text-slate-400">
-              Akses kontrol manajemen multi-tenancy & billing
-            </p>
-          </div>
-          <span
-            class="text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider bg-indigo-500/15 text-indigo-400 border border-indigo-500/25"
-          >
-            Standalone
-          </span>
-        </div>
-      </div>
-
+    <div class="ui-card p-6 shadow-sm">
       {#if errorMsg}
-        <div
-          class="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/25 flex items-start gap-2.5 text-xs text-rose-400 leading-relaxed"
-        >
-          <AlertCircle class="w-4 h-4 shrink-0 mt-0.5 text-rose-500" />
-          <span>{errorMsg}</span>
-        </div>
+        <div class="mb-5"><Alert tone="error" message={errorMsg} /></div>
       {/if}
 
-      <form onsubmit={handleAdminLogin} class="space-y-4">
+      <form onsubmit={handleAdminLogin} class="space-y-5">
         <div>
-          <label
-            for="admin_email"
-            class="block text-xs font-semibold text-slate-300 mb-1.5"
-          >
-            Email Administrator Platform
-          </label>
+          <label for="admin-email" class="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Email</label>
           <div class="relative">
-            <Mail
-              class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500"
-            />
-            <input
-              id="admin_email"
-              type="email"
-              bind:value={email}
-              placeholder="admin@perusahaan.com"
-              class="ui-input pl-10 pr-4 text-white"
-              required
-            />
+            <Mail class="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input id="admin-email" type="email" bind:value={email} autocomplete="username" placeholder="admin@domain.com" class="ui-input py-2.5 pl-10 focus:border-indigo-500 focus:ring-indigo-500/10" required />
           </div>
         </div>
-
         <div>
-          <label
-            for="admin_password"
-            class="block text-xs font-semibold text-slate-300 mb-1.5"
-          >
-            Kata Sandi
-          </label>
+          <label for="admin-password" class="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Kata sandi</label>
           <div class="relative">
-            <Lock
-              class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500"
-            />
+            <Lock class="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
-              id="admin_password"
-              type="password"
+              id="admin-password"
+              type={showPassword ? 'text' : 'password'}
               bind:value={password}
+              autocomplete="current-password"
               placeholder="••••••••"
-              class="ui-input pl-10 pr-4 text-white"
+              class="ui-input py-2.5 pr-10 pl-10 focus:border-indigo-500 focus:ring-indigo-500/10"
               required
             />
+            <button
+              type="button"
+              onclick={() => (showPassword = !showPassword)}
+              class="absolute right-2.5 top-1/2 -translate-y-1/2 cursor-pointer rounded-md p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+              aria-label={showPassword ? 'Sembunyikan kata sandi' : 'Tampilkan kata sandi'}
+            >
+              {#if showPassword}<EyeOff class="h-4 w-4" />{:else}<Eye class="h-4 w-4" />{/if}
+            </button>
           </div>
         </div>
 
         <button
           type="submit"
           disabled={isLoading}
-          class="w-full mt-2 py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/25 transition disabled:opacity-50 cursor-pointer"
+          class="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-indigo-500 dark:hover:bg-indigo-400"
         >
           {#if isLoading}
-            <div
-              class="w-3.5 h-3.5 rounded-full border-2 border-white border-t-transparent animate-spin"
-            ></div>
-            <span>Memverifikasi Otoritas...</span>
+            <span class="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"></span>
+            Memproses…
           {:else}
-            <span>Masuk ke Konsol Administrator</span>
-            <ArrowRight class="w-3.5 h-3.5" />
+            Masuk
+            <ArrowRight class="h-4 w-4" />
           {/if}
         </button>
       </form>
-
-      <!-- Security Notice -->
-      <div
-        class="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80 text-[11px] text-slate-400 space-y-1"
-      >
-        <div class="font-bold text-slate-300 flex items-center gap-1.5">
-          <ShieldCheck class="w-3.5 h-3.5 text-indigo-400" />
-          <span>Isolasi Pintu Masuk Administrator</span>
-        </div>
-        <p class="text-[11px] leading-relaxed text-slate-400">
-          Halaman ini khusus untuk pemegang role <strong>SUPER_ADMIN</strong> dan
-          staf platform. Akun tenant klien dilarang masuk dari pintu ini.
-        </p>
-      </div>
-
-      <!-- Switch back to Tenant Portal -->
-      <div class="pt-3 border-t border-slate-800/80 text-center">
-        <a
-          href="/login"
-          class="text-[11px] text-slate-400 hover:text-white transition inline-flex items-center gap-1.5"
-        >
-          <Building2 class="w-3.5 h-3.5 text-emerald-400" />
-          <span>Pengguna / Staf Tenant Klien?</span>
-          <span class="font-bold underline text-emerald-400"
-            >Masuk ke Portal Tenant →</span
-          >
-        </a>
-      </div>
     </div>
+
+    <p class="mt-6 flex items-center justify-center gap-1.5 text-center text-sm text-slate-500 dark:text-slate-400">
+      <Building2 class="h-4 w-4" />
+      Pengguna tenant?
+      <a href="/login" class="font-semibold text-emerald-600 hover:underline dark:text-emerald-400">Masuk di sini</a>
+    </p>
   </div>
 </div>
