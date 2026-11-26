@@ -3,7 +3,7 @@
 // ===========================================
 
 import { Elysia, t } from 'elysia';
-import { eq, and, desc, sql } from 'drizzle-orm';
+import { eq, and, desc, sql, gte } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { db } from '../../config/database';
 import { env } from '../../config/env';
@@ -96,6 +96,28 @@ export class BroadcastService {
 
     if (contactList.length === 0) {
       throw new Error('Tidak ada kontak pelanggan di database untuk dikirimi broadcast.');
+    }
+
+    // 3b. Monthly broadcast quota of the organization's plan (0 / empty = unlimited)
+    const monthlyLimit = Number(org?.maxBroadcastPerMonth || 0);
+    if (monthlyLimit > 0) {
+      const monthStart = new Date();
+      monthStart.setUTCDate(1);
+      monthStart.setUTCHours(0, 0, 0, 0);
+      const [usage] = await db
+        .select({
+          used: sql<number>`COALESCE(SUM(CASE WHEN ${broadcastCampaigns.status} = 'PROCESSING' THEN ${broadcastCampaigns.totalRecipients} ELSE ${broadcastCampaigns.sentCount} END), 0)`,
+        })
+        .from(broadcastCampaigns)
+        .where(and(eq(broadcastCampaigns.organizationId, orgId), gte(broadcastCampaigns.createdAt, monthStart)));
+      const used = Number(usage?.used || 0);
+      const remaining = Math.max(0, monthlyLimit - used);
+      if (contactList.length > remaining) {
+        throw new Error(
+          `Kuota broadcast bulan ini tidak cukup: tersisa ${remaining.toLocaleString('id-ID')} dari ${monthlyLimit.toLocaleString('id-ID')} pesan, ` +
+            `sedangkan broadcast ini akan dikirim ke ${contactList.length.toLocaleString('id-ID')} kontak. Upgrade paket atau tunggu bulan depan.`
+        );
+      }
     }
 
     const campaignId = nanoid();
@@ -264,6 +286,7 @@ export class BroadcastService {
             messageType: 'template',
             body: `[Broadcast: ${body.name}] Template: ${tmpl.name}`,
             status: 'SENT',
+            campaignId,
           });
 
           sentSuccess++;

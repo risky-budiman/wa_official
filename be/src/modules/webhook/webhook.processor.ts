@@ -14,7 +14,8 @@ import {
   users,
   activityLogs,
   organizations,
-  messageTemplates
+  messageTemplates,
+  broadcastCampaigns
 } from '../../db/schema';
 import { ChatbotService } from '../../services/chatbot.service';
 import { MetaApiService } from '../../services/meta-api.service';
@@ -494,8 +495,17 @@ export class WebhookProcessor {
               READ: ['PENDING', 'SENT', 'DELIVERED'],
             };
 
+            const [current] = await db
+              .select({ status: messages.status, campaignId: messages.campaignId })
+              .from(messages)
+              .where(eq(messages.wamId, st.id))
+              .limit(1);
+            if (!current) continue;
+
+            let changed = false;
             if (statusEnum === 'FAILED') {
               const metaError = (st as any).errors?.[0];
+              changed = current.status !== 'FAILED';
               await db
                 .update(messages)
                 .set({
@@ -503,11 +513,26 @@ export class WebhookProcessor {
                   ...(metaError ? { errorDetails: metaError } : {}),
                 } as any)
                 .where(eq(messages.wamId, st.id));
-            } else {
-              await db
+            } else if (lowerStatuses[statusEnum].includes(String(current.status))) {
+              const res: any = await db
                 .update(messages)
                 .set({ status: statusEnum })
                 .where(and(eq(messages.wamId, st.id), inArray(messages.status, lowerStatuses[statusEnum] as any)));
+              changed = Number((Array.isArray(res) ? res[0] : res)?.affectedRows ?? 1) > 0;
+            }
+
+            // Broadcast statistics: count each message once per step it actually took
+            if (changed && current.campaignId) {
+              const wasDelivered = current.status === 'DELIVERED' || current.status === 'READ';
+              const inc: Record<string, any> = {};
+              if (statusEnum === 'DELIVERED' || (statusEnum === 'READ' && !wasDelivered)) {
+                inc.deliveredCount = sql`${broadcastCampaigns.deliveredCount} + 1`;
+              }
+              if (statusEnum === 'READ') inc.readCount = sql`${broadcastCampaigns.readCount} + 1`;
+              if (statusEnum === 'FAILED') inc.failedCount = sql`${broadcastCampaigns.failedCount} + 1`;
+              if (Object.keys(inc).length > 0) {
+                await db.update(broadcastCampaigns).set(inc).where(eq(broadcastCampaigns.id, current.campaignId));
+              }
             }
           }
         }

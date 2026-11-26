@@ -78,6 +78,35 @@ export async function autoMigrateSchema(): Promise<void> {
       console.warn('⚠️ API key hashing migration notice:', err?.message || err);
     }
 
+    // 4. messages.campaign_id (broadcast delivery / read statistics)
+    try {
+      const cols = rowsOf(
+        await db.execute(sql`
+          SELECT COLUMN_NAME FROM information_schema.COLUMNS
+          WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'messages' AND COLUMN_NAME = 'campaign_id'
+        `)
+      );
+      if (cols.length === 0) {
+        await db.execute(sql`ALTER TABLE messages ADD COLUMN campaign_id VARCHAR(36) NULL, ADD INDEX idx_msg_campaign (campaign_id)`);
+        console.log('🧩 messages.campaign_id ditambahkan (statistik broadcast).');
+      }
+    } catch (err: any) {
+      console.warn('⚠️ messages.campaign_id migration notice:', err?.message || err);
+    }
+
+    // 5. A broadcast is sent by an in-process loop: one still PROCESSING at startup was cut off by a restart
+    try {
+      const res: any = await db.execute(sql`
+        UPDATE broadcast_campaigns
+        SET status = IF(sent_count > 0, 'COMPLETED', 'FAILED')
+        WHERE status = 'PROCESSING'
+      `);
+      const affected = Number((Array.isArray(res) ? res[0] : res)?.affectedRows || 0);
+      if (affected > 0) console.log(`🧹 ${affected} kampanye broadcast yang terputus oleh restart ditandai selesai.`);
+    } catch (err: any) {
+      console.warn('⚠️ Broadcast recovery notice:', err?.message || err);
+    }
+
     // 3. broadcast_campaigns: keep campaign history when a template is deleted
     try {
       await migrateCampaignTemplateLink();

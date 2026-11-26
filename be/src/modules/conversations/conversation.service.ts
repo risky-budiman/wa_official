@@ -263,6 +263,9 @@ export class ConversationService {
    * Add a secondary agent / collaborator to conversation
    */
   static async addParticipant(user: JwtPayload, conversationId: string, targetUserId: string) {
+    if (user.role === 'AGENT') {
+      throw new Error('Hanya Administrator atau Supervisor yang dapat menambah anggota ke percakapan.');
+    }
     const conv = await this.getById(user, conversationId);
 
     // Check if target user exists in same organization
@@ -332,6 +335,9 @@ export class ConversationService {
    * Remove a collaborator agent from conversation
    */
   static async removeParticipant(user: JwtPayload, conversationId: string, targetUserId: string) {
+    if (user.role === 'AGENT') {
+      throw new Error('Hanya Administrator atau Supervisor yang dapat mengeluarkan anggota dari percakapan.');
+    }
     await this.getById(user, conversationId);
 
     await db
@@ -354,6 +360,19 @@ export class ConversationService {
 
     if (user.role === 'AGENT' && body.assignedUserId !== user.id) {
       throw new Error('Agen hanya dapat mengambil tiket untuk diri sendiri atau mengajukan transfer.');
+    }
+
+    // The new owner must be an active member of THIS organization
+    const [target] = await db
+      .select({ id: users.id, status: users.status })
+      .from(users)
+      .where(and(eq(users.id, body.assignedUserId), eq(users.organizationId, user.orgId)))
+      .limit(1);
+    if (!target) {
+      throw new Error('Agen tujuan tidak ditemukan dalam organisasi Anda');
+    }
+    if (target.status && target.status !== 'ACTIVE') {
+      throw new Error('Agen tujuan sedang tidak aktif');
     }
 
     await db
@@ -392,11 +411,12 @@ export class ConversationService {
       .where(eq(conversations.id, conversationId));
 
     if (status === 'RESOLVED') {
-      // ✅ Mark all unread messages as READ when ticket is resolved
+      // Mark the customer's messages as read; never touch the delivery status of OUR messages
+      // (a FAILED outbound message must stay FAILED)
       await db
         .update(messages)
         .set({ status: 'READ' })
-        .where(eq(messages.conversationId, conversationId));
+        .where(and(eq(messages.conversationId, conversationId), eq(messages.direction, 'INBOUND')));
     }
 
     await db.insert(activityLogs).values({

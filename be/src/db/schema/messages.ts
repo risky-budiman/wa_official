@@ -20,6 +20,8 @@ export const messages = mysqlTable('messages', {
     .notNull()
     .references(() => conversations.id, { onDelete: 'cascade' }),
   wamId: varchar('wam_id', { length: 255 }), // Meta Message ID (wamid.HBgL...)
+  // Broadcast campaign this message belongs to (delivery/read stats come from its status updates)
+  campaignId: varchar('campaign_id', { length: 36 }),
   direction: mysqlEnum('direction', messageDirectionEnum).notNull(),
   senderType: mysqlEnum('sender_type', messageSenderTypeEnum).notNull(),
   senderId: varchar('sender_id', { length: 36 }), // NULL = contact, users.id = agent/spv

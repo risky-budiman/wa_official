@@ -11,6 +11,7 @@ import { authPlugin } from '../../middleware/auth';
 import { ConversationService } from './conversation.service';
 import { MessageService } from '../messages/message.service';
 import { AiAgentService } from '../../services/ai-agent.service';
+import { env } from '../../config/env';
 import { ChatbotService } from '../../services/chatbot.service';
 import type { ConversationStatus } from '../../db/schema/conversations';
 import { getActivePhone } from '../../services/phone-number.service';
@@ -271,6 +272,16 @@ export const conversationRoutes = new Elysia({ prefix: '/conversations' })
       if (!user) {
         set.status = 401;
         return { success: false, error: 'Unauthorized' };
+      }
+      // Developer tool: fabricates an inbound customer message (and may trigger real auto-replies).
+      // Administrators only, and disabled in production unless ALLOW_INBOUND_SIMULATOR=true.
+      if (user.role !== 'ADMINISTRATOR') {
+        set.status = 403;
+        return { success: false, error: 'Akses ditolak (khusus Administrator)' };
+      }
+      if (env.NODE_ENV === 'production' && process.env.ALLOW_INBOUND_SIMULATOR !== 'true') {
+        set.status = 404;
+        return { success: false, error: 'Simulator tidak tersedia di production' };
       }
 
       try {
