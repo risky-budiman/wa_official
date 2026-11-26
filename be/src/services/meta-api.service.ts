@@ -318,6 +318,24 @@ export class MetaApiService {
   /**
    * Subscribe App to WABA (WhatsApp Business Account) Webhooks via Meta Graph API
    */
+  /**
+   * Is this number registered on the Cloud API? (platform_type CLOUD_API). Numbers that just went
+   * through Embedded Signup must be registered with a 6-digit PIN before they can send.
+   */
+  static async fetchPhoneRegistration(phoneNumberId: string, accessToken: string): Promise<{ platformType?: string; status?: string } | null> {
+    if (!phoneNumberId || !accessToken) return null;
+    try {
+      const res = await fetch(`${this.baseUrl}/${phoneNumberId}?fields=platform_type,status`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const data: any = await res.json();
+      if (!res.ok) return null;
+      return { platformType: data.platform_type, status: data.status };
+    } catch {
+      return null;
+    }
+  }
+
   static async subscribeAppToWaba(wabaId: string, accessToken: string) {
     if (!wabaId || !accessToken || wabaId === '1386698372551547') return null;
 

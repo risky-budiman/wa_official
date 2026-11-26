@@ -47,6 +47,10 @@
 
   let wabaId = $state('');
   let appId = $state('');
+  /** Facebook Login for Business configuration ID → real WhatsApp Embedded Signup */
+  let esConfigId = $state('');
+  /** WABA / number picked in the Embedded Signup popup (arrives by postMessage from facebook.com) */
+  let esSession: { wabaId?: string; phoneNumberId?: string } | null = null;
   let accessToken = $state('');
   let displayPhoneNumber = $state('');
   let verifiedName = $state('');
@@ -442,6 +446,7 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
       if (res.organization) {
         wabaId = res.organization.wabaId || '';
         appId = res.organization.appId || '';
+        esConfigId = res.organization.embeddedSignupConfigId || '';
         if (!companyName && res.organization.name) {
           companyName = res.organization.name;
         }
@@ -557,6 +562,35 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
       return;
     }
 
+    // Real WhatsApp Embedded Signup (Tech Provider): the customer can create/choose a WABA and number
+    if (esConfigId) {
+      try {
+        await loadFacebookSdk(realAppId);
+      } catch {
+        fbErrorMsg = 'Gagal memuat Facebook SDK. Periksa koneksi atau ekstensi pemblokir iklan.';
+        return;
+      }
+      isConnectingFb = true;
+      esSession = null;
+      (window as any).FB.login(
+        (response: any) => {
+          const code = response?.authResponse?.code;
+          if (code) finishEmbeddedSignup(code);
+          else {
+            isConnectingFb = false;
+            fbErrorMsg = 'Pendaftaran WhatsApp dibatalkan atau tidak selesai.';
+          }
+        },
+        {
+          config_id: esConfigId,
+          response_type: 'code',
+          override_default_response_type: true,
+          extras: { setup: {}, featureType: '', sessionInfoVersion: '3' },
+        }
+      );
+      return;
+    }
+
     isConnectingFb = true;
     const redirectUri = encodeURIComponent(window.location.origin + '/admin/settings');
     const oauthUrl = `https://www.facebook.com/v20.0/dialog/oauth?client_id=${realAppId}&redirect_uri=${redirectUri}&scope=whatsapp_business_management,whatsapp_business_messaging&response_type=code`;
@@ -580,6 +614,75 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
     }, 1000);
   }
 
+  let fbSdkPromise: Promise<void> | null = null;
+  function loadFacebookSdk(appIdForSdk: string): Promise<void> {
+    if ((window as any).FB) return Promise.resolve();
+    if (fbSdkPromise) return fbSdkPromise;
+    fbSdkPromise = new Promise<void>((resolve, reject) => {
+      (window as any).fbAsyncInit = () => {
+        (window as any).FB.init({ appId: appIdForSdk, autoLogAppEvents: true, xfbml: false, version: 'v21.0' });
+        resolve();
+      };
+      const script = document.createElement('script');
+      script.src = 'https://connect.facebook.net/en_US/sdk.js';
+      script.async = true;
+      script.defer = true;
+      script.crossOrigin = 'anonymous';
+      script.onerror = () => {
+        fbSdkPromise = null;
+        reject(new Error('sdk'));
+      };
+      document.body.appendChild(script);
+    });
+    return fbSdkPromise;
+  }
+
+  /** Code from FB.login + the WABA/number from the popup → one request (no race between the two). */
+  async function finishEmbeddedSignup(code: string) {
+    fbSuccessMsg = 'Menyelesaikan pendaftaran WhatsApp Business…';
+    fbErrorMsg = null;
+    // sessionInfo usually arrives just before the login callback; wait briefly for it
+    for (let i = 0; i < 20 && !esSession; i++) await new Promise((r) => setTimeout(r, 150));
+    try {
+      const res = await apiRequest<any>('/settings/waba/embedded-signup', {
+        method: 'POST',
+        body: JSON.stringify({
+          code, // SDK codes are exchanged without redirect_uri
+          wabaId: esSession?.wabaId,
+          phoneNumberId: esSession?.phoneNumberId,
+        }),
+      });
+      if (res.success && res.connectedChannel) {
+        channelStore.setConnected(res.connectedChannel);
+        await channelStore.checkStatus();
+        await loadSettings();
+        applySignupResult(res);
+      } else {
+        fbSuccessMsg = null;
+        fbErrorMsg = res.error || 'Gagal menyelesaikan pendaftaran WhatsApp';
+      }
+    } catch (err: any) {
+      fbSuccessMsg = null;
+      fbErrorMsg = err?.message || 'Gagal terhubung dengan Facebook';
+    } finally {
+      isConnectingFb = false;
+    }
+  }
+
+  /** Success message, or the remaining steps (webhook subscription / PIN registration). */
+  function applySignupResult(res: any) {
+    const warnings: string[] = res.warnings || [];
+    if (warnings.length) {
+      fbSuccessMsg = null;
+      fbErrorMsg = warnings.join(' ');
+      // Unregistered number → continue straight into the PIN step of the number wizard
+      if (res.needsRegistration) showChangeNumber = true;
+    } else {
+      fbSuccessMsg = 'Selamat! Akun WhatsApp Business resmi Anda berhasil terhubung.';
+      setTimeout(() => (fbSuccessMsg = null), 6000);
+    }
+  }
+
   async function handleOAuthCode(code: string) {
     if (isProcessingOAuth) return;
     isProcessingOAuth = true;
@@ -599,10 +702,9 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
 
       if (res.success && res.connectedChannel) {
         channelStore.setConnected(res.connectedChannel);
-        fbSuccessMsg = 'Selamat! Akun WhatsApp Business resmi Anda berhasil terhubung via Facebook!';
         await channelStore.checkStatus();
         await loadSettings();
-        setTimeout(() => (fbSuccessMsg = null), 6000);
+        applySignupResult(res);
       } else {
         fbSuccessMsg = null;
         fbErrorMsg = res.error || 'Gagal menyelesaikan otorisasi Facebook';
@@ -641,30 +743,39 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
     }
 
     // 2. Listen for postMessage from popup window or Meta Embedded Signup
-    const messageListener = async (event: MessageEvent) => {
+    const messageListener = (event: MessageEvent) => {
+      // 🔒 OAuth code only from our own popup page
       if (event.data?.type === 'FB_AUTH_CODE' && event.data.code) {
+        if (event.origin !== window.location.origin) return;
         handleOAuthCode(event.data.code);
-      } else if (event.data?.type === 'WA_EMBEDDED_SIGNUP') {
+        return;
+      }
+      // 🔒 Embedded Signup session info only from Facebook
+      let host = '';
+      try {
+        host = new URL(event.origin).hostname;
+      } catch {
+        return;
+      }
+      if (host !== 'facebook.com' && !host.endsWith('.facebook.com')) return;
+      let data: any = event.data;
+      if (typeof data === 'string') {
         try {
-          const data = typeof event.data.data === 'string' ? JSON.parse(event.data.data) : event.data.data;
-          if (data?.waba_id || data?.phone_number_id) {
-            isConnectingFb = true;
-            const res = await apiRequest<any>('/settings/waba/embedded-signup', {
-              method: 'POST',
-              body: JSON.stringify({
-                wabaId: data.waba_id,
-                phoneNumberId: data.phone_number_id,
-                displayPhoneNumber: data.display_phone_number || '+62 812-3456-7890',
-                verifiedName: data.verified_name || 'Official WhatsApp Account',
-              }),
-            });
-            isConnectingFb = false;
-            if (res.success && res.connectedChannel) {
-              channelStore.setConnected(res.connectedChannel);
-              await loadSettings();
-            }
-          }
-        } catch (_) {}
+          data = JSON.parse(data);
+        } catch {
+          return;
+        }
+      }
+      if (data?.type !== 'WA_EMBEDDED_SIGNUP') return;
+      if (data.event === 'FINISH' || data.event === 'FINISH_ONLY_WABA' || data.event === 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING') {
+        esSession = { wabaId: data.data?.waba_id, phoneNumberId: data.data?.phone_number_id };
+      } else if (data.event === 'CANCEL') {
+        const step = data.data?.current_step ? ` (berhenti di langkah: ${data.data.current_step})` : '';
+        fbErrorMsg = `Pendaftaran WhatsApp dibatalkan${step}.`;
+        isConnectingFb = false;
+      } else if (data.event === 'ERROR') {
+        fbErrorMsg = `Meta: ${data.data?.error_message || 'pendaftaran gagal'}.`;
+        isConnectingFb = false;
       }
     };
 

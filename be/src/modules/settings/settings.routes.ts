@@ -486,6 +486,8 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
         name: metaLiveWaba?.name || org?.name,
         wabaId: org?.wabaId,
         appId: env.META_APP_ID || org?.appId || '',
+        // Set → the real WhatsApp Embedded Signup (FB SDK + config_id) is used
+        embeddedSignupConfigId: env.META_ES_CONFIG_ID || '',
       },
       webhookVerifyToken: env.META_WEBHOOK_VERIFY_TOKEN || 'c815d80a7f3608e9edc744580250728aca2574307b8fb724',
       phoneNumbers: phones,
@@ -767,11 +769,13 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
           if (tokenResult.accessToken) {
             finalAccessToken = tokenResult.accessToken;
 
-            // Dynamically discover true WABA ID from the logged-in Facebook account!
-            const discoveredWabaId = await MetaApiService.fetchSharedWabaId(finalAccessToken, targetAppId);
-            if (discoveredWabaId) {
-              finalWabaId = discoveredWabaId;
-              console.log(`✅ Successfully linked dynamic WABA ID: ${finalWabaId}`);
+            // The WABA picked in the Embedded Signup popup (sessionInfo) wins; otherwise discover it
+            if (!finalWabaId) {
+              const discoveredWabaId = await MetaApiService.fetchSharedWabaId(finalAccessToken, targetAppId);
+              if (discoveredWabaId) {
+                finalWabaId = discoveredWabaId;
+                console.log(`✅ Successfully linked dynamic WABA ID: ${finalWabaId}`);
+              }
             }
           } else {
             set.status = 400;
@@ -837,9 +841,7 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
           wabaId: finalWabaId,
           accessToken: finalAccessToken,
         };
-        if (detectedCompanyName) {
-          orgUpdateData.name = detectedCompanyName;
-        }
+        // (The organisation keeps the name the tenant chose; the WABA name is only reported back)
 
         await db
           .update(organizations)
@@ -861,11 +863,29 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
           finalDisplayName,
           'GREEN'
         );
-        await MetaApiService.subscribeAppToWaba(finalWabaId, finalAccessToken);
+        const subscription: any = await MetaApiService.subscribeAppToWaba(finalWabaId, finalAccessToken);
+        const webhookSubscribed = subscription?.success === true;
+        const registration = safePhoneId.startsWith('phone_')
+          ? null
+          : await MetaApiService.fetchPhoneRegistration(safePhoneId, finalAccessToken);
+        const needsRegistration = !!registration?.platformType && registration.platformType !== 'CLOUD_API';
+
+        const warnings: string[] = [];
+        if (!webhookSubscribed) {
+          warnings.push('Langganan webhook WABA gagal — pesan masuk belum akan diterima. Klik "Sinkronkan" di Pengaturan atau hubungi admin platform.');
+        }
+        if (needsRegistration) {
+          warnings.push('Nomor belum diaktifkan di WhatsApp Cloud API. Lanjutkan dengan membuat PIN 6 digit agar bisa mengirim pesan.');
+        }
 
         return {
           success: true,
-          message: 'Nomor WhatsApp Business resmi berhasil dihubungkan!',
+          webhookSubscribed,
+          needsRegistration,
+          warnings,
+          message: warnings.length
+            ? 'WhatsApp Business terhubung, tetapi ada langkah yang belum selesai.'
+            : 'Nomor WhatsApp Business resmi berhasil dihubungkan!',
           connectedChannel: {
             wabaId: finalWabaId,
             phoneNumberId: safePhoneId,

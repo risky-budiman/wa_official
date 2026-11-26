@@ -106,6 +106,10 @@ export const env = {
   get META_APP_SECRET() {
     return (process.env.META_APP_SECRET || (globalThis as any).Bun?.env?.META_APP_SECRET || getEnvFileValue('META_APP_SECRET') || '').trim();
   },
+  /** Facebook Login for Business configuration ID for WhatsApp Embedded Signup (Tech Provider) */
+  get META_ES_CONFIG_ID() {
+    return (process.env.META_ES_CONFIG_ID || (globalThis as any).Bun?.env?.META_ES_CONFIG_ID || getEnvFileValue('META_ES_CONFIG_ID') || '').trim();
+  },
   META_ACCESS_TOKEN: process.env.META_ACCESS_TOKEN || '',
   META_PHONE_NUMBER_ID: process.env.META_PHONE_NUMBER_ID || '',
   META_WABA_ID: process.env.META_WABA_ID || '',
