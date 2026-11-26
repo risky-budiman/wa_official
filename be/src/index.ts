@@ -16,6 +16,7 @@ import { analyticsRoutes } from './modules/analytics/analytics.routes';
 import { settingsRoutes } from './modules/settings/settings.routes';
 import { contactRoutes } from './modules/contacts/contact.routes';
 import { webhookRoutes } from './modules/webhook/webhook.routes';
+import { publicRoutes } from './modules/public/public.routes';
 import { mediaRoutes } from './modules/media/media.routes';
 import { externalRoutes } from './modules/external/external.routes';
 import { superAdminRoutes } from './modules/super-admin/super-admin.routes';
@@ -76,6 +77,7 @@ const app = new Elysia()
       .use(externalRoutes)
       .use(superAdminRoutes)
       .use(billingRoutes)
+      .use(publicRoutes)
   )
 
   // ─── Global Error Handler ──────────────────

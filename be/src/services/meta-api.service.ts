@@ -105,7 +105,8 @@ export class MetaApiService {
         baseUrl = env.CORS_ORIGIN.split(',')[0].trim();
       }
       if (!baseUrl) {
-        baseUrl = 'https://crm.sahabatit.my.id';
+        // Meta downloads media from a public URL — a relative link can never work
+        throw new Error('PUBLIC_APP_URL belum diisi di .env server (mis. https://crm.ids.net.id); media tidak bisa dikirim.');
       }
       fullMediaUrl = `${baseUrl.replace(/\/$/, '')}${fullMediaUrl}`;
     }

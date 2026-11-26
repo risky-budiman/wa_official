@@ -82,6 +82,10 @@ export const env = {
   NODE_ENV: process.env.NODE_ENV || 'development',
   CORS_ORIGIN: process.env.CORS_ORIGIN || '*',
   PUBLIC_APP_URL: process.env.PUBLIC_APP_URL || '',
+  /** Contact e-mail on the public privacy / terms / data-deletion pages */
+  get LEGAL_CONTACT_EMAIL() {
+    return (process.env.LEGAL_CONTACT_EMAIL || getEnvFileValue('LEGAL_CONTACT_EMAIL') || '').trim();
+  },
 
   // MySQL
   DB_HOST: process.env.DB_HOST || 'localhost',

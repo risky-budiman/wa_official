@@ -83,6 +83,14 @@
       {#if footer}
         <div class="mt-8 text-center text-sm text-slate-500 dark:text-slate-400">{@render footer()}</div>
       {/if}
+
+      <p class="mt-6 text-center text-xs text-slate-400 dark:text-slate-500">
+        <a href="/privacy" class="hover:text-slate-600 hover:underline dark:hover:text-slate-300">Kebijakan Privasi</a>
+        ·
+        <a href="/terms" class="hover:text-slate-600 hover:underline dark:hover:text-slate-300">Ketentuan Layanan</a>
+        ·
+        <a href="/data-deletion" class="hover:text-slate-600 hover:underline dark:hover:text-slate-300">Penghapusan Data</a>
+      </p>
     </div>
   </main>
 </div>
