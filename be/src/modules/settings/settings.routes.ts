@@ -70,7 +70,7 @@ async function loadNumberContext(user: any, set: any, phoneId?: string): Promise
     .where(eq(organizations.id, user.orgId))
     .limit(1);
   const token = resolveOrgToken(org?.accessToken);
-  if (!org?.wabaId || org.wabaId === '1386698372551547' || !token) {
+  if (!org?.wabaId || !token) {
     set.status = 400;
     return { error: { success: false, error: 'Hubungkan WhatsApp Business Account (WABA) terlebih dahulu.' } };
   }
@@ -229,7 +229,7 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
     let phone = await getActivePhone(user.orgId);
 
     // Auto-heal: If organization has an active WABA ID, ensure phone status is CONNECTED
-    if (org?.wabaId && org.wabaId !== '1386698372551547') {
+    if (org?.wabaId) {
       if (!phone) {
         const safePhoneId = 'phone_' + nanoid(10);
         await safeUpsertPhoneNumber(
@@ -249,7 +249,7 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
       }
     }
 
-    const isConnected = Boolean(org?.wabaId && org.wabaId !== '1386698372551547');
+    const isConnected = Boolean(org?.wabaId);
 
     return {
       success: true,
@@ -421,7 +421,7 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
     }
 
     // Automatically sync live phone number and business name from Meta API & Subscribe WABA to App
-    if (activeWabaId && activeWabaId !== '1386698372551547' && activeAccessToken) {
+    if (activeWabaId && activeAccessToken) {
       try {
         // 1. Auto-subscribe WABA to App Webhooks
         await MetaApiService.subscribeAppToWaba(activeWabaId, activeAccessToken);
@@ -787,14 +787,14 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
         }
 
         // Fallback to the org's existing WABA ID / token when the signup did not provide new ones
-        if (!finalWabaId || finalWabaId === '1386698372551547' || !finalAccessToken) {
+        if (!finalWabaId || !finalAccessToken) {
           const [orgData] = await db
             .select({ wabaId: organizations.wabaId, accessToken: organizations.accessToken })
             .from(organizations)
             .where(eq(organizations.id, user.orgId))
             .limit(1);
-          if (!finalWabaId || finalWabaId === '1386698372551547') {
-            finalWabaId = (orgData?.wabaId && orgData.wabaId !== '1386698372551547') ? orgData.wabaId : '';
+          if (!finalWabaId) {
+            finalWabaId = orgData?.wabaId || '';
           }
           if (!finalAccessToken) finalAccessToken = resolveOrgToken(orgData?.accessToken) || '';
         }

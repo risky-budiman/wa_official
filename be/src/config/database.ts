@@ -80,10 +80,8 @@ export async function testConnection(): Promise<void> {
       await connection.query(`ALTER TABLE broadcast_campaigns MODIFY COLUMN created_by_id VARCHAR(36) NULL;`);
     } catch (_) {}
 
-    // Auto-migration: Purge any old dummy WABA ID (1386698372551547) from database
-    try {
-      await connection.query(`UPDATE organizations SET waba_id = NULL WHERE waba_id = '1386698372551547';`);
-    } catch (_) {}
+    // (Removed: a startup query used to clear waba_id 1386698372551547 as a "dummy" — it is a real
+    //  WABA ID, so every restart disconnected the organisation using it.)
 
     // Auto-create super_admins table if not exists & migrate platform admins from users
     try {

@@ -51,7 +51,7 @@ export class TemplateService {
       : platformWabaId();
 
     // Fallback: Resolve WABA ID from Phone Number ID if token is available
-    if (activeToken && (!activeWabaId || activeWabaId === '1386698372551547') && platformPhoneNumberId()) {
+    if (activeToken && !activeWabaId && platformPhoneNumberId()) {
       try {
         const resolvedWaba = await MetaApiService.fetchWabaIdFromPhoneNumberId(platformPhoneNumberId(), activeToken);
         if (resolvedWaba) {
@@ -244,7 +244,7 @@ export class TemplateService {
       : platformWabaId();
 
     // Fallback: Resolve WABA ID from Phone Number ID if token is available
-    if (activeToken && (!activeWabaId || activeWabaId === '1386698372551547') && platformPhoneNumberId()) {
+    if (activeToken && !activeWabaId && platformPhoneNumberId()) {
       try {
         const resolvedWaba = await MetaApiService.fetchWabaIdFromPhoneNumberId(platformPhoneNumberId(), activeToken);
         if (resolvedWaba) {
@@ -540,7 +540,7 @@ export class TemplateService {
         : platformWabaId();
 
       // Fallback: Resolve WABA ID from Phone Number ID if token is available
-      if (activeToken && (!activeWabaId || activeWabaId === '1386698372551547') && platformPhoneNumberId()) {
+      if (activeToken && !activeWabaId && platformPhoneNumberId()) {
         try {
           const resolvedWaba = await MetaApiService.fetchWabaIdFromPhoneNumberId(platformPhoneNumberId(), activeToken);
           if (resolvedWaba) {

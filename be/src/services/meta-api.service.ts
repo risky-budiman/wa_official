@@ -337,7 +337,7 @@ export class MetaApiService {
   }
 
   static async subscribeAppToWaba(wabaId: string, accessToken: string) {
-    if (!wabaId || !accessToken || wabaId === '1386698372551547') return null;
+    if (!wabaId || !accessToken) return null;
 
     try {
       const url = `${this.baseUrl}/${wabaId}/subscribed_apps`;
