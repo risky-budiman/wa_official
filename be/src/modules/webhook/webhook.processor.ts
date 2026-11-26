@@ -2,10 +2,9 @@
 // Webhook Event Processor (BullMQ Worker)
 // ===========================================
 
-import { Worker, Job } from 'bullmq';
+import type { Job } from 'bullmq';
 import { eq, and, or, sql, desc, ne, inArray, isNotNull } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
-import { redis } from '../../config/redis';
 import { db } from '../../config/database';
 import {
   phoneNumbers,
@@ -517,22 +516,24 @@ export class WebhookProcessor {
   }
 }
 
-// Start BullMQ Worker
-export const webhookWorker = new Worker(
-  'whatsapp-webhook',
-  async (job) => {
-    await WebhookProcessor.handleJob(job);
-  },
-  {
-    connection: redis,
-    concurrency: 5,
-  }
-);
-
-webhookWorker.on('completed', (job) => {
-  // console.log(`✅ Webhook job ${job.id} selesai diproses`);
-});
-
-webhookWorker.on('failed', (job, err) => {
-  console.error(`❌ Webhook job ${job?.id} gagal:`, err.message);
-});
+/**
+ * Start the BullMQ worker — only when WEBHOOK_QUEUE=redis. Redis is connected lazily here,
+ * so installs without Redis no longer spam reconnect errors.
+ */
+export async function startWebhookWorker() {
+  if (process.env.WEBHOOK_QUEUE !== 'redis') return null;
+  const { Worker } = await import('bullmq');
+  const { redis } = await import('../../config/redis');
+  const worker = new Worker(
+    'whatsapp-webhook',
+    async (job) => {
+      await WebhookProcessor.handleJob(job);
+    },
+    { connection: redis, concurrency: 5 }
+  );
+  worker.on('failed', (job, err) => {
+    console.error(`❌ Webhook job ${job?.id} gagal:`, err.message);
+  });
+  console.log('📬 Webhook queue aktif (BullMQ + Redis).');
+  return worker;
+}

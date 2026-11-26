@@ -21,7 +21,7 @@ import { externalRoutes } from './modules/external/external.routes';
 import { superAdminRoutes } from './modules/super-admin/super-admin.routes';
 import { billingRoutes } from './modules/billing/billing.routes';
 import { wsPlugin } from './websocket/ws.server';
-import './modules/webhook/webhook.processor'; // Initialize BullMQ worker
+import { startWebhookWorker } from './modules/webhook/webhook.processor';
 import { AutoResolveService } from './services/auto-resolve.service';
 import { autoMigrateSchema } from './db/auto-migrate';
 
@@ -29,6 +29,8 @@ import { autoMigrateSchema } from './db/auto-migrate';
 validateEnv();
 await testConnection();
 await autoMigrateSchema();
+// Optional Redis/BullMQ webhook worker (WEBHOOK_QUEUE=redis)
+startWebhookWorker().catch((err) => console.error('❌ Webhook worker gagal start:', err?.message || err));
 
 // Start Inactivity Auto-Resolve Background Worker
 AutoResolveService.startWorker(60000);
