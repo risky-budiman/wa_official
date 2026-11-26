@@ -20,6 +20,8 @@
 
   // ─── Join Org Fields ───
   let organizationId = $state('');
+  /** Set after joining an existing organisation: the account waits for admin approval */
+  let pendingMessage = $state<string | null>(null);
   let orgLookup = $state<{ name: string; id: string; memberCount: number } | null>(null);
   let orgLookupLoading = $state(false);
   let orgLookupError = $state<string | null>(null);
@@ -107,7 +109,9 @@
     const res = await authStore.register(body);
     isLoading = false;
 
-    if (res.success) {
+    if (res.success && (res as any).pendingApproval) {
+      pendingMessage = (res as any).message || 'Pendaftaran terkirim. Tunggu Administrator mengaktifkan akun Anda.';
+    } else if (res.success) {
       goto('/inbox');
     } else {
       errorMsg = res.error || 'Registrasi gagal';
@@ -116,6 +120,18 @@
 </script>
 
 <AuthShell title="Buat akun baru" subtitle="Daftarkan perusahaan Anda, atau bergabung ke tim yang sudah ada." width="md">
+  {#if pendingMessage}
+    <div class="space-y-5 text-center" role="status">
+      <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400">
+        <svg class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+      </div>
+      <div class="space-y-1.5">
+        <h2 class="text-lg font-semibold text-slate-900 dark:text-white">Menunggu persetujuan</h2>
+        <p class="text-sm leading-relaxed text-slate-600 dark:text-slate-300">{pendingMessage}</p>
+      </div>
+      <a href="/login" class="ui-btn-primary w-full justify-center">Ke halaman login</a>
+    </div>
+  {:else}
     <!-- Mode Switcher -->
     <div class="mb-6 flex rounded-xl bg-slate-200/60 p-1 dark:bg-slate-800/60">
       <button
@@ -332,4 +348,5 @@
       {#if mode === 'join'}Minta ID organisasi dari Administrator tim Anda.{:else}Anda akan menjadi Administrator pertama organisasi ini.{/if}
     </p>
   {/snippet}
+  {/if}
 </AuthShell>

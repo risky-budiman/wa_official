@@ -7,7 +7,7 @@ import { eq, and, desc, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { hash } from 'argon2';
 import { db } from '../../config/database';
-import { users, teams, conversations } from '../../db/schema';
+import { users, teams, conversations, organizations } from '../../db/schema';
 import { authPlugin, invalidateAccountCache } from '../../middleware/auth';
 import type { UserRole, UserStatus } from '../../db/schema/users';
 
@@ -28,6 +28,27 @@ async function otherActiveAdmins(orgId: string, exceptUserId: string) {
 async function releaseConversations(userId: string) {
   await db.execute(sql`UPDATE conversations SET status = 'UNASSIGNED', assigned_user_id = NULL WHERE assigned_user_id = ${userId} AND status = 'OPEN'`);
   await db.execute(sql`UPDATE conversations SET assigned_user_id = NULL WHERE assigned_user_id = ${userId}`);
+}
+
+/** Seats of the plan (maxAgents) are used by active Supervisors and Agents. */
+async function assertSeatAvailable(orgId: string, exceptUserId?: string) {
+  const [org] = await db.select({ maxAgents: organizations.maxAgents }).from(organizations).where(eq(organizations.id, orgId)).limit(1);
+  const limit = Number(org?.maxAgents || 0);
+  if (!limit) return;
+  const [row] = await db
+    .select({ n: sql<number>`COUNT(*)` })
+    .from(users)
+    .where(
+      and(
+        eq(users.organizationId, orgId),
+        eq(users.status, 'ACTIVE'),
+        sql`${users.role} IN ('SUPERVISOR', 'AGENT')`,
+        exceptUserId ? sql`${users.id} <> ${exceptUserId}` : sql`1 = 1`
+      )
+    );
+  if (Number(row?.n || 0) >= limit) {
+    throw new Error(`Batas paket tercapai: maksimal ${limit} agen/supervisor aktif. Nonaktifkan agen lain atau upgrade paket.`);
+  }
 }
 
 async function assertTeamInOrg(orgId: string, teamId?: string | null) {
@@ -87,6 +108,7 @@ export class UserService {
       throw new Error('Password minimal 6 karakter.');
     }
     await assertTeamInOrg(orgId, body.teamId);
+    if (body.role !== 'ADMINISTRATOR') await assertSeatAvailable(orgId);
     const passwordHash = await hash(generatedPassword || body.password!.trim());
     const id = nanoid();
 
@@ -164,6 +186,15 @@ export class UserService {
       updatePayload.email = email;
     }
     if (body.teamId !== undefined) await assertTeamInOrg(orgId, body.teamId);
+
+    // Activating someone, or turning an admin into an agent, takes a seat
+    const finalRole = body.role ?? target.role;
+    const finalStatus = body.status ?? target.status;
+    const takesNewSeat =
+      finalStatus === 'ACTIVE' &&
+      (finalRole === 'AGENT' || finalRole === 'SUPERVISOR') &&
+      !(target.status === 'ACTIVE' && (target.role === 'AGENT' || target.role === 'SUPERVISOR'));
+    if (takesNewSeat) await assertSeatAvailable(orgId, userId);
     if (body.role !== undefined) updatePayload.role = body.role;
     if (body.status !== undefined) updatePayload.status = body.status;
     if (body.isOnline !== undefined) updatePayload.isOnline = body.isOnline;

@@ -28,6 +28,15 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
       try {
         const user = await AuthService.register(body);
 
+        if (user.pendingApproval) {
+          set.status = 202;
+          return {
+            success: true,
+            pendingApproval: true,
+            message: `Pendaftaran ke "${user.organizationName}" terkirim. Minta Administrator tim mengaktifkan akun Anda di menu Tim, lalu login.`,
+          };
+        }
+
         // Generate JWT token
         const token = await jwt.sign({
           id: user.id,
@@ -228,7 +237,10 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
         updateData.email = cleanEmail;
       }
 
-      if (body.newPassword && body.newPassword.trim()) {
+      const wantsNewPassword = !!(body.newPassword && body.newPassword.trim());
+      // 🔒 Changing the login e-mail or the password both require the current password
+      // (a stolen session must not be able to take over the account's login)
+      if (wantsNewPassword || updateData.email) {
         // 🔒 Limit wrong current-password guesses (stolen-token scenario)
         const pwdKey = `pwdchange:user:${user.id}`;
         const pwdWait = retryAfterSeconds(pwdKey, RULES.passwordChangePerUser);
@@ -237,7 +249,7 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
         // 🔒 Changing the password always requires the current password
         if (!body.currentPassword || !body.currentPassword.trim()) {
           set.status = 400;
-          return { success: false, error: 'Masukkan password saat ini untuk mengganti password.' };
+          return { success: false, error: 'Masukkan password saat ini untuk mengganti email atau password.' };
         }
 
         const isCurrentValid = await Bun.password.verify(body.currentPassword, dbUser.passwordHash).catch(() => false);
@@ -251,11 +263,13 @@ export const authRoutes = new Elysia({ prefix: '/auth' })
           }
         }
 
-        const newHash = await Bun.password.hash(body.newPassword.trim(), {
-          algorithm: 'bcrypt',
-          cost: 10,
-        });
-        updateData.passwordHash = newHash;
+        if (wantsNewPassword) {
+          const newHash = await Bun.password.hash(body.newPassword!.trim(), {
+            algorithm: 'bcrypt',
+            cost: 10,
+          });
+          updateData.passwordHash = newHash;
+        }
       }
 
       if (Object.keys(updateData).length > 0) {

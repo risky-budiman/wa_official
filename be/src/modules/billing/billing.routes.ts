@@ -91,7 +91,8 @@ export const billingRoutes = new Elysia({ prefix: '/billing' })
     }
 
     try {
-      const result = await BillingService.checkMidtransStatus(params.id);
+      // 🔒 Only orders of the caller's own organisation
+      const result = await BillingService.checkMidtransStatus(params.id, user.orgId);
       return { success: true, data: result };
     } catch (err: any) {
       set.status = 400;
@@ -104,6 +105,10 @@ export const billingRoutes = new Elysia({ prefix: '/billing' })
     if (!user || !user.orgId) {
       set.status = 400;
       return { success: false, error: 'User tidak terikat dengan organisasi' };
+    }
+    if (user.role !== 'ADMINISTRATOR') {
+      set.status = 403;
+      return { success: false, error: 'Hanya Administrator yang dapat membatalkan pesanan.' };
     }
 
     try {

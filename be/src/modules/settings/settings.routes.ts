@@ -3,6 +3,7 @@
 // ===========================================
 
 import { Elysia, t } from 'elysia';
+import { parseMessagingTier } from '../../services/messaging-tier';
 import { eq, and, gte, sql, desc } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { env } from '../../config/env';
@@ -299,39 +300,7 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
     }
 
     // Determine Meta Limit Tier
-    const tierRaw = metaPhoneDetails?.messaging_limit_tier || 'TIER_2K';
-    let dailyLimit = 2000;
-    let tierDisplay = 'TIER_2K (2.000 Chat / 24 Jam)';
-
-    const cleanTier = String(tierRaw).toUpperCase().trim();
-    if (cleanTier === 'TIER_50' || cleanTier === '50') {
-      dailyLimit = 50;
-      tierDisplay = 'TIER_50 (50 Chat / 24 Jam)';
-    } else if (cleanTier === 'TIER_250' || cleanTier === '250') {
-      dailyLimit = 250;
-      tierDisplay = 'TIER_250 (250 Chat / 24 Jam)';
-    } else if (cleanTier === 'TIER_1K' || cleanTier === '1000' || cleanTier === '1K') {
-      dailyLimit = 1000;
-      tierDisplay = 'TIER_1K (1.000 Chat / 24 Jam)';
-    } else if (cleanTier === 'TIER_2K' || cleanTier === '2000' || cleanTier === '2K') {
-      dailyLimit = 2000;
-      tierDisplay = 'TIER_2K (2.000 Chat / 24 Jam)';
-    } else if (cleanTier === 'TIER_10K' || cleanTier === '10000' || cleanTier === '10K') {
-      dailyLimit = 10000;
-      tierDisplay = 'TIER_10K (10.000 Chat / 24 Jam)';
-    } else if (cleanTier === 'TIER_100K' || cleanTier === '100000' || cleanTier === '100K') {
-      dailyLimit = 100000;
-      tierDisplay = 'TIER_100K (100.000 Chat / 24 Jam)';
-    } else if (cleanTier === 'TIER_UNLIMITED' || cleanTier === 'UNLIMITED') {
-      dailyLimit = 1000000;
-      tierDisplay = 'TIER_UNLIMITED (Tanpa Batas Kuota)';
-    } else {
-      const digits = cleanTier.replace(/[^0-9]/g, '');
-      if (digits) {
-        dailyLimit = parseInt(digits, 10);
-        tierDisplay = `TIER_${dailyLimit} (${dailyLimit.toLocaleString('id-ID')} Chat / 24 Jam)`;
-      }
-    }
+    const { dailyLimit, tierDisplay } = parseMessagingTier(metaPhoneDetails?.messaging_limit_tier);
 
     const qualityRating = metaPhoneDetails?.quality_rating || phone?.qualityRating || 'GREEN';
 
@@ -388,7 +357,7 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
       success: true,
       quota: {
         dailyLimit,
-        tier: tierRaw,
+        tier: metaPhoneDetails?.messaging_limit_tier || 'TIER_2K',
         tierDisplay,
         totalUsed, // Consuming the 1,000 Meta limit
         remainingQuota,

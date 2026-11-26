@@ -183,6 +183,19 @@
     }
   }
 
+  /** One-click approval for people who joined with the organisation ID (and re-activation) */
+  async function activateUser(u: UserItem) {
+    errorMsg = null;
+    const res = await apiRequest(`/users/${u.id}`, { method: 'PATCH', body: JSON.stringify({ status: 'ACTIVE' }) });
+    if (res.success) {
+      successMsg = `${u.fullName} sekarang aktif dan bisa login.`;
+      setTimeout(() => (successMsg = null), 4000);
+      await loadUsers();
+    } else {
+      errorMsg = res.error || 'Gagal mengaktifkan pengguna';
+    }
+  }
+
   async function deleteUser(u: UserItem) {
     if (!confirm(`Apakah Anda yakin ingin menghapus pengguna "${u.fullName}"?`)) return;
 
@@ -323,6 +336,12 @@
                     <span class="inline-flex items-center gap-1 text-slate-400 font-bold text-[11px]">
                       <XCircle class="w-3.5 h-3.5" /> Nonaktif
                     </span>
+                    <button
+                      type="button"
+                      onclick={() => activateUser(u)}
+                      class="ml-2 rounded-lg bg-emerald-600 px-2 py-0.5 text-[11px] font-semibold text-white hover:bg-emerald-500"
+                      title="Aktifkan akun ini (mis. pendaftar baru yang bergabung dengan ID organisasi)"
+                    >Aktifkan</button>
                   {/if}
                 </td>
 

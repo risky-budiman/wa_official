@@ -187,6 +187,9 @@ class AuthStore {
       this.setAuth(res.token, res.user);
       return { success: true };
     }
+    if (res.success && (res as any).pendingApproval) {
+      return { success: true, pendingApproval: true, message: (res as any).message as string };
+    }
     return { success: false, error: res.error || 'Registrasi gagal' };
   }
 

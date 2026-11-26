@@ -9,7 +9,9 @@ import { conversations, users, messages, activityLogs } from '../../db/schema';
 import { authPlugin } from '../../middleware/auth';
 
 export class AnalyticsService {
-  static async getSlaMetrics(orgId: string) {
+  /** days = null → all time. "Active" is always the current state. */
+  static async getSlaMetrics(orgId: string, days: number | null = null) {
+    const since = days ? new Date(Date.now() - days * 24 * 60 * 60 * 1000) : null;
     // 1. Total resolved conversations
     const [resolvedStats] = await db
       .select({
@@ -19,7 +21,8 @@ export class AnalyticsService {
       .where(
         and(
           eq(conversations.organizationId, orgId),
-          eq(conversations.status, 'RESOLVED')
+          eq(conversations.status, 'RESOLVED'),
+          since ? sql`${conversations.lastMessageAt} >= ${since}` : sql`1 = 1`
         )
       );
 
@@ -50,7 +53,8 @@ export class AnalyticsService {
         conversations,
         and(
           eq(conversations.assignedUserId, users.id),
-          eq(conversations.status, 'RESOLVED')
+          eq(conversations.status, 'RESOLVED'),
+          since ? sql`${conversations.lastMessageAt} >= ${since}` : sql`1 = 1`
         )
       )
       .where(and(eq(users.organizationId, orgId), sql`${users.role} IN ('ADMINISTRATOR', 'SUPERVISOR', 'AGENT')`))
@@ -77,6 +81,7 @@ export class AnalyticsService {
         GROUP BY m.conversation_id
       ) fi
       JOIN conversations c ON c.id = fi.cid
+      ${since ? sql`WHERE fi.first_in >= ${since}` : sql``}
     `);
 
     //    Ticket duration = opened → last message, for RESOLVED tickets
@@ -85,6 +90,7 @@ export class AnalyticsService {
              TIMESTAMPDIFF(SECOND, created_at, last_message_at) AS secs
       FROM conversations
       WHERE organization_id = ${orgId} AND status = 'RESOLVED' AND last_message_at IS NOT NULL
+      ${since ? sql`AND last_message_at >= ${since}` : sql``}
     `);
 
     const avg = (rows: any[], uid?: string): number | null => {
@@ -132,7 +138,7 @@ function formatDuration(totalSeconds: number | null): string | null {
 
 export const analyticsRoutes = new Elysia({ prefix: '/analytics' })
   .use(authPlugin)
-  .get('/sla', async ({ user, set }) => {
+  .get('/sla', async ({ user, set, query }) => {
     if (!user) {
       set.status = 401;
       return { success: false, error: 'Unauthorized' };
@@ -144,6 +150,8 @@ export const analyticsRoutes = new Elysia({ prefix: '/analytics' })
       return { success: false, error: 'Laporan hanya untuk Supervisor dan Administrator' };
     }
 
-    const data = await AnalyticsService.getSlaMetrics(user.orgId);
-    return { success: true, ...data };
+    const d = parseInt(String((query as any)?.days || ''), 10);
+    const days = Number.isFinite(d) && d > 0 && d <= 3650 ? d : null;
+    const data = await AnalyticsService.getSlaMetrics(user.orgId, days);
+    return { success: true, days, ...data };
   });

@@ -89,6 +89,9 @@ export class AuthService {
     // - Joining an existing organization → always AGENT
     //   (an Administrator can promote the user afterwards via Manajemen Pengguna)
     const role: UserRole = isNewOrganization ? 'ADMINISTRATOR' : 'AGENT';
+    // 🔒 Knowing an organisation ID must not be enough to read its customers' chats:
+    // people who join an existing organisation wait until an Administrator activates them.
+    const status = isNewOrganization ? 'ACTIVE' : 'INACTIVE';
 
     // Create user
     const userId = nanoid();
@@ -99,9 +102,11 @@ export class AuthService {
       passwordHash,
       fullName: body.fullName,
       role,
+      status,
     });
 
     return {
+      pendingApproval: !isNewOrganization,
       id: userId,
       email: body.email,
       fullName: body.fullName,

@@ -36,6 +36,18 @@ export class BillingService {
   /**
    * Ambil Konfigurasi Midtrans dari database platform_settings
    */
+  /**
+   * Atomically mark an order PAID. Returns false when another request (webhook, status
+   * check, manual approval) already did — so the subscription is activated exactly once.
+   */
+  private static async markPaidOnce(orderId: string, fields: Record<string, any>): Promise<boolean> {
+    const res: any = await db
+      .update(subscriptionOrders)
+      .set({ ...fields, paymentStatus: 'PAID', paidAt: new Date(), updatedAt: new Date() })
+      .where(and(eq(subscriptionOrders.id, orderId), sql`${subscriptionOrders.paymentStatus} <> 'PAID'`));
+    return Number((Array.isArray(res) ? res[0] : res)?.affectedRows ?? 0) > 0;
+  }
+
   static async getMidtransConfig(): Promise<MidtransConfig> {
     const [setting] = await db
       .select()
@@ -130,6 +142,18 @@ export class BillingService {
 
     // Tentukan durasi hari & total harga (dihitung di server, tidak percaya nilai dari client)
     const { durationDays, amount } = this.calculateOrderPricing(plan, customDurationDays);
+
+    // 🔒 A free plan must not be re-ordered to extend the subscription forever
+    if (amount === 0) {
+      const [usedFree] = await db
+        .select({ id: subscriptionOrders.id })
+        .from(subscriptionOrders)
+        .where(and(eq(subscriptionOrders.organizationId, org.id), eq(subscriptionOrders.amount, 0), eq(subscriptionOrders.paymentStatus, 'PAID')))
+        .limit(1);
+      if (usedFree || (org.plan || '').toUpperCase() === 'TRIAL') {
+        throw new Error('Paket gratis / uji coba hanya bisa dipakai satu kali. Pilih paket berbayar untuk melanjutkan.');
+      }
+    }
 
     // Generate Order Number: INV-YYYYMMDD-XXXX
     const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
@@ -350,17 +374,12 @@ export class BillingService {
         return { success: false, message: 'Gross amount mismatch' };
       }
 
-      // Pembayaran Berhasil (Lunas)
-      await db
-        .update(subscriptionOrders)
-        .set({
-          paymentStatus: 'PAID',
-          paymentMethod: payment_type || order.paymentMethod,
-          paymentDetails: payload,
-          paidAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .where(eq(subscriptionOrders.id, order.id));
+      // Pembayaran Berhasil (Lunas) — only the first request activates
+      const won = await this.markPaidOnce(order.id, {
+        paymentMethod: payment_type || order.paymentMethod,
+        paymentDetails: payload,
+      });
+      if (!won) return { success: true, message: 'Order sudah berstatus PAID sebelumnya.' };
 
       const [updatedOrder] = await db
         .select()
@@ -413,11 +432,11 @@ export class BillingService {
    * Cek Status Transaksi On-Demand langsung ke Midtrans API
    * (Berguna jika webhook belum sampai atau pengujian lokal sandbox)
    */
-  static async checkMidtransStatus(orderId: string): Promise<{ success: boolean; status: string; activated: boolean }> {
+  static async checkMidtransStatus(orderId: string, orgId?: string): Promise<{ success: boolean; status: string; activated: boolean }> {
     const [order] = await db
       .select()
       .from(subscriptionOrders)
-      .where(eq(subscriptionOrders.id, orderId))
+      .where(orgId ? and(eq(subscriptionOrders.id, orderId), eq(subscriptionOrders.organizationId, orgId)) : eq(subscriptionOrders.id, orderId))
       .limit(1);
 
     if (!order) {
@@ -455,16 +474,15 @@ export class BillingService {
     const fraudStatus = data.fraud_status;
 
     if (txStatus === 'settlement' || (txStatus === 'capture' && fraudStatus === 'accept')) {
-      await db
-        .update(subscriptionOrders)
-        .set({
-          paymentStatus: 'PAID',
-          paymentMethod: data.payment_type || order.paymentMethod,
-          paymentDetails: data,
-          paidAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .where(eq(subscriptionOrders.id, order.id));
+      if (Math.round(Number(data.gross_amount)) !== Math.round(Number(order.amount))) {
+        console.warn(`⚠️ [MIDTRANS STATUS] Nominal tidak cocok untuk ${order.orderNumber}. Tidak diaktifkan.`);
+        return { success: false, status: order.paymentStatus, activated: false };
+      }
+      const won = await this.markPaidOnce(order.id, {
+        paymentMethod: data.payment_type || order.paymentMethod,
+        paymentDetails: data,
+      });
+      if (!won) return { success: true, status: 'PAID', activated: true };
 
       const [updatedOrder] = await db
         .select()
@@ -503,21 +521,16 @@ export class BillingService {
       throw new Error('Transaksi ini sudah berstatus LUNAS (PAID).');
     }
 
-    // Update order menjadi PAID
-    await db
-      .update(subscriptionOrders)
-      .set({
-        paymentStatus: 'PAID',
-        paymentMethod: order.paymentMethod || 'manual_transfer',
-        paymentDetails: {
-          manualApproval: true,
-          approvedBy: adminEmail,
-          approvedAt: new Date().toISOString(),
-        },
-        paidAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(subscriptionOrders.id, order.id));
+    // Update order menjadi PAID (atomic: never activates twice)
+    const won = await this.markPaidOnce(order.id, {
+      paymentMethod: order.paymentMethod || 'manual_transfer',
+      paymentDetails: {
+        manualApproval: true,
+        approvedBy: adminEmail,
+        approvedAt: new Date().toISOString(),
+      },
+    });
+    if (!won) throw new Error('Transaksi ini sudah berstatus LUNAS (PAID).');
 
     const [updatedOrder] = await db
       .select()

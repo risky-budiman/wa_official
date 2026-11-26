@@ -21,6 +21,7 @@ import { apiKeyAuthPlugin } from '../../middleware/api-key-auth';
 import { MetaApiService } from '../../services/meta-api.service';
 import { getActivePhone } from '../../services/phone-number.service';
 import { orgMetaToken, platformPhoneNumberId } from '../../services/meta-credentials';
+import { fetchOrgMessagingTier } from '../../services/messaging-tier';
 
 /**
  * Map an external endpoint to the permission(s) it needs (any one of them is enough).
@@ -568,15 +569,18 @@ export const externalRoutes = new Elysia({ prefix: '/external' })
       );
 
     const totalUsed = Number(stats?.uniqueContactsReached || 0);
-    const dailyLimit = 1000;
+    // Real limit of this organisation's number (Meta tier), not a fixed 1.000
+    const tier = await fetchOrgMessagingTier(orgId);
 
     return {
       success: true,
       quota: {
-        dailyLimit,
+        dailyLimit: tier.dailyLimit,
         used24h: totalUsed,
-        remaining24h: Math.max(0, dailyLimit - totalUsed),
-        tier: 'TIER_1K (1.000 Chat / 24 Jam)',
+        remaining24h: Math.max(0, tier.dailyLimit - totalUsed),
+        tier: tier.tierDisplay,
+        tierSource: tier.live ? 'META_LIVE' : 'DEFAULT',
+        qualityRating: tier.qualityRating,
         resetWindow: 'Rolling 24 Hours',
       },
     };

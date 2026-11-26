@@ -29,10 +29,18 @@
 
   let slaData = $state<SlaData | null>(null);
   let isLoading = $state(true);
+  /** Period in days ('' = all time) */
+  let period = $state('30');
+  const PERIODS = [
+    { value: '7', label: '7 hari' },
+    { value: '30', label: '30 hari' },
+    { value: '90', label: '90 hari' },
+    { value: '', label: 'Semua' },
+  ];
 
   async function loadMetrics() {
     isLoading = true;
-    const res = await apiRequest<SlaData>('/analytics/sla');
+    const res = await apiRequest<SlaData>(`/analytics/sla${period ? `?days=${period}` : ''}`);
     isLoading = false;
     if (res.success && res.overview) {
       slaData = res as any;
@@ -49,13 +57,26 @@
     title="Laporan & SLA"
     description="Kecepatan respons pertama (FRT), durasi penyelesaian (ART) dan kepuasan pelanggan (CSAT)."
     icon={BarChart3}
-  />
+  >
+    {#snippet actions()}
+      <div class="inline-flex rounded-xl border border-slate-200 bg-white p-0.5 dark:border-slate-800 dark:bg-slate-900" role="group" aria-label="Periode laporan">
+        {#each PERIODS as p}
+          <button
+            type="button"
+            onclick={() => { period = p.value; loadMetrics(); }}
+            aria-pressed={period === p.value}
+            class="rounded-lg px-3 py-1.5 text-xs font-semibold transition {period === p.value ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}"
+          >{p.label}</button>
+        {/each}
+      </div>
+    {/snippet}
+  </PageHeader>
 
   <!-- SLA Metric Cards (no placeholder numbers: show "—" until real data exists) -->
   <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
     <StatCard label="Respons Pertama (FRT)" value={slaData?.overview.avgFirstResponseTime || '—'} icon={Clock} tone="emerald" hint="Target di bawah 3 menit" />
     <StatCard label="Durasi Tiket Selesai" value={slaData?.overview.avgResolutionTime || '—'} icon={Zap} tone="cyan" hint="Rata-rata dari tiket dibuka hingga pesan terakhir" />
-    <StatCard label="Tiket Selesai" value={slaData?.overview.totalResolved ?? '—'} icon={CheckCircle2} tone="violet" hint="Total tiket berstatus selesai" />
+    <StatCard label="Tiket Selesai" value={slaData?.overview.totalResolved ?? '—'} icon={CheckCircle2} tone="violet" hint={period ? `Diselesaikan dalam ${period} hari terakhir` : 'Total tiket berstatus selesai'} />
     <StatCard label="Kepuasan Pelanggan (CSAT)" value={slaData?.overview.csatScore || '—'} icon={BarChart3} tone="amber" hint={slaData?.overview.csatScore ? 'Skala 1 – 5' : 'Survei kepuasan belum diaktifkan'} />
   </div>
 
