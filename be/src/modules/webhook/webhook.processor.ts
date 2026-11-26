@@ -68,25 +68,20 @@ export class WebhookProcessor {
       const pureAgents = onlinePool.filter((a) => a.role === 'AGENT');
       const candidates = pureAgents.length > 0 ? pureAgents : onlinePool;
 
-      // 2. Count active workload for each online candidate
-      const workloads = await Promise.all(
-        candidates.map(async (agent) => {
-          const [result] = await db
-            .select({ count: sql<number>`count(*)` })
-            .from(conversations)
-            .where(
-              and(
-                eq(conversations.organizationId, orgId),
-                eq(conversations.assignedUserId, agent.id),
-                sql`${conversations.status} IN ('OPEN', 'PENDING')`
-              )
-            );
-          return {
-            agentId: agent.id,
-            count: Number(result?.count || 0),
-          };
-        })
-      );
+      // 2. Count active workload for all online candidates in ONE grouped query (was one query per agent)
+      const counts = await db
+        .select({ agentId: conversations.assignedUserId, count: sql<number>`count(*)` })
+        .from(conversations)
+        .where(
+          and(
+            eq(conversations.organizationId, orgId),
+            inArray(conversations.assignedUserId, candidates.map((a) => a.id)),
+            sql`${conversations.status} IN ('OPEN', 'PENDING')`
+          )
+        )
+        .groupBy(conversations.assignedUserId);
+      const countByAgent = new Map(counts.map((c) => [c.agentId, Number(c.count || 0)]));
+      const workloads = candidates.map((agent) => ({ agentId: agent.id, count: countByAgent.get(agent.id) ?? 0 }));
 
       // 3. Filter out agents who have reached the Max Handle Capacity Limit (Cap)
       const availableWorkloads = workloads.filter((w) => w.count < maxLimit);

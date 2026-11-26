@@ -752,7 +752,6 @@ export const templateRoutes = new Elysia({ prefix: '/templates' })
             id: contactId,
             organizationId: user.orgId,
             name: body.contactName || `Kontak +${targetNumber}`,
-            phoneNumber: `+${targetNumber}`,
             waId: targetNumber,
           });
         }
@@ -809,7 +808,7 @@ export const templateRoutes = new Elysia({ prefix: '/templates' })
           )
           .limit(1);
 
-        const rawComponents = Array.isArray(tmpl?.components) ? tmpl.components : [];
+        const rawComponents: any[] = Array.isArray(tmpl?.components) ? tmpl.components : [];
         let sanitizedComponents: any[] = [];
 
         // 4a. Header parameter sanitization

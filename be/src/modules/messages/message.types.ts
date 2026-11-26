@@ -8,6 +8,8 @@ export interface SendMessageBody {
   body: string;
   mediaUrl?: string;
   mediaMimeType?: string;
+  /** Original file name for documents (shown to the recipient) */
+  filename?: string;
   templateName?: string;
   templateComponents?: any[];
 }
