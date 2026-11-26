@@ -54,6 +54,31 @@ async function migrateCampaignTemplateLink() {
   console.log('🧩 broadcast_campaigns.template_id kini ON DELETE SET NULL (template bisa dihapus, riwayat broadcast tetap ada).');
 }
 
+/**
+ * Make an existing foreign key use ON DELETE SET NULL (databases created before the schema said so).
+ * Idempotent; the column is made nullable first.
+ */
+async function ensureFkSetNull(table: string, column: string, refTable: string, columnType: string) {
+  const fks = rowsOf(
+    await db.execute(sql`
+      SELECT rc.CONSTRAINT_NAME AS name, rc.DELETE_RULE AS rule
+      FROM information_schema.REFERENTIAL_CONSTRAINTS rc
+      JOIN information_schema.KEY_COLUMN_USAGE k
+        ON k.CONSTRAINT_NAME = rc.CONSTRAINT_NAME AND k.TABLE_SCHEMA = rc.CONSTRAINT_SCHEMA
+      WHERE rc.CONSTRAINT_SCHEMA = DATABASE() AND k.TABLE_NAME = ${table} AND k.COLUMN_NAME = ${column}
+        AND k.REFERENCED_TABLE_NAME = ${refTable}
+    `)
+  );
+  const fk = fks[0];
+  if (!fk || fk.rule === 'SET NULL' || !/^[A-Za-z0-9_]+$/.test(fk.name)) return;
+  await db.execute(sql.raw(`ALTER TABLE \`${table}\` DROP FOREIGN KEY \`${fk.name}\``));
+  await db.execute(sql.raw(`ALTER TABLE \`${table}\` MODIFY \`${column}\` ${columnType} NULL`));
+  await db.execute(
+    sql.raw(`ALTER TABLE \`${table}\` ADD CONSTRAINT \`${fk.name}\` FOREIGN KEY (\`${column}\`) REFERENCES \`${refTable}\`(id) ON DELETE SET NULL`)
+  );
+  console.log(`🧩 ${table}.${column} kini ON DELETE SET NULL.`);
+}
+
 export async function autoMigrateSchema(): Promise<void> {
   try {
     console.log('🔄 Checking & Auto-Syncing database schema migrations...');
@@ -105,6 +130,13 @@ export async function autoMigrateSchema(): Promise<void> {
       if (affected > 0) console.log(`🧹 ${affected} kampanye broadcast yang terputus oleh restart ditandai selesai.`);
     } catch (err: any) {
       console.warn('⚠️ Broadcast recovery notice:', err?.message || err);
+    }
+
+    // 6. Deleting a user who created a broadcast failed (FK was NO ACTION in older databases)
+    try {
+      await ensureFkSetNull('broadcast_campaigns', 'created_by_id', 'users', 'VARCHAR(36)');
+    } catch (err: any) {
+      console.warn('⚠️ broadcast_campaigns.created_by_id migration notice:', err?.message || err);
     }
 
     // 3. broadcast_campaigns: keep campaign history when a template is deleted
