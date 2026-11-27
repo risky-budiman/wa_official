@@ -419,6 +419,14 @@ export class MetaApiService {
   }
 
   /**
+   * Coexistence: ask Meta to send the WhatsApp Business app's contacts (smb_app_state_sync) or
+   * chat history (history) as webhooks. Only allowed within 24 hours of onboarding.
+   */
+  static requestSmbAppSync(phoneNumberId: string, accessToken: string, syncType: 'smb_app_state_sync' | 'history') {
+    return this.graphPost(`${phoneNumberId}/smb_app_data`, accessToken, { messaging_product: 'whatsapp', sync_type: syncType });
+  }
+
+  /**
    * Exchange OAuth Code from Facebook Login Embedded Signup for Permanent / User Access Token
    */
   static async exchangeCodeForToken(code: string, redirectUri?: string, customAppId?: string): Promise<{ accessToken?: string; error?: string }> {

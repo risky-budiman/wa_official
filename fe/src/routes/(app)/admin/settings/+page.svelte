@@ -50,7 +50,7 @@
   /** Facebook Login for Business configuration ID → real WhatsApp Embedded Signup */
   let esConfigId = $state('');
   /** WABA / number picked in the Embedded Signup popup (arrives by postMessage from facebook.com) */
-  let esSession: { wabaId?: string; phoneNumberId?: string } | null = null;
+  let esSession: { wabaId?: string; phoneNumberId?: string; coexistence?: boolean } | null = null;
   let accessToken = $state('');
   let displayPhoneNumber = $state('');
   let verifiedName = $state('');
@@ -546,8 +546,10 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
    * mode "new": Embedded Signup — create a WABA / register a NEW number in Meta's popup.
    * mode "existing": plain Facebook Login — share a WABA whose number is already on the Cloud API
    * (Embedded Signup does not let you pick numbers that are already registered).
+   * mode "coexistence": Embedded Signup for a number used in the WhatsApp Business app — the number
+   * stays active on the phone and is also on the Cloud API (the owner scans a QR code in the app).
    */
-  async function connectWithFacebook(mode: 'new' | 'existing' = 'new') {
+  async function connectWithFacebook(mode: 'new' | 'existing' | 'coexistence' = 'new') {
     fbSuccessMsg = null;
     fbErrorMsg = null;
     isProcessingOAuth = false;
@@ -568,7 +570,7 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
     }
 
     // Real WhatsApp Embedded Signup (Tech Provider): the customer can create/choose a WABA and number
-    if (esConfigId && mode === 'new') {
+    if (esConfigId && (mode === 'new' || mode === 'coexistence')) {
       try {
         await loadFacebookSdk(realAppId);
       } catch {
@@ -580,7 +582,7 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
       (window as any).FB.login(
         (response: any) => {
           const code = response?.authResponse?.code;
-          if (code) finishEmbeddedSignup(code);
+          if (code) finishEmbeddedSignup(code, mode === 'coexistence');
           else {
             isConnectingFb = false;
             fbErrorMsg = 'Pendaftaran WhatsApp dibatalkan atau tidak selesai.';
@@ -592,7 +594,12 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
           override_default_response_type: true,
           // ES v4 must be named explicitly: without "version" Meta falls back to the retired
           // v2/v3 flow and the popup only shows "Sorry, something went wrong".
-          extras: { setup: {}, sessionInfoVersion: '3', version: 'v4' },
+          extras: {
+            setup: {},
+            sessionInfoVersion: '3',
+            version: 'v4',
+            ...(mode === 'coexistence' ? { featureType: 'whatsapp_business_app_onboarding' } : {}),
+          },
         }
       );
       return;
@@ -645,7 +652,7 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
   }
 
   /** Code from FB.login + the WABA/number from the popup → one request (no race between the two). */
-  async function finishEmbeddedSignup(code: string) {
+  async function finishEmbeddedSignup(code: string, coexistence = false) {
     fbSuccessMsg = 'Menyelesaikan pendaftaran WhatsApp Business…';
     fbErrorMsg = null;
     // sessionInfo usually arrives just before the login callback; wait briefly for it
@@ -657,6 +664,7 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
           code, // SDK codes are exchanged without redirect_uri
           wabaId: esSession?.wabaId,
           phoneNumberId: esSession?.phoneNumberId,
+          coexistence: coexistence || esSession?.coexistence === true,
         }),
       });
       if (res.success && res.connectedChannel) {
@@ -685,7 +693,9 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
       // Unregistered number → continue straight into the PIN step of the number wizard
       if (res.needsRegistration) showChangeNumber = true;
     } else {
-      fbSuccessMsg = 'Selamat! Akun WhatsApp Business resmi Anda berhasil terhubung.';
+      fbSuccessMsg = res.coexistence
+        ? 'Nomor terhubung dan tetap aktif di aplikasi WhatsApp Business. Kontak & riwayat chat sedang disinkronkan — buka aplikasi di HP minimal sekali tiap 14 hari agar koneksi tidak terputus.'
+        : 'Selamat! Akun WhatsApp Business resmi Anda berhasil terhubung.';
       setTimeout(() => (fbSuccessMsg = null), 6000);
     }
   }
@@ -775,7 +785,11 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
       }
       if (data?.type !== 'WA_EMBEDDED_SIGNUP') return;
       if (data.event === 'FINISH' || data.event === 'FINISH_ONLY_WABA' || data.event === 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING') {
-        esSession = { wabaId: data.data?.waba_id, phoneNumberId: data.data?.phone_number_id };
+        esSession = {
+          wabaId: data.data?.waba_id,
+          phoneNumberId: data.data?.phone_number_id,
+          coexistence: data.event === 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING',
+        };
       } else if (data.event === 'CANCEL') {
         const step = data.data?.current_step ? ` (berhenti di langkah: ${data.data.current_step})` : '';
         fbErrorMsg = `Pendaftaran WhatsApp dibatalkan${step}.`;
@@ -1032,7 +1046,7 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
               <span>Integrasi otomatis via Meta Tech Provider. Pengguna tidak perlu memasukkan App ID manual.</span>
             </div>
             {#if esConfigId}
-              <div class="grid gap-3 sm:grid-cols-2">
+              <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 <button type="button" onclick={() => connectWithFacebook('existing')} disabled={isConnectingFb} class="flex flex-col items-start gap-1 rounded-xl border-2 border-[#1877F2] bg-[#1877F2] p-4 text-left text-white shadow-md transition hover:bg-[#166fe5] disabled:opacity-60 cursor-pointer">
                   <span class="flex items-center gap-2 text-xs font-bold">
                     {#if isConnectingFb}<span class="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin"></span>{:else}<span class="flex h-4 w-4 items-center justify-center rounded-full bg-white font-serif text-[11px] font-bold text-[#1877F2]">f</span>{/if}
@@ -1046,6 +1060,13 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
                     Daftarkan nomor baru
                   </span>
                   <span class="text-[11px] leading-snug text-slate-500 dark:text-slate-400">Embedded Signup Meta: buat/pilih akun WhatsApp Business &amp; verifikasi nomor baru lewat OTP.</span>
+                </button>
+                <button type="button" onclick={() => connectWithFacebook('coexistence')} disabled={isConnectingFb} class="flex flex-col items-start gap-1 rounded-xl border-2 border-emerald-500/40 bg-white p-4 text-left text-emerald-700 transition hover:border-emerald-500 disabled:opacity-60 dark:bg-slate-900 dark:text-emerald-400 cursor-pointer">
+                  <span class="flex items-center gap-2 text-xs font-bold">
+                    <Smartphone class="h-4 w-4" />
+                    Pakai nomor WhatsApp Business App
+                  </span>
+                  <span class="text-[11px] leading-snug text-slate-500 dark:text-slate-400">Nomor tetap aktif di aplikasi WhatsApp Business di HP (Coexistence). Scan QR dari aplikasi; kontak &amp; riwayat chat ikut tersinkron.</span>
                 </button>
               </div>
             {:else}

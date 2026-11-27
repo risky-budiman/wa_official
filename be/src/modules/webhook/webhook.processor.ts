@@ -18,8 +18,8 @@ import {
   broadcastCampaigns
 } from '../../db/schema';
 import { ChatbotService } from '../../services/chatbot.service';
-import { describeInbound } from '../../services/inbound-message';
-import { MetaApiService } from '../../services/meta-api.service';
+import { extractMessageContent } from '../../services/message-content';
+import { CoexistenceSync } from '../../services/coexistence-sync';
 import { env } from '../../config/env';
 import type { MetaWebhookBody } from './webhook.types';
 import { notArchived } from '../../services/phone-number.service';
@@ -222,6 +222,21 @@ export class WebhookProcessor {
         const activeAccessToken = orgMetaToken(orgFull?.accessToken);
         const windowExpiresAt = new Date(Date.now() + careHours * 60 * 60 * 1000); // Standard Meta 24-hr session window
 
+        // Coexistence: the same number is also used in the WhatsApp Business app on the phone
+        const coexistence = { orgId, phone, accessToken: activeAccessToken };
+        if (change.field === 'smb_message_echoes') {
+          await CoexistenceSync.handleEchoes(coexistence, value);
+          continue;
+        }
+        if (change.field === 'history') {
+          await CoexistenceSync.handleHistory(coexistence, value);
+          continue;
+        }
+        if (change.field === 'smb_app_state_sync') {
+          await CoexistenceSync.handleContactSync(coexistence, value);
+          continue;
+        }
+
         // 2. Handle Inbound Customer Messages
         if (value.messages && value.messages.length > 0) {
           for (const msg of value.messages) {
@@ -279,68 +294,8 @@ export class WebhookProcessor {
             }
 
             // 2b. Process Inbound Media & Text
-            let messageBody = '';
-            let mediaUrl: string | null = null;
-            let mediaMimeType: string | null = null;
-            // Text, template-button / menu replies, location, contact cards, reactions …
-            const described = describeInbound(msg);
-
-            if (msg.type === 'text' && msg.text) {
-              messageBody = msg.text.body;
-            } else if (msg.type === 'image' && msg.image) {
-              messageBody = msg.image.caption || '[Foto/Gambar]';
-              mediaMimeType = msg.image.mime_type || 'image/jpeg';
-              if (msg.image.id) {
-                const downloaded = await MetaApiService.downloadMedia(msg.image.id, activeAccessToken);
-                if (downloaded) {
-                  mediaUrl = downloaded.localUrl;
-                  mediaMimeType = downloaded.mimeType;
-                }
-              }
-            } else if (msg.type === 'document' && msg.document) {
-              const filename = msg.document.filename || 'dokumen.pdf';
-              messageBody = msg.document.caption ? `${msg.document.caption} (${filename})` : `[Dokumen: ${filename}]`;
-              mediaMimeType = msg.document.mime_type || 'application/pdf';
-              if (msg.document.id) {
-                const downloaded = await MetaApiService.downloadMedia(msg.document.id, activeAccessToken);
-                if (downloaded) {
-                  mediaUrl = downloaded.localUrl;
-                  mediaMimeType = downloaded.mimeType;
-                }
-              }
-            } else if (msg.type === 'audio' && msg.audio) {
-              messageBody = '[Pesan Suara / Audio]';
-              mediaMimeType = msg.audio.mime_type || 'audio/ogg';
-              if (msg.audio.id) {
-                const downloaded = await MetaApiService.downloadMedia(msg.audio.id, activeAccessToken);
-                if (downloaded) {
-                  mediaUrl = downloaded.localUrl;
-                  mediaMimeType = downloaded.mimeType;
-                }
-              }
-            } else if (msg.type === 'video' && msg.video) {
-              messageBody = msg.video.caption || '[Video]';
-              mediaMimeType = msg.video.mime_type || 'video/mp4';
-              if (msg.video.id) {
-                const downloaded = await MetaApiService.downloadMedia(msg.video.id, activeAccessToken);
-                if (downloaded) {
-                  mediaUrl = downloaded.localUrl;
-                  mediaMimeType = downloaded.mimeType;
-                }
-              }
-            } else if (msg.type === 'sticker' && msg.sticker) {
-              messageBody = '[Stiker]';
-              mediaMimeType = msg.sticker.mime_type || 'image/webp';
-              if (msg.sticker.id) {
-                const downloaded = await MetaApiService.downloadMedia(msg.sticker.id, activeAccessToken);
-                if (downloaded) {
-                  mediaUrl = downloaded.localUrl;
-                  mediaMimeType = downloaded.mimeType;
-                }
-              }
-            } else {
-              messageBody = described.body;
-            }
+            // Text, template-button / menu replies, location, contact cards, reactions, media downloads …
+            const { body: messageBody, mediaUrl, mediaMimeType, described } = await extractMessageContent(msg, activeAccessToken);
 
             // 2c. Find Active Conversation (Exclude RESOLVED tickets so new customer messages start a fresh session)
             const [activeConv] = await db

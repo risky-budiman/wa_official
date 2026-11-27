@@ -748,6 +748,8 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
 
       try {
         const { code, redirectUri, wabaId, phoneNumberId, displayPhoneNumber, verifiedName } = body;
+        // Number stays active in the WhatsApp Business app (Embedded Signup "whatsapp_business_app_onboarding")
+        const coexistence = body.coexistence === true;
 
         let finalAccessToken = '';
         let finalWabaId = wabaId || '';
@@ -868,9 +870,25 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
         const registration = safePhoneId.startsWith('phone_')
           ? null
           : await MetaApiService.fetchPhoneRegistration(safePhoneId, finalAccessToken);
-        const needsRegistration = !!registration?.platformType && registration.platformType !== 'CLOUD_API';
+        // A Coexistence number is already registered through the app: never ask for a PIN /register
+        const needsRegistration = !coexistence && !!registration?.platformType && registration.platformType !== 'CLOUD_API';
 
         const warnings: string[] = [];
+        let syncStarted = false;
+        if (coexistence) {
+          if (safePhoneId.startsWith('phone_')) {
+            warnings.push('Nomor WhatsApp Business App belum terdeteksi di WABA — sinkronisasi kontak & riwayat chat tidak bisa dimulai.');
+          } else {
+            // Meta only allows these within 24 hours of onboarding; contacts first, then history
+            const contactSync = await MetaApiService.requestSmbAppSync(safePhoneId, finalAccessToken, 'smb_app_state_sync');
+            const historySync = await MetaApiService.requestSmbAppSync(safePhoneId, finalAccessToken, 'history');
+            syncStarted = contactSync.ok && historySync.ok;
+            if (!syncStarted) {
+              const reason = [!contactSync.ok && contactSync.error, !historySync.ok && historySync.error].filter(Boolean).join('; ');
+              warnings.push(`Sinkronisasi kontak / riwayat chat dari aplikasi WhatsApp Business gagal dimulai (${reason}).`);
+            }
+          }
+        }
         if (!webhookSubscribed) {
           warnings.push('Langganan webhook WABA gagal — pesan masuk belum akan diterima. Klik "Sinkronkan" di Pengaturan atau hubungi admin platform.');
         }
@@ -882,6 +900,8 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
           success: true,
           webhookSubscribed,
           needsRegistration,
+          coexistence,
+          syncStarted,
           warnings,
           message: warnings.length
             ? 'WhatsApp Business terhubung, tetapi ada langkah yang belum selesai.'
@@ -909,6 +929,7 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
         phoneNumberId: t.Optional(t.String()),
         displayPhoneNumber: t.Optional(t.String()),
         verifiedName: t.Optional(t.String()),
+        coexistence: t.Optional(t.Boolean()),
       }),
     }
   )

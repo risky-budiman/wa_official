@@ -45,6 +45,7 @@
     ChevronLeft,
     PanelRightOpen,
     PanelRightClose,
+    Smartphone,
   } from "lucide-svelte";
   import { formatWhatsAppMarkdown } from "$lib/utils/whatsapp-formatter";
   import { fetchQuickReplies } from "$lib/api/quick-replies";
@@ -1628,7 +1629,7 @@
               >
                 {#if !inbound && !grouped}
                   <div class="mb-0.5 flex items-center gap-1 text-xs font-semibold {isBot ? 'text-indigo-600 dark:text-indigo-300' : 'text-emerald-700 dark:text-emerald-400'}">
-                    {#if isBot}<Bot class="h-3.5 w-3.5" /> Balasan otomatis{:else}{msg.senderName || "Customer Service"}{/if}
+                    {#if isBot}<Bot class="h-3.5 w-3.5" /> Balasan otomatis{:else if msg.senderType === "AGENT" && !msg.senderId}<Smartphone class="h-3.5 w-3.5" /> Dari aplikasi WhatsApp Business{:else}{msg.senderName || "Customer Service"}{/if}
                   </div>
                 {/if}
 
