@@ -87,6 +87,8 @@
   let showContactPanel = $state(
     typeof window !== "undefined" ? window.innerWidth >= 1536 : true,
   );
+  // Phones / tablets (< lg): the same panel opens full screen over the chat
+  let showContactSheet = $state(false);
   let messagesContainer = $state<HTMLDivElement | null>(null);
   let messageInputRef = $state<HTMLTextAreaElement | null>(null);
 
@@ -381,6 +383,7 @@
     const id = selectedConvId;
     untrack(() => {
       historyView = null;
+      showContactSheet = false;
       historySessions = [];
       if (id) loadHistory(id);
       else historyLoading = false;
@@ -1642,6 +1645,18 @@
           >
             {#if showContactPanel}<PanelRightClose class="h-5 w-5" />{:else}<PanelRightOpen class="h-5 w-5" />{/if}
           </button>
+          <button
+            type="button"
+            onclick={() => (showContactSheet = true)}
+            class="ui-icon-btn relative lg:hidden"
+            title="Detail kontak & riwayat percakapan"
+            aria-label="Detail kontak dan riwayat percakapan"
+          >
+            <History class="h-5 w-5" />
+            {#if historySessions.length}
+              <span class="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-600 px-1 text-[10px] font-semibold leading-none text-white">{historySessions.length > 99 ? "99+" : historySessions.length}</span>
+            {/if}
+          </button>
         </div>
       </div>
 
@@ -2099,9 +2114,16 @@
   <!-- 3. RIGHT COLUMN: Contact & Team Info -->
   {#if selectedConv}
     <aside
-      class="hidden w-72 shrink-0 overflow-y-auto border-l border-slate-200 bg-white xl:w-80 {showContactPanel ? 'lg:block' : ''} dark:border-slate-800 dark:bg-slate-900"
+      class="{showContactSheet ? 'fixed inset-0 z-40 block' : 'hidden'} overflow-y-auto bg-white lg:static lg:z-auto lg:w-72 lg:shrink-0 lg:border-l lg:border-slate-200 xl:w-80 {showContactPanel ? 'lg:block' : 'lg:hidden'} dark:bg-slate-900 lg:dark:border-slate-800"
       aria-label="Detail kontak"
     >
+      <!-- Phone: header of the full-screen panel -->
+      <div class="sticky top-0 z-10 flex items-center gap-2 border-b border-slate-200 bg-white/95 px-3 py-2.5 backdrop-blur lg:hidden dark:border-slate-800 dark:bg-slate-900/95">
+        <button type="button" class="ui-icon-btn" onclick={() => (showContactSheet = false)} aria-label="Kembali ke chat">
+          <ChevronLeft class="h-5 w-5" />
+        </button>
+        <span class="text-sm font-semibold text-slate-900 dark:text-white">Detail kontak</span>
+      </div>
       <!-- Profile -->
       <div class="flex flex-col items-center border-b border-slate-100 px-5 pt-6 pb-5 text-center dark:border-slate-800">
         <div class="mb-3 flex h-16 w-16 items-center justify-center rounded-full text-xl font-semibold {avatarTone(selectedConv.contact.name)}">
@@ -2287,12 +2309,12 @@
 <!-- ─── Earlier session viewer (read-only) ─── -->
 {#if historyView}
   <div
-    class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm"
+    class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm sm:p-4"
     role="presentation"
     onclick={(e) => { if (e.target === e.currentTarget) historyView = null; }}
     onkeydown={(e) => { if (e.key === "Escape") historyView = null; }}
   >
-    <div class="flex h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900" role="dialog" aria-modal="true" aria-label="Riwayat percakapan">
+    <div class="flex h-full w-full max-w-2xl flex-col overflow-hidden bg-white shadow-2xl sm:h-[85vh] sm:rounded-2xl sm:border sm:border-slate-200 dark:bg-slate-900 sm:dark:border-slate-700" role="dialog" aria-modal="true" aria-label="Riwayat percakapan">
       <div class="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4 dark:border-slate-800">
         <div class="min-w-0">
           <h3 class="flex items-center gap-2 text-base font-semibold text-slate-900 dark:text-white">
