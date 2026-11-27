@@ -36,8 +36,19 @@ const parseJson = <T>(v: unknown): T | null => {
   return v as T;
 };
 
-/** A human (agent in the CRM, or the owner in the WhatsApp Business app) replied within this window → bot stays quiet. */
-export const HUMAN_REPLY_QUIET_MS = 12 * 60 * 60 * 1000;
+/**
+ * After a person replies (agent in the CRM, or the owner in the WhatsApp Business app) the bot stays
+ * quiet for this many hours — set per organization in Chatbot & AI. 0 = until the conversation is resolved.
+ */
+export const DEFAULT_HUMAN_QUIET_HOURS = 12;
+export const HUMAN_QUIET_HOUR_OPTIONS = [0, 1, 3, 6, 12, 24, 48] as const;
+
+export function humanQuietHours(cfg?: Pick<ChatbotConfig, 'humanQuietHours'> | null): number {
+  const raw = cfg?.humanQuietHours as unknown;
+  if (raw === null || raw === undefined || raw === '') return DEFAULT_HUMAN_QUIET_HOURS;
+  const h = Number(raw);
+  return (HUMAN_QUIET_HOUR_OPTIONS as readonly number[]).includes(h) ? h : DEFAULT_HUMAN_QUIET_HOURS;
+}
 const HUMAN_SENDERS = ['AGENT', 'SUPERVISOR', 'ADMINISTRATOR'] as const;
 
 /** Don't repeat the same fixed auto-reply to one customer more often than this. */
@@ -55,10 +66,20 @@ export function buildAiSystemPrompt(orgName: string, customPrompt?: string) {
 
 export class ChatbotService {
   /**
-   * Did a person reply to this contact recently? Looks across the contact's conversations, because a
-   * reply from the phone may sit in an older (resolved) ticket while the customer's answer opens a new one.
+   * Did a person reply to this contact recently? With a time window it looks across the contact's
+   * conversations, because a reply from the phone may sit in an older (resolved) ticket while the
+   * customer's answer opens a new one. quietHours 0 = any human reply in the current conversation.
    */
-  static async humanRepliedRecently(orgId: string, contactId: string, now = Date.now()): Promise<boolean> {
+  static async humanRepliedRecently(
+    orgId: string,
+    contactId: string,
+    opts: { convId: string; quietHours: number },
+    now = Date.now()
+  ): Promise<boolean> {
+    const scope =
+      opts.quietHours > 0
+        ? gte(messages.createdAt, new Date(now - opts.quietHours * 60 * 60 * 1000))
+        : eq(messages.conversationId, opts.convId);
     const [last] = await db
       .select({ id: messages.id })
       .from(messages)
@@ -70,7 +91,7 @@ export class ChatbotService {
           eq(messages.direction, 'OUTBOUND'),
           sql`COALESCE(${messages.isInternalNote}, 0) = 0`,
           inArray(messages.senderType, [...HUMAN_SENDERS]),
-          gte(messages.createdAt, new Date(now - HUMAN_REPLY_QUIET_MS))
+          scope
         )
       )
       .limit(1);
@@ -97,9 +118,6 @@ export class ChatbotService {
     if (!conv || conv.assignedUserId || conv.status === 'RESOLVED' || conv.status === 'PENDING') {
       return { handledBy: 'NONE' };
     }
-    if (await this.humanRepliedRecently(orgId, conv.contactId)) {
-      return { handledBy: 'NONE' };
-    }
 
     const [org] = await db
       .select({
@@ -118,6 +136,11 @@ export class ChatbotService {
     const chatbot = parseJson<ChatbotConfig>(org.chatbotConfig);
     const hours = parseJson<OperatingHoursConfig>(org.operatingHours);
     const settings = normalizeBotSettings(ai, chatbot);
+
+    // A person replied recently (CRM or the WhatsApp Business app) → let them continue
+    if (await this.humanRepliedRecently(orgId, conv.contactId, { convId, quietHours: humanQuietHours(chatbot) })) {
+      return { handledBy: 'NONE' };
+    }
 
     // 2. Master switch + "only outside working hours"
     if (!settings.enabled) return { handledBy: 'NONE' };

@@ -51,6 +51,11 @@ export interface ChatbotConfig {
   greetOnNewConversation?: boolean;
   rules?: ChatbotRule[];
   fallbackMode?: 'AI_AGENT' | 'HANDOFF_HUMAN' | 'STATIC_MESSAGE';
+  /**
+   * Hours the bot stays quiet after a person replied (CRM or WhatsApp Business app). 0 = for the
+   * rest of the conversation, until it is resolved. Default 12.
+   */
+  humanQuietHours?: number;
 }
 
 export const orgStatusEnum = ['ACTIVE', 'SUSPENDED', 'TRIAL', 'EXPIRED'] as const;

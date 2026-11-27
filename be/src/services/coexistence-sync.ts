@@ -9,7 +9,7 @@
 //  - smb_app_state_sync: the app's address book (contact names)
 // These three fields must be ticked in the Meta App Dashboard → WhatsApp → Configuration → Webhooks.
 
-import { and, desc, eq, ne } from 'drizzle-orm';
+import { and, desc, eq, lte, ne } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { db } from '../config/database';
 import { contacts, conversations, messages, type PhoneNumber } from '../db/schema';
@@ -125,17 +125,21 @@ async function conversationFor(ctx: CoexistenceContext, contactId: string, at: D
   return (await db.select().from(conversations).where(eq(conversations.id, id)).limit(1))[0];
 }
 
-/** Store one app message (deduplicated by wamid). Returns false when it was already stored. */
-async function storeMessage(ctx: CoexistenceContext, item: HistoryItem, contactName?: string): Promise<boolean> {
+/** Store one app message (deduplicated by wamid). Returns where it was stored, or null when it already was. */
+async function storeMessage(
+  ctx: CoexistenceContext,
+  item: HistoryItem,
+  contactName?: string
+): Promise<{ conversationId: string; at: Date } | null> {
   const wamId = String(item.msg.id);
   const [dup] = await db.select({ id: messages.id }).from(messages).where(eq(messages.wamId, wamId)).limit(1);
-  if (dup) return false;
+  if (dup) return null;
 
   const contact = await findOrCreateContact(ctx.orgId, item.customerWaId, contactName);
-  if (!contact) return false;
+  if (!contact) return null;
   const at = item.msg.timestamp ? new Date(Number(item.msg.timestamp) * 1000) : new Date();
   const conv = await conversationFor(ctx, contact.id, at);
-  if (!conv) return false;
+  if (!conv) return null;
 
   const { body, mediaUrl, mediaMimeType } = await extractMessageContent(item.msg, ctx.accessToken);
   try {
@@ -157,14 +161,33 @@ async function storeMessage(ctx: CoexistenceContext, item: HistoryItem, contactN
       createdAt: at,
     });
   } catch {
-    return false; // stored concurrently (uq_wamid)
+    return null; // stored concurrently (uq_wamid)
   }
 
   // Only move the conversation preview forward in time (history arrives in chunks)
   if (!conv.lastMessageAt || at >= new Date(conv.lastMessageAt)) {
     await db.update(conversations).set({ lastMessagePreview: body, lastMessageAt: at }).where(eq(conversations.id, conv.id));
   }
-  return true;
+  return { conversationId: conv.id, at };
+}
+
+/**
+ * The business answered on the phone, so the customer's messages up to that reply were seen there:
+ * clear them from the CRM's unread count (it counts INBOUND messages whose status is not READ).
+ */
+export async function markAnsweredOnPhone(conversationId: string, at: Date) {
+  await db
+    .update(messages)
+    .set({ status: 'READ' })
+    .where(
+      and(
+        eq(messages.conversationId, conversationId),
+        eq(messages.direction, 'INBOUND'),
+        ne(messages.status, 'READ'),
+        // webhook timestamps are whole seconds
+        lte(messages.createdAt, new Date(at.getTime() + 999))
+      )
+    );
 }
 
 export class CoexistenceSync {
@@ -174,7 +197,9 @@ export class CoexistenceSync {
       const customerWaId = digits(msg?.to);
       if (!msg?.id || !customerWaId) continue;
       const saved = await storeMessage(ctx, { customerWaId, direction: 'OUTBOUND', status: 'SENT', msg });
-      if (saved) console.log(`📱 Balasan dari aplikasi WA Business ke ${customerWaId} disimpan.`);
+      if (!saved) continue;
+      await markAnsweredOnPhone(saved.conversationId, saved.at);
+      console.log(`📱 Balasan dari aplikasi WA Business ke ${customerWaId} disimpan.`);
     }
   }
 

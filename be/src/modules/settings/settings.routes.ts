@@ -13,7 +13,7 @@ import { authPlugin } from '../../middleware/auth';
 import { hashApiKey } from '../../middleware/api-key-auth';
 import { MetaApiService } from '../../services/meta-api.service';
 import { AiAgentService, assertSafeLlmBaseUrl } from '../../services/ai-agent.service';
-import { buildAiSystemPrompt } from '../../services/chatbot.service';
+import { buildAiSystemPrompt, humanQuietHours } from '../../services/chatbot.service';
 import { decideBotReply, normalizeBotSettings, fillTemplate } from '../../services/bot-engine';
 import {
   activatePhoneNumber,
@@ -42,6 +42,20 @@ async function safeUpsertPhoneNumber(
     verifiedName,
     qualityRating,
   });
+}
+
+/** Meta accepts the Coexistence contact / history sync request only within 24h of onboarding. */
+const COEXISTENCE_SYNC_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/** Ask Meta to send the WhatsApp Business app's contacts, then its chat history (webhooks follow). */
+async function startCoexistenceSync(phoneNumberId: string, accessToken: string) {
+  const contactSync = await MetaApiService.requestSmbAppSync(phoneNumberId, accessToken, 'smb_app_state_sync');
+  const historySync = await MetaApiService.requestSmbAppSync(phoneNumberId, accessToken, 'history');
+  const ok = contactSync.ok && historySync.ok;
+  const error = [!contactSync.ok && `kontak: ${contactSync.error}`, !historySync.ok && `riwayat: ${historySync.error}`]
+    .filter(Boolean)
+    .join('; ');
+  return { ok, error };
 }
 
 /** Token the organization uses to talk to Meta (its own, else the platform token). */
@@ -142,6 +156,7 @@ function cleanChatbotConfig(c: any) {
       ? c.greetingKeywords.map((k: any) => str(k, 60).trim()).filter(Boolean).slice(0, 30)
       : undefined,
     greetOnNewConversation: c.greetOnNewConversation === true,
+    humanQuietHours: humanQuietHours(c),
     rules: rules.map((r: any, i: number) => ({
       id: str(r?.id, 60) || `rule-${Date.now()}-${i}`,
       title: str(r?.title, 120) || `Menu ${i + 1}`,
@@ -879,13 +894,15 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
           if (safePhoneId.startsWith('phone_')) {
             warnings.push('Nomor WhatsApp Business App belum terdeteksi di WABA — sinkronisasi kontak & riwayat chat tidak bisa dimulai.');
           } else {
-            // Meta only allows these within 24 hours of onboarding; contacts first, then history
-            const contactSync = await MetaApiService.requestSmbAppSync(safePhoneId, finalAccessToken, 'smb_app_state_sync');
-            const historySync = await MetaApiService.requestSmbAppSync(safePhoneId, finalAccessToken, 'history');
-            syncStarted = contactSync.ok && historySync.ok;
+            // Remember when: Meta only allows the sync within 24 hours (see /waba/coexistence/resync)
+            await db
+              .update(phoneNumbers)
+              .set({ coexistenceOnboardedAt: new Date() })
+              .where(and(eq(phoneNumbers.organizationId, user.orgId), eq(phoneNumbers.phoneNumberId, safePhoneId)));
+            const sync = await startCoexistenceSync(safePhoneId, finalAccessToken);
+            syncStarted = sync.ok;
             if (!syncStarted) {
-              const reason = [!contactSync.ok && contactSync.error, !historySync.ok && historySync.error].filter(Boolean).join('; ');
-              warnings.push(`Sinkronisasi kontak / riwayat chat dari aplikasi WhatsApp Business gagal dimulai (${reason}).`);
+              warnings.push(`Sinkronisasi kontak / riwayat chat dari aplikasi WhatsApp Business gagal dimulai (${sync.error}). Coba lagi lewat tombol "Sinkron ulang" dalam 24 jam.`);
             }
           }
         }
@@ -933,6 +950,51 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
       }),
     }
   )
+
+  // ─── POST /settings/waba/coexistence/resync — retry the contact & chat-history import ───
+  // Only within 24 hours of WhatsApp Business app onboarding (Meta rejects it afterwards).
+  .post('/waba/coexistence/resync', async ({ user, set }) => {
+    if (!user) {
+      set.status = 401;
+      return { success: false, error: 'Unauthorized' };
+    }
+    if (user.role !== 'ADMINISTRATOR') {
+      set.status = 403;
+      return { success: false, error: 'Akses dibatasi untuk Administrator' };
+    }
+    const phone = await getActivePhone(user.orgId);
+    const onboardedAt = phone?.coexistenceOnboardedAt ? new Date(phone.coexistenceOnboardedAt).getTime() : 0;
+    if (!phone || !onboardedAt) {
+      set.status = 400;
+      return { success: false, error: 'Nomor aktif tidak dihubungkan lewat aplikasi WhatsApp Business.' };
+    }
+    if (Date.now() - onboardedAt > COEXISTENCE_SYNC_WINDOW_MS) {
+      set.status = 400;
+      return {
+        success: false,
+        error: 'Batas 24 jam sejak nomor dihubungkan sudah lewat, jadi Meta tidak lagi mengizinkan impor kontak & riwayat chat.',
+      };
+    }
+    const [org] = await db
+      .select({ accessToken: organizations.accessToken })
+      .from(organizations)
+      .where(eq(organizations.id, user.orgId))
+      .limit(1);
+    const token = resolveOrgToken(org?.accessToken);
+    if (!token) {
+      set.status = 400;
+      return { success: false, error: 'Token akses Meta tidak tersedia. Hubungkan ulang WhatsApp Business.' };
+    }
+    const sync = await startCoexistenceSync(phone.phoneNumberId, token);
+    if (!sync.ok) {
+      set.status = 502;
+      return { success: false, error: `Meta menolak permintaan sinkronisasi (${sync.error}).` };
+    }
+    return {
+      success: true,
+      message: 'Sinkronisasi dimulai. Kontak dan riwayat chat akan muncul bertahap dalam beberapa menit.',
+    };
+  })
 
   // ═══════════════════════════════════════════════════════════════
   // CHANGE NUMBER FLOW (Administrator)

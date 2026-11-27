@@ -16,6 +16,8 @@ export const phoneNumbers = mysqlTable('phone_numbers', {
   verifiedName: varchar('verified_name', { length: 255 }),
   qualityRating: varchar('quality_rating', { length: 50 }).default('UNKNOWN'),
   status: varchar('status', { length: 50 }).default('CONNECTED'),
+  /** When the number was onboarded as WhatsApp Business app Coexistence (Meta allows the contact/history sync for 24h) */
+  coexistenceOnboardedAt: datetime('coexistence_onboarded_at'),
   createdAt: datetime('created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
 }, (table) => [
   uniqueIndex('uq_phone_id').on(table.phoneNumberId),

@@ -42,8 +42,19 @@ Silakan balas dengan angka:
     greetingText: DEFAULT_GREETING,
     greetingKeywords: ['halo', 'hai', 'hi', 'menu', 'mulai', 'p'],
     greetOnNewConversation: true,
+    // Bot stays quiet this many hours after a person replied (0 = until the conversation is resolved)
+    humanQuietHours: 12,
     rules: [] as Rule[],
   });
+  const quietOptions = [
+    { value: 1, label: '1 jam' },
+    { value: 3, label: '3 jam' },
+    { value: 6, label: '6 jam' },
+    { value: 12, label: '12 jam' },
+    { value: 24, label: '24 jam' },
+    { value: 48, label: '48 jam' },
+    { value: 0, label: 'Sampai percakapan diselesaikan' },
+  ];
   let hasApiKey = $state(false);
   let apiKeyHint = $state('');
   let editingKey = $state(false);
@@ -178,6 +189,7 @@ Cara menjawab:
           greetingText: typeof c.greetingText === 'string' && c.greetingText ? c.greetingText : DEFAULT_GREETING,
           greetingKeywords: Array.isArray(c.greetingKeywords) && c.greetingKeywords.length ? c.greetingKeywords : menu.greetingKeywords,
           greetOnNewConversation: c.greetOnNewConversation === true,
+          humanQuietHours: quietOptions.some((o) => o.value === c.humanQuietHours) ? c.humanQuietHours : 12,
           rules: Array.isArray(c.rules)
             ? c.rules.map((r: any, i: number) => ({
                 id: r.id || `rule-${i}`,
@@ -535,6 +547,27 @@ Cara menjawab:
               {#if ai.triggerMode === 'OUT_OF_HOURS' && !hours.enabled}
                 <Alert tone="warning" message="Jam kerja belum diatur, jadi asisten tetap membalas setiap saat. Atur di tab Jam kerja." />
               {/if}
+            </section>
+
+            <!-- After a human reply -->
+            <section class="ui-card space-y-3 p-5">
+              <div>
+                <h3 class="text-sm font-semibold text-slate-900 dark:text-white">Setelah agen membalas</h3>
+                <p class="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
+                  Jika agen membalas dari CRM atau dari aplikasi WhatsApp Business di HP, asisten berhenti membalas pelanggan itu agar tidak terjadi balasan ganda.
+                </p>
+              </div>
+              <div class="grid grid-cols-1 gap-1.5 sm:max-w-xs">
+                <label for="quiet-hours" class="text-sm font-medium text-slate-700 dark:text-slate-300">Asisten diam selama</label>
+                <select id="quiet-hours" class="ui-input" bind:value={menu.humanQuietHours}>
+                  {#each quietOptions as o}<option value={o.value}>{o.label}</option>{/each}
+                </select>
+              </div>
+              <p class="text-xs text-slate-500 dark:text-slate-400">
+                {menu.humanQuietHours === 0
+                  ? 'Asisten aktif lagi setelah percakapan ditandai selesai dan pelanggan memulai percakapan baru.'
+                  : `Dihitung dari balasan agen terakhir. Lewat ${menu.humanQuietHours} jam tanpa balasan agen, asisten membalas lagi.`}
+              </p>
             </section>
 
             <!-- Fallback -->

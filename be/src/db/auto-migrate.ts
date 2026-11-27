@@ -186,6 +186,22 @@ export async function autoMigrateSchema(): Promise<void> {
       console.warn('⚠️ organizations.quick_replies migration notice:', err?.message || err);
     }
 
+    // 8. phone_numbers.coexistence_onboarded_at (WhatsApp Business app Coexistence, 24h sync window)
+    try {
+      const cols = rowsOf(
+        await db.execute(sql`
+          SELECT COLUMN_NAME FROM information_schema.COLUMNS
+          WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'phone_numbers' AND COLUMN_NAME = 'coexistence_onboarded_at'
+        `)
+      );
+      if (cols.length === 0) {
+        await db.execute(sql`ALTER TABLE phone_numbers ADD COLUMN coexistence_onboarded_at DATETIME NULL`);
+        console.log('🧩 phone_numbers.coexistence_onboarded_at ditambahkan.');
+      }
+    } catch (err: any) {
+      console.warn('⚠️ phone_numbers.coexistence_onboarded_at migration notice:', err?.message || err);
+    }
+
     // 6. Deleting a user who created a broadcast failed (FK was NO ACTION in older databases)
     try {
       await ensureFkSetNull('broadcast_campaigns', 'created_by_id', 'users', 'VARCHAR(36)');

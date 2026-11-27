@@ -59,6 +59,10 @@
   let isConnectingFb = $state(false);
   let isDisconnecting = $state(false);
   let fbSuccessMsg = $state<string | null>(null);
+  // WhatsApp Business app (Coexistence): Meta accepts a contact / chat-history re-sync until this time
+  let coexSyncUntil = $state<number | null>(null);
+  let isResyncingCoex = $state(false);
+  const canResyncCoex = $derived(coexSyncUntil !== null && coexSyncUntil > Date.now());
   let fbErrorMsg = $state<string | null>(null);
 
   // Settings form state
@@ -454,7 +458,25 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
       if (res.phoneNumbers && res.phoneNumbers.length > 0) {
         displayPhoneNumber = res.phoneNumbers[0].displayPhoneNumber || '';
         verifiedName = res.phoneNumbers[0].verifiedName || '';
+        const onboarded = res.phoneNumbers[0].coexistenceOnboardedAt;
+        coexSyncUntil = onboarded ? new Date(onboarded).getTime() + 24 * 60 * 60 * 1000 : null;
+      } else {
+        coexSyncUntil = null;
       }
+    }
+  }
+
+  async function resyncCoexistence() {
+    isResyncingCoex = true;
+    fbSuccessMsg = null;
+    fbErrorMsg = null;
+    const res = await apiRequest<any>('/settings/waba/coexistence/resync', { method: 'POST' });
+    isResyncingCoex = false;
+    if (res.success) {
+      fbSuccessMsg = res.message || 'Sinkronisasi kontak & riwayat chat dimulai.';
+      setTimeout(() => (fbSuccessMsg = null), 6000);
+    } else {
+      fbErrorMsg = res.error || 'Gagal memulai sinkronisasi kontak & riwayat chat.';
     }
   }
 
@@ -926,6 +948,18 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
                 <RefreshCw class="w-3.5 h-3.5 text-slate-500 dark:text-slate-400 {isSyncingLive ? 'animate-spin text-emerald-500' : ''}" />
                 <span>{isSyncingLive ? 'Menyinkronkan...' : 'Sinkronkan Meta'}</span>
               </button>
+
+              {#if canResyncCoex}
+                <button
+                  onclick={resyncCoexistence}
+                  disabled={isResyncingCoex}
+                  class="h-9 px-3.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-slate-700/80 border border-emerald-300 dark:border-emerald-500/40 text-emerald-700 dark:text-emerald-400 text-xs font-semibold flex items-center gap-2 transition shadow-sm cursor-pointer disabled:opacity-60"
+                  title="Impor ulang kontak & riwayat chat dari aplikasi WhatsApp Business (hanya bisa dalam 24 jam sejak nomor dihubungkan, sampai {new Date(coexSyncUntil ?? 0).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })})"
+                >
+                  <RefreshCw class="w-3.5 h-3.5 {isResyncingCoex ? 'animate-spin' : ''}" />
+                  <span>{isResyncingCoex ? 'Meminta...' : 'Sinkron ulang chat HP'}</span>
+                </button>
+              {/if}
 
               <button
                 onclick={() => (showChangeNumber = true)}
