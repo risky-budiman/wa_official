@@ -34,6 +34,18 @@ export class MessageService {
         )
       );
 
+    const items = await this.fetchThread(conversationId, query);
+    return {
+      items,
+      count: items.length,
+    };
+  }
+
+  /**
+   * Messages of one conversation, oldest → newest. No access check and no read receipts:
+   * callers verify access first (list() above, or the contact's chat history).
+   */
+  static async fetchThread(conversationId: string, query: GetMessagesQuery = {}) {
     const limit = Math.min(query.limit || 200, 500);
     const offset = query.offset || 0;
 
@@ -64,12 +76,7 @@ export class MessageService {
       .limit(limit)
       .offset(offset);
 
-    const items = newestFirst.reverse();
-
-    return {
-      items,
-      count: items.length,
-    };
+    return newestFirst.reverse();
   }
 
   /**

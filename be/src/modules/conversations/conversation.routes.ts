@@ -95,6 +95,37 @@ export const conversationRoutes = new Elysia({ prefix: '/conversations' })
     }
   })
 
+  // ─── GET /conversations/:id/history — the contact's earlier sessions ──
+  .get('/:id/history', async ({ user, params, set }) => {
+    if (!user) {
+      set.status = 401;
+      return { success: false, error: 'Unauthorized' };
+    }
+    try {
+      const items = await ConversationService.history(user, params.id);
+      return { success: true, items };
+    } catch (err: any) {
+      set.status = 403;
+      return { success: false, error: err.message };
+    }
+  })
+
+  // ─── GET /conversations/:id/history/:sessionId — read an earlier session (read-only) ──
+  .get('/:id/history/:sessionId', async ({ user, params, set }) => {
+    if (!user) {
+      set.status = 401;
+      return { success: false, error: 'Unauthorized' };
+    }
+    try {
+      const session = await ConversationService.historySession(user, params.id, params.sessionId);
+      const items = await MessageService.fetchThread(session.id, { limit: 500 });
+      return { success: true, session, items };
+    } catch (err: any) {
+      set.status = 403;
+      return { success: false, error: err.message };
+    }
+  })
+
   // ─── POST /conversations/:id/participants — Add Multi-Agent Participant ──
   .post(
     '/:id/participants',

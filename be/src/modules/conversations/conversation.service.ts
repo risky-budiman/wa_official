@@ -272,6 +272,65 @@ export class ConversationService {
   }
 
   /**
+   * The contact's other conversations (earlier sessions / tickets), newest first. Whoever may open
+   * the current conversation may also read the customer's earlier sessions, like the contact history
+   * in other CRMs — an agent needs that context to continue the conversation.
+   */
+  static async history(user: JwtPayload, conversationId: string) {
+    const current = await this.getById(user, conversationId);
+    const items = await db
+      .select({
+        id: conversations.id,
+        status: conversations.status,
+        createdAt: conversations.createdAt,
+        lastMessageAt: conversations.lastMessageAt,
+        lastMessagePreview: conversations.lastMessagePreview,
+        assignedUserName: users.fullName,
+        messageCount: sql<number>`(
+          SELECT COUNT(*) FROM messages m
+          WHERE m.conversation_id = ${conversations.id} AND COALESCE(m.is_internal_note, 0) = 0
+        )`,
+      })
+      .from(conversations)
+      .leftJoin(users, eq(conversations.assignedUserId, users.id))
+      .where(
+        and(
+          eq(conversations.organizationId, user.orgId),
+          eq(conversations.contactId, current.contactId),
+          ne(conversations.id, conversationId)
+        )
+      )
+      .orderBy(desc(conversations.createdAt))
+      .limit(100);
+    return items.map((i) => ({ ...i, messageCount: Number(i.messageCount || 0) }));
+  }
+
+  /** One earlier session of the same contact, for reading from the current conversation. */
+  static async historySession(user: JwtPayload, conversationId: string, sessionId: string) {
+    const current = await this.getById(user, conversationId);
+    const [session] = await db
+      .select({
+        id: conversations.id,
+        status: conversations.status,
+        createdAt: conversations.createdAt,
+        lastMessageAt: conversations.lastMessageAt,
+        assignedUserName: users.fullName,
+      })
+      .from(conversations)
+      .leftJoin(users, eq(conversations.assignedUserId, users.id))
+      .where(
+        and(
+          eq(conversations.id, sessionId),
+          eq(conversations.organizationId, user.orgId),
+          eq(conversations.contactId, current.contactId)
+        )
+      )
+      .limit(1);
+    if (!session) throw new Error('Sesi percakapan tidak ditemukan untuk kontak ini.');
+    return session;
+  }
+
+  /**
    * Add a secondary agent / collaborator to conversation
    */
   static async addParticipant(user: JwtPayload, conversationId: string, targetUserId: string) {

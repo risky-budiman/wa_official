@@ -46,6 +46,7 @@
     PanelRightOpen,
     PanelRightClose,
     Smartphone,
+    History,
   } from "lucide-svelte";
   import { formatWhatsAppMarkdown } from "$lib/utils/whatsapp-formatter";
   import { fetchQuickReplies } from "$lib/api/quick-replies";
@@ -323,6 +324,68 @@
     status: string;
     createdAt: string;
   }
+
+  // ─── Contact chat history: the customer's earlier sessions (read-only) ───
+  interface HistorySession {
+    id: string;
+    status: ConversationItem["status"];
+    createdAt: string;
+    lastMessageAt: string | null;
+    lastMessagePreview: string | null;
+    assignedUserName: string | null;
+    messageCount: number;
+  }
+  let historySessions = $state<HistorySession[]>([]);
+  let historyLoading = $state(false);
+  let historyView = $state<{ session: HistorySession; items: MessageItem[] } | null>(null);
+  let historyViewLoading = $state(false);
+  let historyViewError = $state<string | null>(null);
+
+  const SESSION_STATUS: Record<string, { label: string; tone: string }> = {
+    RESOLVED: { label: "Selesai", tone: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300" },
+    OPEN: { label: "Aktif", tone: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300" },
+    UNASSIGNED: { label: "Antrean", tone: "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300" },
+    PENDING: { label: "Menunggu agen", tone: "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300" },
+  };
+
+  function sessionRange(s: HistorySession): string {
+    const fmt = (iso: string) =>
+      new Date(iso).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
+    const start = fmt(s.createdAt);
+    const end = s.lastMessageAt ? fmt(s.lastMessageAt) : start;
+    return start === end ? start : `${start} – ${end}`;
+  }
+
+  async function loadHistory(convId: string) {
+    historyLoading = true;
+    const res = await apiRequest<{ items: HistorySession[] }>(`/conversations/${convId}/history`);
+    if (selectedConvId !== convId) return; // switched chats meanwhile
+    historyLoading = false;
+    historySessions = res.success && Array.isArray(res.items) ? res.items : [];
+  }
+
+  async function openHistorySession(s: HistorySession) {
+    if (!selectedConvId) return;
+    historyView = { session: s, items: [] };
+    historyViewError = null;
+    historyViewLoading = true;
+    const res = await apiRequest<{ items: MessageItem[] }>(`/conversations/${selectedConvId}/history/${s.id}`);
+    if (!historyView || historyView.session.id !== s.id) return; // closed or another session opened
+    historyViewLoading = false;
+    if (res.success && Array.isArray(res.items)) historyView = { session: s, items: res.items };
+    else historyViewError = (res as any).error || "Riwayat percakapan tidak dapat dimuat.";
+  }
+
+  // Reload the contact's earlier sessions whenever another chat is opened
+  $effect(() => {
+    const id = selectedConvId;
+    untrack(() => {
+      historyView = null;
+      historySessions = [];
+      if (id) loadHistory(id);
+      else historyLoading = false;
+    });
+  });
 
   // ─── Display helpers (chat list & thread) ───
   const AVATAR_TONES = [
@@ -1204,9 +1267,6 @@
   });
 </script>
 
-<div
-  class="h-full flex overflow-hidden bg-slate-100/70 dark:bg-slate-950 text-slate-900 dark:text-slate-100"
->
 <!-- Shared media renderer for chat bubbles (works on light, tinted and dark bubbles) -->
 {#snippet messageMedia(msg: MessageItem)}
   {#if msg.mediaUrl}
@@ -1256,6 +1316,10 @@
     </div>
   {/if}
 {/snippet}
+
+<div
+  class="h-full flex overflow-hidden bg-slate-100/70 dark:bg-slate-950 text-slate-900 dark:text-slate-100"
+>
   <!-- 1. LEFT COLUMN: Conversation List -->
   <div
     class="w-full md:w-80 border-r border-slate-200 dark:border-slate-800/80 bg-white dark:bg-slate-900/60 flex-col shrink-0 {selectedConvId ? 'hidden md:flex' : 'flex'}"
@@ -2134,6 +2198,43 @@
           </dl>
         </section>
 
+        <!-- Earlier sessions with this contact -->
+        <section>
+          <h5 class="mb-2.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            <History class="h-3.5 w-3.5" /> Riwayat percakapan
+            {#if historySessions.length}<span class="font-normal normal-case text-slate-400">· {historySessions.length} sesi</span>{/if}
+          </h5>
+          {#if historyLoading}
+            <p class="flex items-center gap-2 text-sm text-slate-400"><Loader2 class="h-4 w-4 animate-spin" /> Memuat…</p>
+          {:else if historySessions.length === 0}
+            <p class="text-sm text-slate-400 dark:text-slate-500">Belum ada sesi sebelumnya dengan kontak ini.</p>
+          {:else}
+            <ul class="max-h-80 space-y-1.5 overflow-y-auto pr-0.5">
+              {#each historySessions as s (s.id)}
+                {@const st = SESSION_STATUS[s.status] || SESSION_STATUS.RESOLVED}
+                <li>
+                  <button
+                    type="button"
+                    onclick={() => openHistorySession(s)}
+                    class="w-full cursor-pointer rounded-xl border border-slate-200 px-3 py-2.5 text-left transition hover:border-emerald-300 hover:bg-emerald-50/40 dark:border-slate-800 dark:hover:border-emerald-500/40 dark:hover:bg-emerald-500/5"
+                  >
+                    <span class="flex items-center justify-between gap-2">
+                      <span class="truncate text-sm font-medium text-slate-900 dark:text-white">{sessionRange(s)}</span>
+                      <span class="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold {st.tone}">{st.label}</span>
+                    </span>
+                    <span class="mt-0.5 block truncate text-xs text-slate-500 dark:text-slate-400">
+                      {s.assignedUserName || "Tanpa agen"} · {s.messageCount} pesan
+                    </span>
+                    {#if s.lastMessagePreview}
+                      <span class="mt-1 block truncate text-xs text-slate-400 dark:text-slate-500">{s.lastMessagePreview}</span>
+                    {/if}
+                  </button>
+                </li>
+              {/each}
+            </ul>
+          {/if}
+        </section>
+
         <!-- Tags -->
         <section>
           <div class="mb-2.5 flex items-center justify-between">
@@ -2182,6 +2283,86 @@
     </aside>
   {/if}
 </div>
+
+<!-- ─── Earlier session viewer (read-only) ─── -->
+{#if historyView}
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm"
+    role="presentation"
+    onclick={(e) => { if (e.target === e.currentTarget) historyView = null; }}
+    onkeydown={(e) => { if (e.key === "Escape") historyView = null; }}
+  >
+    <div class="flex h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900" role="dialog" aria-modal="true" aria-label="Riwayat percakapan">
+      <div class="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4 dark:border-slate-800">
+        <div class="min-w-0">
+          <h3 class="flex items-center gap-2 text-base font-semibold text-slate-900 dark:text-white">
+            <History class="h-4 w-4 text-emerald-600" /> {sessionRange(historyView.session)}
+          </h3>
+          <p class="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400">
+            {selectedConv?.contact.name} · {historyView.session.assignedUserName || "Tanpa agen"} · {(SESSION_STATUS[historyView.session.status] || SESSION_STATUS.RESOLVED).label}
+          </p>
+        </div>
+        <button type="button" class="ui-icon-btn" onclick={() => (historyView = null)} aria-label="Tutup riwayat"><X class="h-5 w-5" /></button>
+      </div>
+
+      <div class="flex-1 overflow-y-auto bg-slate-50 px-4 py-4 dark:bg-slate-950/60">
+        {#if historyViewLoading}
+          <p class="flex items-center justify-center gap-2 py-10 text-sm text-slate-400"><Loader2 class="h-4 w-4 animate-spin" /> Memuat percakapan…</p>
+        {:else if historyViewError}
+          <Alert tone="error" message={historyViewError} />
+        {:else if historyView.items.length === 0}
+          <p class="py-10 text-center text-sm text-slate-400">Sesi ini tidak berisi pesan.</p>
+        {:else}
+          {#each historyView.items as msg, i (msg.id)}
+            {@const prev = i > 0 ? historyView.items[i - 1] : null}
+            {#if !prev || dayKey(prev.createdAt) !== dayKey(msg.createdAt)}
+              <div class="my-3 flex justify-center">
+                <span class="rounded-full bg-white px-3 py-1 text-[11px] font-medium text-slate-500 shadow-sm ring-1 ring-slate-200/80 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700">{dayLabel(msg.createdAt)}</span>
+              </div>
+            {/if}
+            {#if msg.isInternalNote}
+              <div class="my-2 rounded-xl border border-dashed border-amber-300 bg-amber-50/90 px-3.5 py-2.5 text-sm dark:border-amber-700/60 dark:bg-amber-950/30">
+                <div class="mb-0.5 flex items-center gap-1.5 text-xs font-semibold text-amber-800 dark:text-amber-300">
+                  <Eye class="h-3.5 w-3.5" /> Catatan internal{#if msg.senderName}<span class="font-normal">· {msg.senderName}</span>{/if}
+                  <span class="ml-auto font-normal">{timeLabel(msg.createdAt)}</span>
+                </div>
+                <div class="text-slate-800 dark:text-slate-200">{@html formatWhatsAppMarkdown(msg.body)}</div>
+              </div>
+            {:else}
+              {@const inbound = msg.senderType === "CONTACT"}
+              {@const isBot = msg.senderType === "BOT"}
+              <div class="mt-1.5 flex {inbound ? 'justify-start' : 'justify-end'}">
+                <div
+                  class="max-w-[85%] rounded-2xl px-3.5 pt-2 pb-1.5 text-sm leading-relaxed shadow-sm ring-1
+                    {inbound
+                      ? 'bg-white text-slate-800 ring-slate-200/70 dark:bg-slate-800 dark:text-slate-100 dark:ring-slate-700/60'
+                      : isBot
+                        ? 'bg-indigo-50 text-slate-800 ring-indigo-200/70 dark:bg-indigo-950/50 dark:text-slate-100 dark:ring-indigo-800/50'
+                        : 'bg-emerald-50 text-slate-800 ring-emerald-200/70 dark:bg-emerald-900/35 dark:text-slate-100 dark:ring-emerald-800/50'}"
+                >
+                  {#if !inbound}
+                    <div class="mb-0.5 flex items-center gap-1 text-xs font-semibold {isBot ? 'text-indigo-600 dark:text-indigo-300' : 'text-emerald-700 dark:text-emerald-400'}">
+                      {#if isBot}<Bot class="h-3.5 w-3.5" /> Balasan otomatis{:else if msg.senderType === "AGENT" && !msg.senderId}<Smartphone class="h-3.5 w-3.5" /> Dari aplikasi WhatsApp Business{:else}{msg.senderName || "Customer Service"}{/if}
+                    </div>
+                  {/if}
+                  {@render messageMedia(msg)}
+                  {#if hasRenderableBody(msg)}
+                    <div class="break-words [overflow-wrap:anywhere]">{@html formatWhatsAppMarkdown(msg.body)}</div>
+                  {/if}
+                  <div class="mt-0.5 text-right text-[11px] text-slate-400 dark:text-slate-500">{timeLabel(msg.createdAt)}</div>
+                </div>
+              </div>
+            {/if}
+          {/each}
+        {/if}
+      </div>
+
+      <div class="flex items-center gap-2 border-t border-slate-200 px-5 py-3 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
+        <Lock class="h-3.5 w-3.5" /> Hanya baca — balas pelanggan dari percakapan yang sedang aktif.
+      </div>
+    </div>
+  </div>
+{/if}
 
 <!-- ─── 1. MODAL TAMBAH KOLABORATOR (MULTI-AGENT) ─── -->
 {#if showAddCollaboratorModal}
