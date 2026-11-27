@@ -3,14 +3,15 @@
 // ===========================================
 //
 // Flow for every inbound customer message (called from the webhook):
-//   1. Skip when a human owns the conversation, it is resolved, or the customer
-//      already asked for a human (status PENDING).
+//   1. Skip when a human owns the conversation, it is resolved, the customer
+//      already asked for a human (status PENDING), or a human replied recently —
+//      from the CRM or from the WhatsApp Business app on the phone (Coexistence).
 //   2. Respect the master switch and "only outside working hours".
 //   3. bot-engine decides: keyword rule / greeting menu / AI / fixed message / silent.
 //   4. Send through the organization's own WhatsApp channel and store the message.
 
 import { nanoid } from 'nanoid';
-import { and, desc, eq, gte } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, sql } from 'drizzle-orm';
 import { db } from '../config/database';
 import { messages, conversations, phoneNumbers, organizations } from '../db/schema';
 import type { AiAgentConfig, ChatbotConfig, OperatingHoursConfig } from '../db/schema/organizations';
@@ -35,6 +36,10 @@ const parseJson = <T>(v: unknown): T | null => {
   return v as T;
 };
 
+/** A human (agent in the CRM, or the owner in the WhatsApp Business app) replied within this window → bot stays quiet. */
+export const HUMAN_REPLY_QUIET_MS = 12 * 60 * 60 * 1000;
+const HUMAN_SENDERS = ['AGENT', 'SUPERVISOR', 'ADMINISTRATOR'] as const;
+
 /** Don't repeat the same fixed auto-reply to one customer more often than this. */
 const STATIC_REPEAT_WINDOW_MS = 6 * 60 * 60 * 1000;
 
@@ -49,6 +54,29 @@ export function buildAiSystemPrompt(orgName: string, customPrompt?: string) {
 }
 
 export class ChatbotService {
+  /**
+   * Did a person reply to this contact recently? Looks across the contact's conversations, because a
+   * reply from the phone may sit in an older (resolved) ticket while the customer's answer opens a new one.
+   */
+  static async humanRepliedRecently(orgId: string, contactId: string, now = Date.now()): Promise<boolean> {
+    const [last] = await db
+      .select({ id: messages.id })
+      .from(messages)
+      .innerJoin(conversations, eq(messages.conversationId, conversations.id))
+      .where(
+        and(
+          eq(conversations.organizationId, orgId),
+          eq(conversations.contactId, contactId),
+          eq(messages.direction, 'OUTBOUND'),
+          sql`COALESCE(${messages.isInternalNote}, 0) = 0`,
+          inArray(messages.senderType, [...HUMAN_SENDERS]),
+          gte(messages.createdAt, new Date(now - HUMAN_REPLY_QUIET_MS))
+        )
+      )
+      .limit(1);
+    return !!last;
+  }
+
   static async processInbound(params: {
     orgId: string;
     convId: string;
@@ -62,11 +90,14 @@ export class ChatbotService {
 
     // 1. A human owns it / closed / customer is waiting for a human → stay quiet
     const [conv] = await db
-      .select({ assignedUserId: conversations.assignedUserId, status: conversations.status })
+      .select({ assignedUserId: conversations.assignedUserId, status: conversations.status, contactId: conversations.contactId })
       .from(conversations)
       .where(eq(conversations.id, convId))
       .limit(1);
     if (!conv || conv.assignedUserId || conv.status === 'RESOLVED' || conv.status === 'PENDING') {
+      return { handledBy: 'NONE' };
+    }
+    if (await this.humanRepliedRecently(orgId, conv.contactId)) {
       return { handledBy: 'NONE' };
     }
 
