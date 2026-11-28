@@ -9,6 +9,7 @@ import { hash } from 'argon2';
 import { db } from '../../config/database';
 import { users, teams, conversations, organizations } from '../../db/schema';
 import { authPlugin, invalidateAccountCache } from '../../middleware/auth';
+import { QueueDistributorService } from '../../services/queue-distributor.service';
 import type { UserRole, UserStatus } from '../../db/schema/users';
 
 /** Roles that a tenant Administrator is allowed to assign */
@@ -361,6 +362,10 @@ export const userRoutes = new Elysia({ prefix: '/users' })
     } catch (err: any) {
       set.status = 400;
       return { success: false, error: err.message };
+    }
+    // Someone just went Online: hand them waiting chats right away instead of on the next cycle
+    if ((payload as any).isOnline === true) {
+      QueueDistributorService.distribute(user.orgId).catch((err) => console.warn('Queue distributor notice:', err?.message || err));
     }
     return { success: true, message: 'Data pengguna berhasil diperbarui' };
   }, {

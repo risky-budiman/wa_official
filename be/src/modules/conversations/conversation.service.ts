@@ -680,7 +680,8 @@ export class ConversationService {
           sql`(${conversations.status} = 'UNASSIGNED' OR ${conversations.assignedUserId} IS NULL)`
         )
       )
-      .orderBy(conversations.createdAt)
+      // Chats that can still be answered normally first (oldest first), expired ones after
+      .orderBy(sql`CASE WHEN ${windowStillOpen()} THEN 0 ELSE 1 END`, conversations.createdAt)
       .limit(1);
 
     if (!nextConv) {
