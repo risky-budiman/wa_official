@@ -23,7 +23,8 @@ import { normalizeAssignmentRules, type AssignmentRules } from '../../services/a
 /**
  * The customer's 24-hour WhatsApp window is still open. Without a stored expiry (e.g. chats synced
  * from the WhatsApp Business app) fall back to last activity + 24h, like the inbox does.
- * Expired chats can only get a template, so they stay out of the queue until the customer writes again.
+ * Used by the idle rule: an expired chat only allows a template, so moving it to another agent does not help.
+ * (Expired chats that are not resolved DO stay in the queue.)
  */
 export function windowStillOpen(now = new Date()) {
   return or(
@@ -65,11 +66,9 @@ export class ConversationService {
             eq(conversations.organizationId, user.orgId),
             or(
               eq(conversations.assignedUserId, user.id),
-              // queue: waiting for any agent (new, or handed off by the chatbot) and still answerable
-              and(
-                or(eq(conversations.status, 'UNASSIGNED'), and(eq(conversations.status, 'PENDING'), isNull(conversations.assignedUserId))),
-                windowStillOpen()
-              )
+              eq(conversations.status, 'UNASSIGNED'),
+              // handed off by the chatbot, waiting for any agent
+              and(eq(conversations.status, 'PENDING'), isNull(conversations.assignedUserId))
             )
           )
         );
@@ -643,8 +642,7 @@ export class ConversationService {
         and(
           eq(conversations.organizationId, user.orgId),
           ne(conversations.status, 'RESOLVED'),
-          sql`(${conversations.status} = 'UNASSIGNED' OR ${conversations.assignedUserId} IS NULL)`,
-          windowStillOpen()
+          sql`(${conversations.status} = 'UNASSIGNED' OR ${conversations.assignedUserId} IS NULL)`
         )
       );
 
@@ -679,8 +677,7 @@ export class ConversationService {
         and(
           eq(conversations.organizationId, user.orgId),
           ne(conversations.status, 'RESOLVED'),
-          sql`(${conversations.status} = 'UNASSIGNED' OR ${conversations.assignedUserId} IS NULL)`,
-          windowStillOpen()
+          sql`(${conversations.status} = 'UNASSIGNED' OR ${conversations.assignedUserId} IS NULL)`
         )
       )
       .orderBy(conversations.createdAt)

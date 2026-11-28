@@ -654,8 +654,6 @@
         if (activeTab === "UNASSIGNED") {
           if (c.status === "RESOLVED") return false;
           if (c.status !== "UNASSIGNED" && c.assignedUser) return false;
-          // Expired 24h window: only a template can be sent, so it is no longer in the queue
-          if (isWindowExpired(c)) return false;
         }
       }
 
