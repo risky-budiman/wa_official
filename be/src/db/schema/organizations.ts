@@ -58,6 +58,18 @@ export interface ChatbotConfig {
   humanQuietHours?: number;
 }
 
+/** How chats are distributed to agents (like Qontak's agent allocation settings). */
+export interface AssignmentConfig {
+  /** AUTO: new chats go to the least-busy online agent. MANUAL: they wait in the queue to be taken. */
+  mode?: 'AUTO' | 'MANUAL';
+  /** Agents may take chats from the queue ("Ambil", or by replying). Off: only supervisors/admins assign. */
+  agentCanTakeUnassigned?: boolean;
+  /** Agents may hand their own chats to another agent. */
+  agentCanTransfer?: boolean;
+  /** Customer waits this many minutes without an answer → chat moves to another agent (0 = off). */
+  idleReassignMinutes?: number;
+}
+
 export const orgStatusEnum = ['ACTIVE', 'SUSPENDED', 'TRIAL', 'EXPIRED'] as const;
 
 export type OrgStatus = (typeof orgStatusEnum)[number];
@@ -86,6 +98,7 @@ export const organizations = mysqlTable('organizations', {
   chatbotConfig: json('chatbot_config').$type<ChatbotConfig>(),
   /** Team-wide quick replies (null = built-in defaults) */
   quickReplies: json('quick_replies').$type<QuickReply[]>(),
+  assignmentConfig: json('assignment_config').$type<AssignmentConfig>(),
   createdAt: datetime('created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: datetime('updated_at').default(sql`CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`).notNull(),
 });

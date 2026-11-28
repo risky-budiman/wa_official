@@ -24,20 +24,24 @@ import { env } from '../../config/env';
 import type { MetaWebhookBody } from './webhook.types';
 import { notArchived } from '../../services/phone-number.service';
 import { orgMetaToken } from '../../services/meta-credentials';
+import { normalizeAssignmentRules } from '../../services/assignment-rules';
 
 export class WebhookProcessor {
   /**
    * Auto-assign strategy: Pick active agent with the least number of active (OPEN/PENDING) conversations
    * Respects each organization's maxChatsPerAgent capacity limit.
    */
-  static async getLeastBusyAgent(orgId: string): Promise<string | null> {
+  static async getLeastBusyAgent(orgId: string, opts: { excludeUserId?: string } = {}): Promise<string | null> {
     try {
       // 0. Fetch Organization Workload & Capacity Configuration
       const [org] = await db
-        .select({ maxChatsPerAgent: organizations.maxChatsPerAgent })
+        .select({ maxChatsPerAgent: organizations.maxChatsPerAgent, assignmentConfig: organizations.assignmentConfig })
         .from(organizations)
         .where(eq(organizations.id, orgId))
         .limit(1);
+
+      // Manual distribution: chats wait in the queue until someone takes them
+      if (normalizeAssignmentRules(org?.assignmentConfig).mode === 'MANUAL') return null;
 
       const maxLimit = org?.maxChatsPerAgent ?? 5;
 
@@ -61,7 +65,7 @@ export class WebhookProcessor {
       if (activeAgents.length === 0) return null;
 
       // Only assign to agents who are currently ONLINE (isOnline = true)
-      const onlinePool = activeAgents.filter((a) => a.isOnline);
+      const onlinePool = activeAgents.filter((a) => a.isOnline && a.id !== opts.excludeUserId);
       if (onlinePool.length === 0) {
         // All agents are offline -> Return null so chat enters UNASSIGNED / PENDING queue for manual pickup
         return null;
@@ -335,6 +339,7 @@ export class WebhookProcessor {
                   phoneNumberId: phone.id,
                   contactId: contactId!,
                   assignedUserId: leastBusyAgentId,
+                  assignedAt: leastBusyAgentId ? new Date() : null,
                   status: leastBusyAgentId ? 'OPEN' : 'UNASSIGNED',
                   windowExpiresAt,
                   lastMessagePreview: messageBody,
@@ -365,6 +370,7 @@ export class WebhookProcessor {
               convId = activeConv.id;
               let targetAssignedUser = activeConv.assignedUserId;
               let targetStatus = activeConv.status;
+              const wasUnassigned = !targetAssignedUser;
 
               // If conversation was unassigned, route to least busy online agent or UNASSIGNED queue
               if (!targetAssignedUser) {
@@ -383,6 +389,7 @@ export class WebhookProcessor {
                   lastMessagePreview: messageBody,
                   lastMessageAt: new Date(),
                   assignedUserId: targetAssignedUser,
+                  ...(wasUnassigned && targetAssignedUser ? { assignedAt: new Date() } : {}),
                   status: targetStatus,
                   // The customer wrote to this number: replies must go out from it (after a number change)
                   phoneNumberId: phone.id,

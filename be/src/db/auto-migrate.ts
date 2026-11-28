@@ -202,6 +202,28 @@ export async function autoMigrateSchema(): Promise<void> {
       console.warn('⚠️ phone_numbers.coexistence_onboarded_at migration notice:', err?.message || err);
     }
 
+    // 9. Chat distribution settings + idle-rule bookkeeping
+    for (const [table, column, ddl] of [
+      ['organizations', 'assignment_config', sql`ALTER TABLE organizations ADD COLUMN assignment_config JSON NULL`],
+      ['conversations', 'assigned_at', sql`ALTER TABLE conversations ADD COLUMN assigned_at DATETIME NULL`],
+      ['conversations', 'idle_reassign_count', sql`ALTER TABLE conversations ADD COLUMN idle_reassign_count INT NOT NULL DEFAULT 0`],
+    ] as const) {
+      try {
+        const cols = rowsOf(
+          await db.execute(sql`
+            SELECT COLUMN_NAME FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ${table} AND COLUMN_NAME = ${column}
+          `)
+        );
+        if (cols.length === 0) {
+          await db.execute(ddl);
+          console.log(`🧩 ${table}.${column} ditambahkan.`);
+        }
+      } catch (err: any) {
+        console.warn(`⚠️ ${table}.${column} migration notice:`, err?.message || err);
+      }
+    }
+
     // 6. Deleting a user who created a broadcast failed (FK was NO ACTION in older databases)
     try {
       await ensureFkSetNull('broadcast_campaigns', 'created_by_id', 'users', 'VARCHAR(36)');

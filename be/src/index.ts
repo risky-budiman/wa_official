@@ -24,6 +24,7 @@ import { billingRoutes } from './modules/billing/billing.routes';
 import { wsPlugin } from './websocket/ws.server';
 import { startWebhookWorker } from './modules/webhook/webhook.processor';
 import { AutoResolveService } from './services/auto-resolve.service';
+import { IdleReassignService } from './services/idle-reassign.service';
 import { autoMigrateSchema } from './db/auto-migrate';
 
 // Validate environment and initialize database on startup
@@ -35,6 +36,7 @@ startWebhookWorker().catch((err) => console.error('❌ Webhook worker gagal star
 
 // Start Inactivity Auto-Resolve Background Worker
 AutoResolveService.startWorker(60000);
+IdleReassignService.startWorker(60000);
 BroadcastService.startScheduler(30000);
 
 const app = new Elysia()

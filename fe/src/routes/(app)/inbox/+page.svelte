@@ -506,6 +506,10 @@
   let conversationList = $state<ConversationItem[]>([]);
   let messageList = $state<MessageItem[]>([]);
   let availableAgents = $state<UserOption[]>([]);
+  // Pengaturan → Distribusi Chat (what agents may do themselves)
+  let assignmentRules = $state({ mode: "AUTO", agentCanTakeUnassigned: true, agentCanTransfer: false, idleReassignMinutes: 0 });
+  const isAgent = $derived(authStore.role === "AGENT");
+  const canTakeChats = $derived(!isAgent || assignmentRules.agentCanTakeUnassigned);
   let availableTemplates = $state<TemplateItem[]>([]);
   let activeLightboxUrl = $state<string | null>(null);
 
@@ -743,8 +747,16 @@
     }
   }
 
+  async function loadAssignmentRules() {
+    const res = await apiRequest<{ settings: { assignment?: typeof assignmentRules } }>("/settings/operations");
+    if (res.success && res.settings?.assignment) assignmentRules = res.settings.assignment;
+  }
+
   async function loadAgents() {
-    const res = await apiRequest<{ items: UserOption[] }>("/users");
+    // Agents cannot read the user list; they get the colleagues a chat can be handed to
+    const res = await apiRequest<{ items: UserOption[] }>(
+      authStore.role === "AGENT" ? "/conversations/transfer-targets" : "/users",
+    );
     if (res.success && res.items) {
       availableAgents = res.items;
       if (availableAgents.length > 0) {
@@ -965,6 +977,15 @@
         status: "SENT",
         createdAt: new Date().toISOString(),
       });
+
+      // An agent who handed the chat over no longer has access to it
+      if (isAgent) {
+        selectedConvId = null;
+        messageList = [];
+        notificationStore.setActiveConversation(null);
+      }
+    } else {
+      alert(res.error || "Gagal memindahkan percakapan.");
     }
   }
 
@@ -1221,6 +1242,24 @@
         if (conv) {
           conv.lastMessagePreview = textToSend || (currentAttachment ? `[${currentAttachment.category}]` : "");
           conv.status = "OPEN";
+          // The server makes whoever replies the owner (or a collaborator) automatically
+          const own = (res as any).ownership;
+          if (own?.assignedUser) conv.assignedUser = own.assignedUser;
+          if (own?.addedParticipant && !conv.participants?.some((p) => p.id === own.addedParticipant.id)) {
+            conv.participants = [...(conv.participants || []), own.addedParticipant];
+          }
+          if (own?.note && selectedConvId === targetConvId) {
+            messageList.push({
+              id: own.note.id,
+              senderType: "SYSTEM",
+              senderId: authStore.user?.id || null,
+              messageType: "text",
+              body: own.note.body,
+              isInternalNote: true,
+              status: "SENT",
+              createdAt: new Date().toISOString(),
+            } as MessageItem);
+          }
         }
       } else {
         restoreOnFailure(`Pesan gagal terkirim: ${res.error || "periksa koneksi lalu coba lagi"}. Teks dikembalikan ke kolom ketik.`);
@@ -1239,6 +1278,7 @@
       loadAgents(),
       loadTemplates(),
       loadQueueStats(),
+      loadAssignmentRules(),
     ]);
 
     // Smart throttled auto-refresh (4 seconds, pauses when tab is in background)
@@ -1368,7 +1408,11 @@
             </span>
           </div>
 
-          {#if unassignedQueueCount > 0}
+          {#if unassignedQueueCount > 0 && !canTakeChats}
+            <div class="text-[10px] text-amber-800/80 dark:text-amber-400/80 text-center py-0.5">
+              Chat dibagikan oleh supervisor
+            </div>
+          {:else if unassignedQueueCount > 0}
             <button
               onclick={claimNextFromQueue}
               disabled={isClaimingNext}
@@ -1613,7 +1657,7 @@
         </div>
 
         <div class="flex shrink-0 items-center gap-2">
-          {#if selectedConv.status !== "RESOLVED" && (!selectedConv.assignedUser || selectedConv.status === "UNASSIGNED")}
+          {#if canTakeChats && selectedConv.status !== "RESOLVED" && (!selectedConv.assignedUser || selectedConv.status === "UNASSIGNED")}
             <button
               onclick={() => claimConversation()}
               disabled={isActionLoading}
@@ -2291,6 +2335,14 @@
         </section>
 
         <!-- Actions -->
+        {#if isAgent && assignmentRules.agentCanTransfer && selectedConv.status !== "RESOLVED" && selectedConv.assignedUser?.id === authStore.user?.id}
+          <section class="space-y-2 border-t border-slate-100 pt-5 dark:border-slate-800">
+            <button onclick={() => (showReassignModal = true)} class="ui-btn-secondary w-full justify-start">
+              <User class="h-4 w-4 text-slate-400" />
+              Pindahkan ke agen lain
+            </button>
+          </section>
+        {/if}
         {#if authStore.role !== "AGENT"}
           <section class="space-y-2 border-t border-slate-100 pt-5 dark:border-slate-800">
             <button onclick={() => (showReassignModal = true)} class="ui-btn-secondary w-full justify-start">

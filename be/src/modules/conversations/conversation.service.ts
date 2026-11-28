@@ -17,6 +17,8 @@ import type { JwtPayload } from '../../middleware/auth';
 import type { GetConversationsQuery, AssignConversationBody } from './conversation.types';
 import type { ConversationStatus } from '../../db/schema/conversations';
 import { nanoid } from 'nanoid';
+import { organizations } from '../../db/schema';
+import { normalizeAssignmentRules, type AssignmentRules } from '../../services/assignment-rules';
 
 export class ConversationService {
   /**
@@ -25,6 +27,16 @@ export class ConversationService {
    * - SUPERVISOR: All conversations in organization / team
    * - ADMINISTRATOR: All conversations in organization
    */
+  /** The organization's chat distribution settings (Pengaturan → Distribusi Chat). */
+  static async rules(orgId: string): Promise<AssignmentRules> {
+    const [org] = await db
+      .select({ assignmentConfig: organizations.assignmentConfig })
+      .from(organizations)
+      .where(eq(organizations.id, orgId))
+      .limit(1);
+    return normalizeAssignmentRules(org?.assignmentConfig);
+  }
+
   static async list(user: JwtPayload, query: GetConversationsQuery = {}) {
     const limit = query.limit || 50;
     const offset = query.offset || 0;
@@ -403,6 +415,89 @@ export class ConversationService {
   }
 
   /**
+   * Called after a team member replies to the customer: the first person to reply becomes the owner
+   * (no manual "Ambil" needed); anyone else who replies later is added as a collaborator.
+   * The ownership update is conditional, so two people replying at the same moment cannot both win.
+   */
+  static async claimOnReply(
+    user: JwtPayload,
+    conv: { id: string; assignedUserId: string | null; participants: { id: string }[] }
+  ): Promise<{
+    assignedUser?: { id: string; fullName: string; email: string; role: string };
+    addedParticipant?: { id: string; fullName: string; email: string; role: string; roleInChat: 'COLLABORATOR' };
+    note?: { id: string; body: string };
+  }> {
+    if (!['AGENT', 'SUPERVISOR', 'ADMINISTRATOR'].includes(user.role)) return {};
+    if (conv.assignedUserId === user.id || conv.participants.some((p) => p.id === user.id)) return {};
+
+    const [me] = await db
+      .select({ id: users.id, fullName: users.fullName, email: users.email, role: users.role })
+      .from(users)
+      .where(and(eq(users.id, user.id), eq(users.organizationId, user.orgId)))
+      .limit(1);
+    if (!me) return {};
+
+    const addNote = async (body: string) => {
+      const id = nanoid();
+      await db.insert(messages).values({
+        id,
+        conversationId: conv.id,
+        senderType: 'SYSTEM',
+        senderId: user.id,
+        direction: 'OUTBOUND',
+        messageType: 'text',
+        body,
+        isInternalNote: true,
+        status: 'SENT',
+      });
+      return { id, body };
+    };
+
+    if (!conv.assignedUserId) {
+      const res: any = await db
+        .update(conversations)
+        .set({ assignedUserId: user.id, assignedAt: new Date(), idleReassignCount: 0 })
+        .where(and(eq(conversations.id, conv.id), isNull(conversations.assignedUserId)));
+      if (Number((Array.isArray(res) ? res[0] : res)?.affectedRows ?? 0) > 0) {
+        const note = await addNote(`📥 Percakapan otomatis dipegang ${me.fullName} karena membalas pelanggan`);
+        await db.insert(activityLogs).values({
+          id: nanoid(),
+          organizationId: user.orgId,
+          userId: user.id,
+          action: 'ASSIGN_CHAT',
+          details: { conversationId: conv.id, actionType: 'AUTO_ASSIGN_ON_REPLY', assignedTo: user.email },
+        });
+        return { assignedUser: me, note };
+      }
+      // Someone else claimed it a moment earlier → fall through and join as collaborator
+    }
+
+    const [existing] = await db
+      .select({ id: conversationParticipants.id })
+      .from(conversationParticipants)
+      .where(and(eq(conversationParticipants.conversationId, conv.id), eq(conversationParticipants.userId, user.id)))
+      .limit(1);
+    if (existing) return {};
+
+    await db.insert(conversationParticipants).values({
+      id: nanoid(),
+      conversationId: conv.id,
+      userId: user.id,
+      roleInChat: 'COLLABORATOR',
+      addedByUserId: user.id,
+    });
+    const note = await addNote(`👥 ${me.fullName} otomatis ditambahkan ke obrolan karena ikut membalas`);
+    await db.insert(activityLogs).values({
+      id: nanoid(),
+      organizationId: user.orgId,
+      userId: user.id,
+      action: 'ASSIGN_CHAT',
+      details: { conversationId: conv.id, actionType: 'AUTO_COLLABORATOR_ON_REPLY', addedUser: user.email },
+    });
+    return { addedParticipant: { ...me, roleInChat: 'COLLABORATOR' }, note };
+  }
+
+  /**
    * Remove a collaborator agent from conversation
    */
   static async removeParticipant(user: JwtPayload, conversationId: string, targetUserId: string) {
@@ -429,8 +524,25 @@ export class ConversationService {
   static async assign(user: JwtPayload, conversationId: string, body: AssignConversationBody) {
     const conv = await this.getById(user, conversationId);
 
-    if (user.role === 'AGENT' && body.assignedUserId !== user.id) {
-      throw new Error('Agen hanya dapat mengambil tiket untuk diri sendiri atau mengajukan transfer.');
+    if (user.role === 'AGENT') {
+      const rules = await this.rules(user.orgId);
+      if (body.assignedUserId === user.id) {
+        // Taking a chat: only from the queue (or it is already yours), and only when allowed
+        if (conv.assignedUserId && conv.assignedUserId !== user.id) {
+          throw new Error('Percakapan ini sudah dipegang agen lain.');
+        }
+        if (!conv.assignedUserId && !rules.agentCanTakeUnassigned) {
+          throw new Error('Agen tidak diizinkan mengambil chat sendiri. Minta supervisor untuk menugaskan.');
+        }
+      } else {
+        // Handing over: only your own chat, and only when the organization allows it
+        if (!rules.agentCanTransfer) {
+          throw new Error('Agen tidak diizinkan memindahkan chat ke agen lain. Hubungi supervisor.');
+        }
+        if (conv.assignedUserId !== user.id) {
+          throw new Error('Anda hanya dapat memindahkan chat yang Anda pegang.');
+        }
+      }
     }
 
     // The new owner must be an active member of THIS organization
@@ -450,6 +562,7 @@ export class ConversationService {
       .update(conversations)
       .set({
         assignedUserId: body.assignedUserId,
+        ...(body.assignedUserId !== conv.assignedUserId ? { assignedAt: new Date(), idleReassignCount: 0 } : {}),
         teamId: body.teamId ?? conv.teamId,
         status: 'OPEN',
       })
@@ -541,6 +654,9 @@ export class ConversationService {
    * Claim next conversation from unassigned queue (FIFO: oldest unassigned first)
    */
   static async claimNext(user: JwtPayload) {
+    if (user.role === 'AGENT' && !(await this.rules(user.orgId)).agentCanTakeUnassigned) {
+      return { success: false, error: 'Agen tidak diizinkan mengambil chat sendiri. Minta supervisor untuk menugaskan.' };
+    }
     const [nextConv] = await db
       .select()
       .from(conversations)
@@ -562,6 +678,8 @@ export class ConversationService {
       .update(conversations)
       .set({
         assignedUserId: user.id,
+        assignedAt: new Date(),
+        idleReassignCount: 0,
         status: 'OPEN',
       })
       .where(eq(conversations.id, nextConv.id));

@@ -2,7 +2,7 @@
 // Schema: conversations (Sesi Obrolan)
 // ===========================================
 
-import { mysqlTable, varchar, datetime, text, mysqlEnum, index } from 'drizzle-orm/mysql-core';
+import { mysqlTable, varchar, datetime, text, mysqlEnum, index, int } from 'drizzle-orm/mysql-core';
 import { sql } from 'drizzle-orm';
 import { organizations } from './organizations';
 import { phoneNumbers } from './phone-numbers';
@@ -29,6 +29,10 @@ export const conversations = mysqlTable('conversations', {
   teamId: varchar('team_id', { length: 36 })
     .references(() => teams.id, { onDelete: 'set null' }),
   status: mysqlEnum('status', conversationStatusEnum).notNull().default('UNASSIGNED'),
+  /** When the current owner got the chat (idle rule counts from here). */
+  assignedAt: datetime('assigned_at'),
+  /** Times the idle rule moved this chat; reset when someone replies. */
+  idleReassignCount: int('idle_reassign_count').notNull().default(0),
   windowExpiresAt: datetime('window_expires_at'), // Meta 24-Hour Window
   lastMessagePreview: text('last_message_preview'),
   lastMessageAt: datetime('last_message_at').default(sql`CURRENT_TIMESTAMP`),

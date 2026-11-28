@@ -9,6 +9,7 @@ import { nanoid } from 'nanoid';
 import { env } from '../../config/env';
 import { db } from '../../config/database';
 import { organizations, phoneNumbers, messages, conversations, broadcastCampaigns, apiKeys, users } from '../../db/schema';
+import { normalizeAssignmentRules } from '../../services/assignment-rules';
 import { authPlugin } from '../../middleware/auth';
 import { hashApiKey } from '../../middleware/api-key-auth';
 import { MetaApiService } from '../../services/meta-api.service';
@@ -1166,6 +1167,7 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
         maxChatsPerAgent: organizations.maxChatsPerAgent,
         autoResolveHours: organizations.autoResolveHours,
         careWindowHours: organizations.careWindowHours,
+        assignmentConfig: organizations.assignmentConfig,
       })
       .from(organizations)
       .where(eq(organizations.id, user.orgId))
@@ -1177,6 +1179,8 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
         maxChatsPerAgent: org?.maxChatsPerAgent ?? 5,
         autoResolveHours: org?.autoResolveHours ?? 3,
         careWindowHours: org?.careWindowHours ?? 24,
+        // Read by every role: the inbox hides "Ambil" / transfer when agents may not use them
+        assignment: normalizeAssignmentRules(org?.assignmentConfig),
       },
     };
   })
@@ -1194,9 +1198,20 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
         return { success: false, error: 'Hanya Administrator dan Supervisor yang dapat mengubah Pengaturan Operasional.' };
       }
 
+      let assignmentConfig: ReturnType<typeof normalizeAssignmentRules> | undefined;
+      if (body.assignment) {
+        const [cur] = await db
+          .select({ assignmentConfig: organizations.assignmentConfig })
+          .from(organizations)
+          .where(eq(organizations.id, user.orgId))
+          .limit(1);
+        assignmentConfig = normalizeAssignmentRules({ ...normalizeAssignmentRules(cur?.assignmentConfig), ...body.assignment });
+      }
+
       await db
         .update(organizations)
         .set({
+          assignmentConfig,
           maxChatsPerAgent: body.maxChatsPerAgent !== undefined ? Number(body.maxChatsPerAgent) : undefined,
           autoResolveHours: body.autoResolveHours !== undefined ? Number(body.autoResolveHours) : undefined,
           careWindowHours: body.careWindowHours !== undefined ? Number(body.careWindowHours) : undefined,
@@ -1213,6 +1228,14 @@ export const settingsRoutes = new Elysia({ prefix: '/settings' })
         maxChatsPerAgent: t.Optional(t.Number()),
         autoResolveHours: t.Optional(t.Number()),
         careWindowHours: t.Optional(t.Number()),
+        assignment: t.Optional(
+          t.Object({
+            mode: t.Optional(t.Union([t.Literal('AUTO'), t.Literal('MANUAL')])),
+            agentCanTakeUnassigned: t.Optional(t.Boolean()),
+            agentCanTransfer: t.Optional(t.Boolean()),
+            idleReassignMinutes: t.Optional(t.Number()),
+          })
+        ),
       }),
     }
   )

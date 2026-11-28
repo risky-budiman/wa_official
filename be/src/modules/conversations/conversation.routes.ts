@@ -3,10 +3,10 @@
 // ===========================================
 
 import { Elysia, t } from 'elysia';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, inArray } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { db } from '../../config/database';
-import { phoneNumbers, contacts, conversations, messages } from '../../db/schema';
+import { phoneNumbers, contacts, conversations, messages, users } from '../../db/schema';
 import { authPlugin } from '../../middleware/auth';
 import { ConversationService } from './conversation.service';
 import { MessageService } from '../messages/message.service';
@@ -63,6 +63,25 @@ export const conversationRoutes = new Elysia({ prefix: '/conversations' })
     }
     const stats = await ConversationService.getQueueStats(user);
     return { success: true, ...stats };
+  })
+
+  // ─── GET /conversations/transfer-targets — colleagues a chat can be handed to (names only) ──
+  .get('/transfer-targets', async ({ user, set }) => {
+    if (!user) {
+      set.status = 401;
+      return { success: false, error: 'Unauthorized' };
+    }
+    const items = await db
+      .select({ id: users.id, fullName: users.fullName, email: users.email, role: users.role, isOnline: users.isOnline })
+      .from(users)
+      .where(
+        and(
+          eq(users.organizationId, user.orgId),
+          eq(users.status, 'ACTIVE'),
+          inArray(users.role, ['AGENT', 'SUPERVISOR', 'ADMINISTRATOR'])
+        )
+      );
+    return { success: true, items: items.filter((u) => u.id !== user.id) };
   })
 
   // ─── POST /conversations/claim-next — Claim 1 Conversation from Queue (FIFO) ──

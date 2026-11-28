@@ -330,17 +330,38 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
   let maxChatsPerAgent = $state(5);
   let autoResolveHours = $state(3);
   let careWindowHours = $state(24);
+  // Chat distribution (like Qontak's agent allocation)
+  let assignMode = $state<'AUTO' | 'MANUAL'>('AUTO');
+  let agentCanTakeUnassigned = $state(true);
+  let agentCanTransfer = $state(false);
+  let idleReassignMinutes = $state(0);
+  const IDLE_OPTIONS = [0, 5, 10, 15, 30, 60, 120];
   let isSavingOperations = $state(false);
   let operationsSuccessMsg = $state<string | null>(null);
   let operationsErrorMsg = $state<string | null>(null);
 
   async function loadOperationsSettings() {
     try {
-      const res = await apiRequest<{ success: boolean; settings: { maxChatsPerAgent: number; autoResolveHours: number; careWindowHours: number } }>('/settings/operations');
+      const res = await apiRequest<{
+        success: boolean;
+        settings: {
+          maxChatsPerAgent: number;
+          autoResolveHours: number;
+          careWindowHours: number;
+          assignment?: { mode: 'AUTO' | 'MANUAL'; agentCanTakeUnassigned: boolean; agentCanTransfer: boolean; idleReassignMinutes: number };
+        };
+      }>('/settings/operations');
       if (res && res.success && res.settings) {
         maxChatsPerAgent = res.settings.maxChatsPerAgent ?? 5;
         autoResolveHours = res.settings.autoResolveHours ?? 3;
         careWindowHours = res.settings.careWindowHours ?? 24;
+        const a = res.settings.assignment;
+        if (a) {
+          assignMode = a.mode;
+          agentCanTakeUnassigned = a.agentCanTakeUnassigned;
+          agentCanTransfer = a.agentCanTransfer;
+          idleReassignMinutes = a.idleReassignMinutes;
+        }
       }
     } catch (_) {}
   }
@@ -358,6 +379,12 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
           maxChatsPerAgent: Number(maxChatsPerAgent),
           autoResolveHours: Number(autoResolveHours),
           careWindowHours: Number(careWindowHours),
+          assignment: {
+            mode: assignMode,
+            agentCanTakeUnassigned,
+            agentCanTransfer,
+            idleReassignMinutes: Number(idleReassignMinutes),
+          },
         }),
       });
       isSavingOperations = false;
@@ -1641,10 +1668,64 @@ LOGIKA & KETERAMPILAN KHUSUS (SKILLS):
           </div>
         </div>
 
+        <!-- Distribusi Chat -->
+        <div class="border-t border-slate-100 dark:border-slate-800 pt-5 space-y-4">
+          <div>
+            <h4 class="text-sm font-bold text-slate-900 dark:text-white">Distribusi Chat ke Agen</h4>
+            <p class="text-xs text-slate-500 dark:text-slate-400">Atur bagaimana chat baru dibagikan dan apa yang boleh dilakukan agen sendiri.</p>
+          </div>
+
+          <fieldset class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <legend class="sr-only">Mode distribusi</legend>
+            <label class="flex gap-3 p-3 rounded-xl border cursor-pointer {assignMode === 'AUTO' ? 'border-emerald-500 bg-emerald-500/5' : 'border-slate-200 dark:border-slate-700'}">
+              <input type="radio" name="assign_mode" value="AUTO" bind:group={assignMode} class="mt-0.5" />
+              <span>
+                <span class="block text-xs font-semibold text-slate-800 dark:text-slate-200">Otomatis</span>
+                <span class="block text-[11px] text-slate-500">Chat baru langsung diberikan ke agen online dengan chat aktif paling sedikit (maksimal sesuai batas di atas).</span>
+              </span>
+            </label>
+            <label class="flex gap-3 p-3 rounded-xl border cursor-pointer {assignMode === 'MANUAL' ? 'border-emerald-500 bg-emerald-500/5' : 'border-slate-200 dark:border-slate-700'}">
+              <input type="radio" name="assign_mode" value="MANUAL" bind:group={assignMode} class="mt-0.5" />
+              <span>
+                <span class="block text-xs font-semibold text-slate-800 dark:text-slate-200">Manual</span>
+                <span class="block text-[11px] text-slate-500">Chat baru menunggu di Antrean sampai diambil agen atau ditugaskan supervisor.</span>
+              </span>
+            </label>
+          </fieldset>
+
+          <label class="flex items-start gap-3 cursor-pointer">
+            <input type="checkbox" bind:checked={agentCanTakeUnassigned} class="mt-0.5" />
+            <span>
+              <span class="block text-xs font-semibold text-slate-800 dark:text-slate-200">Agen boleh mengambil chat dari antrean</span>
+              <span class="block text-[11px] text-slate-500">Lewat tombol "Ambil" atau langsung membalas. Jika mati, hanya supervisor/admin yang menugaskan chat.</span>
+            </span>
+          </label>
+
+          <label class="flex items-start gap-3 cursor-pointer">
+            <input type="checkbox" bind:checked={agentCanTransfer} class="mt-0.5" />
+            <span>
+              <span class="block text-xs font-semibold text-slate-800 dark:text-slate-200">Agen boleh memindahkan chat ke agen lain</span>
+              <span class="block text-[11px] text-slate-500">Agen bisa menyerahkan chat yang ia pegang ke rekan lain.</span>
+            </span>
+          </label>
+
+          <div class="max-w-xs">
+            <label for="idle_op" class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Pindahkan chat jika tidak dibalas</label>
+            <select id="idle_op" bind:value={idleReassignMinutes} class="ui-input">
+              {#each IDLE_OPTIONS as m}
+                <option value={m}>{m === 0 ? 'Nonaktif' : `Setelah ${m} menit`}</option>
+              {/each}
+            </select>
+            <p class="text-[11px] text-slate-500 mt-1">
+              Pelanggan menunggu lebih lama dari ini → chat dipindah ke agen online lain (mode Otomatis) atau kembali ke Antrean (mode Manual). Maksimal 3 kali sampai ada yang membalas.
+            </p>
+          </div>
+        </div>
+
         <div class="flex justify-end pt-2">
           <button type="submit" disabled={isSavingOperations} class="py-2.5 px-6 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-2 shadow-md transition cursor-pointer">
             <Save class="w-4 h-4" />
-            {isSavingOperations ? 'Menyimpan...' : 'Simpan SLA'}
+            {isSavingOperations ? 'Menyimpan...' : 'Simpan Pengaturan'}
           </button>
         </div>
       </form>

@@ -99,6 +99,11 @@ export class MessageService {
       throw new Error('Tiket percakapan ini telah Diselesaikan (RESOLVED) & Terkunci permanen.');
     }
 
+    // Replying to a queued chat takes it — only when agents may take chats themselves
+    if (user.role === 'AGENT' && !conv.assignedUserId && !(await ConversationService.rules(user.orgId)).agentCanTakeUnassigned) {
+      throw new Error('Chat ini belum ditugaskan ke Anda. Minta supervisor untuk menugaskan sebelum membalas.');
+    }
+
     // Get phone channel details
     let [phone] = await db
       .select()
@@ -218,10 +223,22 @@ export class MessageService {
         lastMessagePreview: preview,
         lastMessageAt: new Date(),
         status: 'OPEN',
+        // The customer got an answer: the idle rule starts over
+        idleReassignCount: 0,
       })
       .where(eq(conversations.id, conv.id));
 
+    // Whoever replies takes the chat (or joins it as collaborator) — no manual "Ambil" needed.
+    // A failure here must not turn an already-delivered message into an error.
+    let ownership: Awaited<ReturnType<typeof ConversationService.claimOnReply>> = {};
+    try {
+      ownership = await ConversationService.claimOnReply(user, conv);
+    } catch (err: any) {
+      console.warn('⚠️ Auto-assign on reply failed:', err?.message || err);
+    }
+
     return {
+      ownership,
       id: messageId,
       wamId,
       conversationId: conv.id,
@@ -319,7 +336,7 @@ export class MessageService {
         systemPrompt: buildSuggestSystemPrompt(org?.name || 'perusahaan kami', ai?.systemPrompt),
         userMessage: buildSuggestUserPrompt({
           transcript: formatTranscript(recent),
-          contactName: conv.contact?.name,
+          contactName: conv.contact?.name ?? undefined,
           draft,
         }),
         apiKey: ai?.apiKey,
