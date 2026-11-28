@@ -146,6 +146,7 @@ export class AiAgentService {
     conversationHistory?: { role: 'user' | 'model'; text: string }[];
     apiKey?: string;
     model?: string;
+    maxTokens?: number;
   }): Promise<string> {
     const apiKey = params.apiKey || process.env.GEMINI_API_KEY || '';
     if (!apiKey) {
@@ -190,7 +191,7 @@ export class AiAgentService {
       generationConfig: {
         temperature: 0.2,
         topP: 0.8,
-        maxOutputTokens: 800,
+        maxOutputTokens: params.maxTokens || 800,
       },
     };
 
@@ -239,6 +240,7 @@ export class AiAgentService {
     apiKey?: string;
     model?: string;
     baseUrl?: string;
+    maxTokens?: number;
   }): Promise<string> {
     const apiKey = params.apiKey || process.env.OPENAI_API_KEY || '';
     if (!apiKey) {
@@ -272,7 +274,7 @@ export class AiAgentService {
         model,
         messages: messagesPayload,
         temperature: 0.3,
-        max_tokens: 800,
+        max_tokens: params.maxTokens || 800,
       }),
     });
 
@@ -380,6 +382,8 @@ export class AiAgentService {
     apiKey?: string;
     model?: string;
     baseUrl?: string;
+    /** Output token limit for Gemini / OpenAI-compatible (Claude already leaves room for thinking). */
+    maxTokens?: number;
   }): Promise<string> {
     const provider = params.provider || 'gemini';
 

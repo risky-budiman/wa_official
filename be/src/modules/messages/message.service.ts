@@ -13,6 +13,15 @@ import type { JwtPayload } from '../../middleware/auth';
 import type { SendMessageBody, InternalNoteBody, GetMessagesQuery } from './message.types';
 import { getActivePhone, PHONE_STATUS_ARCHIVED } from '../../services/phone-number.service';
 import { orgMetaToken } from '../../services/meta-credentials';
+import { AiAgentService } from '../../services/ai-agent.service';
+import type { AiAgentConfig } from '../../db/schema/organizations';
+import {
+  buildSuggestSystemPrompt,
+  buildSuggestUserPrompt,
+  formatTranscript,
+  parseSuggestions,
+  type SuggestMode,
+} from '../../services/reply-suggest';
 
 export class MessageService {
   /**
@@ -270,208 +279,62 @@ export class MessageService {
   }
 
   /**
-   * Generate Smart AI Reply Suggestions for CS Agent based on real ongoing conversation
+   * Reply suggestions for the agent, written by the organization's AI (Pengaturan AI) from the real
+   * conversation and the company guide. With a draft, the AI polishes the draft instead.
    */
   static async generateAiSuggestions(user: JwtPayload, conversationId: string, currentDraft?: string) {
     const conv = await ConversationService.getById(user, conversationId);
 
-    // Fetch latest 10 messages for context, ordered chronologically
-    const recentMessages = await db
-      .select({
-        direction: messages.direction,
-        body: messages.body,
-        isInternalNote: messages.isInternalNote,
-        createdAt: messages.createdAt,
-      })
+    const [org] = await db
+      .select({ name: organizations.name, aiAgentConfig: organizations.aiAgentConfig })
+      .from(organizations)
+      .where(eq(organizations.id, user.orgId))
+      .limit(1);
+    const rawAi = org?.aiAgentConfig;
+    let ai: AiAgentConfig | null = null;
+    try {
+      ai = (typeof rawAi === 'string' ? JSON.parse(rawAi) : rawAi) as AiAgentConfig | null;
+    } catch {
+      ai = null;
+    }
+
+    const recent = await db
+      .select({ direction: messages.direction, messageType: messages.messageType, body: messages.body })
       .from(messages)
       .where(and(eq(messages.conversationId, conversationId), eq(messages.isInternalNote, false)))
       .orderBy(desc(messages.createdAt))
-      .limit(10);
+      .limit(20);
+    recent.reverse();
 
-    // Sort chronologically (oldest to newest)
-    recentMessages.reverse();
-
-    const contactName = conv.contact.name || 'Kak';
-    const inboundMessages = recentMessages.filter((m) => m.direction === 'INBOUND');
-    const lastCustomerMsgObj = inboundMessages[inboundMessages.length - 1];
-    const lastCustomerMsg = lastCustomerMsgObj?.body?.trim() || '';
-    const lastMsgLower = lastCustomerMsg.toLowerCase();
-
-    // Build context snippet from customer's latest message
-    const msgSnippet = lastCustomerMsg.length > 50 ? `"${lastCustomerMsg.slice(0, 50)}..."` : `"${lastCustomerMsg}"`;
-
-    let options = [];
-
-    // Contextual Category Detection (Strict Multi-Word Matching)
-    if (
-      lastMsgLower.includes('alamat toko') ||
-      lastMsgLower.includes('lokasi toko') ||
-      lastMsgLower.includes('lokasi kantor') ||
-      lastMsgLower.includes('cabang mana') ||
-      lastMsgLower.includes('dimana alamat') ||
-      lastMsgLower.includes('dimana lokasi') ||
-      (lastMsgLower.includes('alamat') && lastMsgLower.includes('mana'))
-    ) {
-      options = [
-        {
-          title: '📍 Info Alamat & Lokasi Toko',
-          text: `Halo Kak ${contactName}! 😊 Terkait lokasi toko/cabang kami, alamat resmi kami berlokasi di: Jakarta Pusat (Jl. Sudirman No. 123). Silakan berkunjung ya kak!`,
-        },
-        {
-          title: '🗺️ Panduan Rute & Titik Maps',
-          text: `Siap Kak ${contactName}, lokasi toko kami sangat strategis dan mudah dijangkau. Boleh kami kirimkan titik lokasi Google Maps untuk panduan rute Kakak?`,
-        },
-        {
-          title: '🏢 Jam Operasional Toko',
-          text: `Halo Kak ${contactName}, toko fisik kami buka setiap hari Senin - Sabtu pukul 09.00 - 20.00 WIB. Ditunggu kedatangannya ya Kak!`,
-        },
-      ];
-    } else if (
-      lastMsgLower.includes('stok ready') ||
-      lastMsgLower.includes('ready stok') ||
-      lastMsgLower.includes('apakah ready') ||
-      lastMsgLower.includes('stoknya') ||
-      lastMsgLower.includes('ada stok') ||
-      lastMsgLower.includes('masih ada stok')
-    ) {
-      options = [
-        {
-          title: '📦 Konfirmasi Stok Ready',
-          text: `Halo Kak ${contactName}! 😊 Produk tersebut saat ini *READY STOK* dan siap kami kemas hari ini. Boleh diinfokan varian/warna yang Kakak inginkan?`,
-        },
-        {
-          title: '⚡ Pengecekan Gudang Fast-Track',
-          text: `Siap Kak ${contactName}, tim gudang kami sedang memverifikasi sisa stok fisiknya. Mohon tunggu sebentar ya Kak!`,
-        },
-        {
-          title: '🛒 Booking & Pemesanan Instan',
-          text: `Halo Kak ${contactName}, produk tersebut tergolong cepat habis (*fast-moving*). Sebaiknya kami amankan stoknya untuk Kakak sekarang?`,
-        },
-      ];
-    } else if (
-      lastMsgLower.includes('berapa harganya') ||
-      lastMsgLower.includes('harganya berapa') ||
-      lastMsgLower.includes('daftar harga') ||
-      lastMsgLower.includes('pricelist') ||
-      lastMsgLower.includes('minta brosur') ||
-      lastMsgLower.includes('rincian biaya') ||
-      lastMsgLower.includes('biaya paket')
-    ) {
-      options = [
-        {
-          title: '🏷️ Info Harga & Brosur Produk',
-          text: `Halo Kak ${contactName}! 😊 Terima kasih sudah berminat. Mengenai daftar harga dan rincian paket unggulan kami, boleh infokan kebutuhan mana yang Kakak cari agar kami rekomendasikan yang terbaik?`,
-        },
-        {
-          title: '📦 Solusi Paket & Pricelist',
-          text: `Siap Kak ${contactName}, kami memiliki pilihan paket paling hemat dan terjangkau. Boleh kami bantu hitungkan estimasi total biayanya?`,
-        },
-        {
-          title: '💬 Diskon & Penawaran Spesial',
-          text: `Halo Kak ${contactName}, untuk pembelian hari ini kami sedang ada penawaran potongan khusus. Boleh diinfokan kuantitas atau tipe yang dibutuhkan Kakak?`,
-        },
-      ];
-    } else if (
-      lastMsgLower.includes('nomor resi') ||
-      lastMsgLower.includes('status resi') ||
-      lastMsgLower.includes('lacak resi') ||
-      lastMsgLower.includes('kapan dikirim') ||
-      lastMsgLower.includes('sudah dikirim') ||
-      lastMsgLower.includes('lacak paket')
-    ) {
-      options = [
-        {
-          title: '🚚 Cek Status Resi Pengiriman',
-          text: `Halo Kak ${contactName}, terkait pengiriman pesanan Kakak, mohon bantu infokan Nomor Pesanan/Invoice ya Kak. Tim kami siap bantu cek lacak lokasinya sekarang! 📦`,
-        },
-        {
-          title: '⏳ Estimasi Pengiriman Kurir',
-          text: `Siap Kak ${contactName}, pesanan Kakak sudah masuk tahap ekspedisi. Boleh infokan nomor resinya agar kami pastikan posisi terbarunya.`,
-        },
-        {
-          title: '📞 Layanan Bantuan Logistik',
-          text: `Baik Kak ${contactName}, tim kami terus memantau pengiriman produk Anda. Jika ada keterlambatan dari pihak ekspedisi, kami akan bantu koordinasikan langsung.`,
-        },
-      ];
-    } else if (
-      lastMsgLower.includes('nomor rekening') ||
-      lastMsgLower.includes('rekening bca') ||
-      lastMsgLower.includes('rekening mandiri') ||
-      lastMsgLower.includes('transfer ke mana') ||
-      lastMsgLower.includes('bukti transfer') ||
-      lastMsgLower.includes('konfirmasi bayar')
-    ) {
-      options = [
-        {
-          title: '💳 Rincian Rekening Pembayaran Resmi',
-          text: `Halo Kak ${contactName}, pembayaran dapat ditransfer melalui rekening resmi kami:\n• BCA: 1234567890 a.n. PT Official WA CRM\n• Mandiri: 0987654321 a.n. PT Official WA CRM\n\nJika sudah transfer, mohon sertakan foto bukti struknya ya Kak! 🙏`,
-        },
-        {
-          title: '✅ Konfirmasi Penerimaan Pembayaran',
-          text: `Terima kasih Kak ${contactName}! Bukti pembayaran Kakak sudah kami terima dan saat ini sedang dalam proses verifikasi oleh tim keuangan kami.`,
-        },
-        {
-          title: '⚡ Batas Waktu Pembayaran',
-          text: `Baik Kak ${contactName}, mohon selesaikan pembayaran sebelum batas waktu berakhir agar pesanan Kakak dapat segera diproses pengirimannya.`,
-        },
-      ];
-    } else if (
-      lastMsgLower.includes('barang rusak') ||
-      lastMsgLower.includes('salah kirim') ||
-      lastMsgLower.includes('klaim garansi') ||
-      lastMsgLower.includes('retur barang') ||
-      lastMsgLower.includes('kecewa sekali')
-    ) {
-      options = [
-        {
-          title: '🙏 Permohonan Maaf & Penanganan Fast-Track',
-          text: `Mohon maaf yang sebesar-besarnya atas ketidaknyamanan ini ya Kak ${contactName}. 🙏 Boleh bantu kirimkan foto/video kendalanya? Tim kami siap membantu memberikan penanganan penggantian secepatnya!`,
-        },
-        {
-          title: '🛠️ Layanan Klaim Garansi & Retur',
-          text: `Halo Kak ${contactName}, kepuasan Anda adalah prioritas kami. Semua transaksi dijamin garansi resmi. Kami bantu proses klaim atau penukaran barang baru ya Kak.`,
-        },
-        {
-          title: '📞 Penanganan Khusus Tim Supervisor',
-          text: `Baik Kak ${contactName}, laporan kendala ini telah kami eskalasi ke tim penanggung jawab. Kami akan mengabarkan perkembangannya secara berkala.`,
-        },
-      ];
-    } else if (lastCustomerMsg.length > 0) {
-      // Dynamic Contextual Responses referencing actual customer's message!
-      options = [
-        {
-          title: '🌟 Balasan Ramah & Kontekstual',
-          text: `Halo Kak ${contactName}! 😊 Terkait pesan Kakak mengenai ${msgSnippet}, baik kak, tim Customer Service kami dengan senang hati siap memberikan bantuan. Boleh diinfokan lebih lanjut?`,
-        },
-        {
-          title: '⚡ Balasan Langsung & Solutif',
-          text: `Baik Kak ${contactName}, mengenai ${msgSnippet}, pesan Kakak sudah kami terima dan sedang diproses oleh tim kami.`,
-        },
-        {
-          title: '💼 Balasan Formal & Profesional',
-          text: `Selamat hari ini Kak ${contactName}. Terima kasih telah menghubungi kami perihal ${msgSnippet}. Tim kami akan menindaklanjuti pesan Anda secepatnya.`,
-        },
-      ];
-    } else {
-      options = [
-        {
-          title: '👋 Salam Ramah & Bantuan CS',
-          text: `Halo Kak ${contactName}! 😊 Ada yang bisa tim Customer Service kami bantu hari ini? Silakan infokan pertanyaan atau kendala Kakak ya!`,
-        },
-        {
-          title: '⚡ Tanggapan Cepat CS',
-          text: `Baik Kak ${contactName}, tim CS kami siap melayani. Boleh infokan pesan atau kebutuhan Kakak?`,
-        },
-        {
-          title: '💼 Konfirmasi Layanan Resmi',
-          text: `Selamat hari ini Kak ${contactName}. Terima kasih telah menghubungi layanan resmi kami. Mohon sampaikan perihal yang ingin ditanyakan.`,
-        },
-      ];
+    const draft = currentDraft?.trim() || '';
+    const mode: SuggestMode = draft ? 'POLISH_DRAFT' : 'SMART_REPLY';
+    if (mode === 'SMART_REPLY' && !recent.some((m) => m.direction === 'INBOUND')) {
+      throw new Error('Belum ada pesan dari pelanggan untuk dibalas.');
     }
 
-    return {
-      mode: 'SMART_REPLY',
-      suggestions: options,
-    };
+    let raw: string;
+    try {
+      raw = await AiAgentService.generateAiResponse({
+        provider: ai?.provider || 'gemini',
+        systemPrompt: buildSuggestSystemPrompt(org?.name || 'perusahaan kami', ai?.systemPrompt),
+        userMessage: buildSuggestUserPrompt({
+          transcript: formatTranscript(recent),
+          contactName: conv.contact?.name,
+          draft,
+        }),
+        apiKey: ai?.apiKey,
+        model: ai?.model,
+        baseUrl: ai?.baseUrl,
+        maxTokens: 2000,
+      });
+    } catch (err: any) {
+      throw new Error(`Asisten AI belum bisa dipakai: ${err?.message || err}. Periksa Pengaturan AI.`);
+    }
+
+    const suggestions = parseSuggestions(raw);
+    if (!suggestions.length) {
+      throw new Error('AI tidak memberikan saran yang bisa dibaca. Silakan coba lagi.');
+    }
+    return { mode, suggestions };
   }
 }

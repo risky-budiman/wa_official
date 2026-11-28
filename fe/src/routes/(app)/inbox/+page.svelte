@@ -203,10 +203,12 @@
         }),
       });
 
-      if (res.success && res.suggestions) {
+      if (res.success && res.suggestions?.length) {
         aiSuggestions = res.suggestions;
         aiMode = res.mode;
         showAiModal = true;
+      } else {
+        alert(res.error || "Gagal mengambil rekomendasi AI.");
       }
     } catch (_) {
       alert("Gagal mengambil rekomendasi AI.");
