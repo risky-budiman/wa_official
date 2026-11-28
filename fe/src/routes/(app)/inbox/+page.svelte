@@ -654,6 +654,8 @@
         if (activeTab === "UNASSIGNED") {
           if (c.status === "RESOLVED") return false;
           if (c.status !== "UNASSIGNED" && c.assignedUser) return false;
+          // Expired 24h window: only a template can be sent, so it is no longer in the queue
+          if (isWindowExpired(c)) return false;
         }
       }
 
@@ -668,6 +670,16 @@
       return true;
     }),
   );
+
+  /** Same rule as the server: stored expiry, or last activity + 24h when none is stored. */
+  function isWindowExpired(c: { windowExpiresAt: string | null; lastMessageAt: string | null }) {
+    const exp = c.windowExpiresAt
+      ? new Date(c.windowExpiresAt).getTime()
+      : c.lastMessageAt
+        ? new Date(c.lastMessageAt).getTime() + 24 * 60 * 60 * 1000
+        : 0;
+    return exp > 0 && Date.now() > exp;
+  }
 
   /** Apply a fresh conversation list (from our own load or the shared notification poll). */
   function applyConversations(items: ConversationItem[]) {
@@ -1597,7 +1609,7 @@
                   {:else if conv.status === "RESOLVED"}
                     <span class="inline-flex items-center gap-1 rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-400"><CheckCircle2 class="h-3 w-3" /> Selesai</span>
                   {/if}
-                  {#if isConvExpired && conv.status !== "RESOLVED"}
+                  {#if isConvExpired}
                     <span class="inline-flex items-center gap-1 rounded-md bg-rose-50 px-1.5 py-0.5 text-[11px] font-medium text-rose-700 ring-1 ring-inset ring-rose-600/15 dark:bg-rose-500/10 dark:text-rose-300 dark:ring-rose-400/20" title="Lewat 24 jam sejak pesan terakhir pelanggan, balas dengan template"><Clock class="h-3 w-3" /> Sesi 24 jam habis</span>
                   {/if}
                   {#if conv.participants && conv.participants.length > 0}
@@ -1646,6 +1658,9 @@
                 <span class="hidden shrink-0 items-center gap-1 rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] font-medium text-slate-600 sm:inline-flex dark:bg-slate-800 dark:text-slate-400"><Lock class="h-3 w-3" /> Selesai</span>
               {:else if selectedConv.status === "UNASSIGNED" || !selectedConv.assignedUser}
                 <span class="hidden shrink-0 rounded-md bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 ring-1 ring-inset ring-amber-600/20 sm:inline-flex dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-400/20">Belum ditugaskan</span>
+              {/if}
+              {#if isWindowExpired(selectedConv)}
+                <span class="hidden shrink-0 items-center gap-1 rounded-md bg-rose-50 px-1.5 py-0.5 text-[11px] font-medium text-rose-700 ring-1 ring-inset ring-rose-600/15 sm:inline-flex dark:bg-rose-500/10 dark:text-rose-300 dark:ring-rose-400/20" title="Lewat 24 jam sejak pesan terakhir pelanggan"><Clock class="h-3 w-3" /> Sesi 24 jam habis</span>
               {/if}
             </div>
             <p class="mt-0.5 flex min-w-0 items-center gap-1.5 truncate text-xs text-slate-500 dark:text-slate-400">
@@ -1821,8 +1836,17 @@
               <Lock class="h-4 w-4" />
             </span>
             <div class="min-w-0">
-              <p class="font-medium text-slate-800 dark:text-slate-100">Percakapan ini sudah selesai</p>
-              <p class="text-xs text-slate-500 dark:text-slate-400">Pesan baru dari pelanggan akan otomatis masuk antrean sebagai tiket baru.</p>
+              <p class="flex flex-wrap items-center gap-2 font-medium text-slate-800 dark:text-slate-100">
+                Percakapan ini sudah selesai
+                {#if isWindowExpired(selectedConv)}
+                  <span class="inline-flex items-center gap-1 rounded-md bg-rose-50 px-1.5 py-0.5 text-[11px] font-medium text-rose-700 ring-1 ring-inset ring-rose-600/15 dark:bg-rose-500/10 dark:text-rose-300 dark:ring-rose-400/20"><Clock class="h-3 w-3" /> Sesi 24 jam habis</span>
+                {/if}
+              </p>
+              <p class="text-xs text-slate-500 dark:text-slate-400">
+                {isWindowExpired(selectedConv)
+                  ? "Sudah lebih dari 24 jam sejak pesan terakhir pelanggan; untuk menghubungi lagi gunakan template WhatsApp. Pesan baru dari pelanggan akan masuk antrean sebagai tiket baru."
+                  : "Pesan baru dari pelanggan akan otomatis masuk antrean sebagai tiket baru."}
+              </p>
             </div>
           </div>
         {:else}

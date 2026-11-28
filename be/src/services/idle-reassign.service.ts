@@ -13,6 +13,7 @@ import { db } from '../config/database';
 import { activityLogs, conversations, messages, organizations, users } from '../db/schema';
 import { WebhookProcessor } from '../modules/webhook/webhook.processor';
 import { isIdleTooLong, MAX_IDLE_REASSIGNS, normalizeAssignmentRules } from './assignment-rules';
+import { windowStillOpen } from '../modules/conversations/conversation.service';
 
 export class IdleReassignService {
   static async runCycle(now = Date.now()) {
@@ -55,7 +56,9 @@ export class IdleReassignService {
           eq(conversations.organizationId, orgId),
           inArray(conversations.status, ['OPEN', 'PENDING']),
           isNotNull(conversations.assignedUserId),
-          lt(conversations.idleReassignCount, MAX_IDLE_REASSIGNS)
+          lt(conversations.idleReassignCount, MAX_IDLE_REASSIGNS),
+          // An expired window only allows a template — moving the chat would not help the customer
+          windowStillOpen(new Date(now))
         )
       );
 

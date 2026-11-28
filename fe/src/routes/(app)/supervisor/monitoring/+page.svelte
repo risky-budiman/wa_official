@@ -164,7 +164,17 @@
 
   // Stats
   let totalActive = $derived(activeChats.filter((c) => c.status === 'OPEN' || c.status === 'PENDING').length);
-  let totalUnassigned = $derived(activeChats.filter((c) => c.status === 'UNASSIGNED' || !c.assignedUserId).length);
+  // Queue = waiting for an agent AND still answerable (expired 24h window → only a template, not queued)
+  function inQueue(c: MonitoringItem) {
+    if (c.status === 'RESOLVED' || (c.status !== 'UNASSIGNED' && c.assignedUserId)) return false;
+    const exp = c.windowExpiresAt
+      ? new Date(c.windowExpiresAt).getTime()
+      : c.lastMessageAt
+        ? new Date(c.lastMessageAt).getTime() + 24 * 60 * 60 * 1000
+        : 0;
+    return !(exp > 0 && Date.now() > exp);
+  }
+  let totalUnassigned = $derived(activeChats.filter(inQueue).length);
   let totalResolved = $derived(activeChats.filter((c) => c.status === 'RESOLVED').length);
   let onlineAgentsCount = $derived(teamUsers.filter((u) => u.isOnline && u.role === 'AGENT').length);
 
@@ -663,12 +673,12 @@
               <h4 class="text-sm font-semibold text-slate-900 dark:text-white">Belum ditugaskan</h4>
             </div>
             <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300">
-              {activeChats.filter(c => !c.assignedUserId).length}
+              {activeChats.filter(inQueue).length}
             </span>
           </div>
 
           <div class="space-y-3 flex-1 overflow-y-auto max-h-[600px] pr-1">
-            {#each activeChats.filter(c => !c.assignedUserId) as chat}
+            {#each activeChats.filter(inQueue) as chat}
               <div class="space-y-2 rounded-xl bg-white p-3.5 shadow-sm ring-1 ring-slate-200/70 dark:bg-slate-900 dark:ring-slate-800">
                 <div class="flex items-center justify-between">
                   <span class="text-sm font-semibold text-slate-900 dark:text-white">{chat.contactName}</span>

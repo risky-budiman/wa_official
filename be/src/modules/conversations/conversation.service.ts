@@ -2,7 +2,7 @@
 // Conversation Service — Multi-Agent Collaboration
 // ===========================================
 
-import { eq, and, desc, sql, inArray, or, ne, isNull } from 'drizzle-orm';
+import { eq, and, desc, sql, inArray, or, ne, isNull, gt } from 'drizzle-orm';
 import { db } from '../../config/database';
 import {
   conversations,
@@ -19,6 +19,18 @@ import type { ConversationStatus } from '../../db/schema/conversations';
 import { nanoid } from 'nanoid';
 import { organizations } from '../../db/schema';
 import { normalizeAssignmentRules, type AssignmentRules } from '../../services/assignment-rules';
+
+/**
+ * The customer's 24-hour WhatsApp window is still open. Without a stored expiry (e.g. chats synced
+ * from the WhatsApp Business app) fall back to last activity + 24h, like the inbox does.
+ * Expired chats can only get a template, so they stay out of the queue until the customer writes again.
+ */
+export function windowStillOpen(now = new Date()) {
+  return or(
+    gt(conversations.windowExpiresAt, now),
+    and(isNull(conversations.windowExpiresAt), gt(conversations.lastMessageAt, new Date(now.getTime() - 24 * 60 * 60 * 1000)))
+  )!;
+}
 
 export class ConversationService {
   /**
@@ -53,9 +65,11 @@ export class ConversationService {
             eq(conversations.organizationId, user.orgId),
             or(
               eq(conversations.assignedUserId, user.id),
-              eq(conversations.status, 'UNASSIGNED'),
-              // handed off by the chatbot, waiting for any agent
-              and(eq(conversations.status, 'PENDING'), isNull(conversations.assignedUserId))
+              // queue: waiting for any agent (new, or handed off by the chatbot) and still answerable
+              and(
+                or(eq(conversations.status, 'UNASSIGNED'), and(eq(conversations.status, 'PENDING'), isNull(conversations.assignedUserId))),
+                windowStillOpen()
+              )
             )
           )
         );
@@ -629,7 +643,8 @@ export class ConversationService {
         and(
           eq(conversations.organizationId, user.orgId),
           ne(conversations.status, 'RESOLVED'),
-          sql`(${conversations.status} = 'UNASSIGNED' OR ${conversations.assignedUserId} IS NULL)`
+          sql`(${conversations.status} = 'UNASSIGNED' OR ${conversations.assignedUserId} IS NULL)`,
+          windowStillOpen()
         )
       );
 
@@ -664,7 +679,8 @@ export class ConversationService {
         and(
           eq(conversations.organizationId, user.orgId),
           ne(conversations.status, 'RESOLVED'),
-          sql`(${conversations.status} = 'UNASSIGNED' OR ${conversations.assignedUserId} IS NULL)`
+          sql`(${conversations.status} = 'UNASSIGNED' OR ${conversations.assignedUserId} IS NULL)`,
+          windowStillOpen()
         )
       )
       .orderBy(conversations.createdAt)
